@@ -196,6 +196,7 @@ const STATE = {
   activeScreen: "splash",
   followedStreamers: [], // IDs dos streamers seguidos
   currentLiveBroadcaster: null,
+  liveChatChannel: null, // canal Supabase Realtime da sala de live atual
   activeChatPartner: null,
   dmsList: [...INITIAL_DMS],
   
@@ -500,10 +501,16 @@ function createLiveCardElement(b, badgeType = null) {
 
 
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM)
-function enterLiveRoom(broadcasterId) {
+async function enterLiveRoom(broadcasterId) {
   const b = MOCK_BROADCASTERS.find(x => x.id === broadcasterId);
   if (!b) return;
-  
+
+  // Sai de qualquer sala anterior antes de entrar nesta (evita vazar inscrição Realtime)
+  if (STATE.liveChatChannel) {
+    sb.removeChannel(STATE.liveChatChannel);
+    STATE.liveChatChannel = null;
+  }
+
   STATE.currentLiveBroadcaster = b;
   
   // Atualizar dados da UI
@@ -561,14 +568,37 @@ function enterLiveRoom(broadcasterId) {
   // Fail-safe de 800ms
   setTimeout(hideLoader, 800);
   
-  // Mensagem de entrada e regras (aviso estático, não é bot)
-  addSystemComment("zcitando entrou na live");
+  // Mensagem de entrada e regras (aviso estático local, não é bot nem persistido)
   addSystemComment("Regras do chat: Seja gentil e siga as diretrizes.");
+
+  // Chat real: carrega histórico de verdade e sincroniza novas mensagens de
+  // todo mundo assistindo esta sala via Supabase Realtime.
+  try {
+    const history = await DB.getLiveChatHistory(b.username);
+    history.forEach(renderIncomingLiveChatRow);
+  } catch (err) {
+    console.log("Não foi possível carregar o histórico do chat", err);
+  }
+
+  STATE.liveChatChannel = DB.subscribeToLiveChat(b.username, renderIncomingLiveChatRow);
+}
+
+function renderIncomingLiveChatRow(row) {
+  if (row.type === "gift") {
+    addLiveComment(row.username, row.text.replace(/^enviou /, ""), true, "");
+  } else {
+    addLiveComment(row.username, row.text);
+  }
 }
 
 function closeLiveRoom() {
   DOM.liveVideo.pause();
   DOM.liveVideo.src = "";
+
+  if (STATE.liveChatChannel) {
+    sb.removeChannel(STATE.liveChatChannel);
+    STATE.liveChatChannel = null;
+  }
 
   STATE.currentLiveBroadcaster = null;
 }
@@ -644,12 +674,21 @@ function handleChatInputKey(event) {
   }
 }
 
-function sendUserComment() {
+async function sendUserComment() {
   const text = DOM.liveChatInput.value.trim();
   if (text === "") return;
+  if (!requireAuth()) return;
+  const b = STATE.currentLiveBroadcaster;
+  if (!b) return;
 
-  addLiveComment("Você", text);
   DOM.liveChatInput.value = "";
+  try {
+    // Não faz eco local otimista — a mensagem aparece pra todo mundo (inclusive
+    // quem enviou) quando o Realtime confirma a escrita real no banco.
+    await DB.sendLiveChatMessage(b.username, STATE.profileName || "Você", text);
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar a mensagem.");
+  }
 }
 
 
@@ -760,8 +799,7 @@ async function sendSelectedGift() {
     // Mostrar anúncio gráfico animado no centro
     triggerGiftAnnouncement(gift.icon, `Você enviou um(a) ${gift.name}!`);
 
-    // Adicionar mensagem especial no chat
-    addLiveComment("Você", gift.name, true, gift.icon);
+    // Mensagem do presente no chat chega via Realtime (visível pra todo mundo na sala, não só localmente)
   } catch (err) {
     showToast(err.message || "Não foi possível enviar o presente.");
   }
@@ -1902,9 +1940,10 @@ async function sendQuickRose(event) {
   // acontecido quando o await abaixo (rede) resolver.
   const clickX = event.clientX;
   const clickY = event.clientY;
+  const broadcasterHandle = STATE.currentLiveBroadcaster ? STATE.currentLiveBroadcaster.username : null;
   let profile;
   try {
-    profile = await DB.sendQuickRose();
+    profile = await DB.sendQuickRose(broadcasterHandle);
   } catch (err) {
     showToast(err.message || "Saldo de moedas insuficiente. Recarregue no Perfil!");
     return;
@@ -1914,10 +1953,8 @@ async function sendQuickRose(event) {
   // Acionar aviso visual do presente na tela
   triggerGiftAnnouncement("🌹", "Você enviou uma Rosa");
 
-  // Adicionar comentário especial no chat
+  // Mensagem da rosa no chat chega via Realtime (visível pra todo mundo na sala).
   if (STATE.currentLiveBroadcaster) {
-    addLiveComment("Você", "enviou uma Rosa 🌹", false, true);
-
     // Emitir corações flutuantes baseados nas coordenadas do clique
     triggerFloatingHeart(clickX, clickY);
   }

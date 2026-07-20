@@ -66,8 +66,8 @@ const DB = {
     return data;
   },
 
-  async sendQuickRose() {
-    const { data, error } = await sb.rpc("send_quick_rose");
+  async sendQuickRose(broadcasterHandle) {
+    const { data, error } = await sb.rpc("send_quick_rose", { p_broadcaster_handle: broadcasterHandle || null });
     if (error) throw error;
     return data;
   },
@@ -174,5 +174,37 @@ const DB = {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("follows").delete().eq("follower_id", user.id).eq("followed_handle", handle);
     if (error) throw error;
+  },
+
+  // Chat real da sala de live — mensagens persistidas e sincronizadas via Realtime
+  // entre todo mundo assistindo à mesma sala (broadcasterHandle).
+  async getLiveChatHistory(broadcasterHandle, limit = 50) {
+    const { data, error } = await sb
+      .from("live_chat_messages")
+      .select("*")
+      .eq("broadcaster_handle", broadcasterHandle)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data.reverse();
+  },
+
+  async sendLiveChatMessage(broadcasterHandle, username, text) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("live_chat_messages").insert({
+      broadcaster_handle: broadcasterHandle, user_id: user.id, username, text, type: "chat"
+    });
+    if (error) throw error;
+  },
+
+  // Retorna o canal inscrito — quem chamar é responsável por dar sb.removeChannel(canal) ao sair da sala.
+  subscribeToLiveChat(broadcasterHandle, onMessage) {
+    const channel = sb.channel(`live_chat:${broadcasterHandle}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "live_chat_messages",
+        filter: `broadcaster_handle=eq.${broadcasterHandle}`
+      }, (payload) => onMessage(payload.new))
+      .subscribe();
+    return channel;
   }
 };
