@@ -222,6 +222,12 @@ function navigateTo(screenId) {
   } else if (screenId === "profile") {
     renderCoins();
     renderProfilePosts();
+    if (STATE.isLoggedIn) {
+      Auth.getUser()
+        .then(user => user ? DB.getProfile(user.id) : null)
+        .then(profile => { if (profile) refreshProfileStats(profile.id, profile.username); })
+        .catch(() => {});
+    }
   } else if (screenId === "go-live") {
     initiateCameraStream();
   }
@@ -1320,6 +1326,28 @@ function switchProfileTab(tabName) {
   }
 }
 
+function formatCompactCount(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(".", ",") + "mi";
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(".", ",") + "k";
+  return String(n);
+}
+
+async function refreshProfileStats(userId, username) {
+  const followingEl = document.getElementById("profile-stat-following");
+  const followersEl = document.getElementById("profile-stat-followers");
+  const likesEl = document.getElementById("profile-stat-likes");
+  if (!followingEl || !followersEl || !likesEl) return;
+
+  try {
+    const stats = await DB.getProfileStats(userId, username);
+    followingEl.textContent = formatCompactCount(stats.followingCount);
+    followersEl.textContent = formatCompactCount(stats.followersCount);
+    likesEl.textContent = formatCompactCount(stats.likesCount);
+  } catch (err) {
+    console.error("Falha ao carregar estatísticas do perfil:", err);
+  }
+}
+
 async function renderProfilePosts() {
   const container = document.getElementById("profile-posts-grid-container");
   if (!container) return;
@@ -1788,6 +1816,7 @@ async function applyProfileToUI(profile) {
 
   renderCoins();
   updateXPProgressUI();
+  refreshProfileStats(profile.id, profile.username);
 
   // Inscreve no canal global de DMs recebidas (uma vez por sessão, não a cada
   // chamada — applyProfileToUI roda depois de toda ação de carteira) e carrega

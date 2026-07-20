@@ -58,6 +58,33 @@ const DB = {
     return data;
   },
 
+  // Contadores reais do perfil (seguindo/seguidores/curtidas) — antes eram
+  // números fixos e falsos no HTML.
+  async getProfileStats(userId, username) {
+    const [followingRes, followersRes, postsRes] = await Promise.all([
+      sb.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", userId),
+      sb.from("follows").select("*", { count: "exact", head: true }).eq("followed_handle", username),
+      sb.from("posts").select("id").eq("user_id", userId)
+    ]);
+    if (followingRes.error) throw followingRes.error;
+    if (followersRes.error) throw followersRes.error;
+    if (postsRes.error) throw postsRes.error;
+
+    let likesCount = 0;
+    const postIds = (postsRes.data || []).map(p => p.id);
+    if (postIds.length > 0) {
+      const { count, error } = await sb.from("post_likes").select("*", { count: "exact", head: true }).in("post_id", postIds);
+      if (error) throw error;
+      likesCount = count || 0;
+    }
+
+    return {
+      followingCount: followingRes.count || 0,
+      followersCount: followersRes.count || 0,
+      likesCount
+    };
+  },
+
   async searchProfiles(query) {
     const { data, error } = await sb
       .from("profiles")
