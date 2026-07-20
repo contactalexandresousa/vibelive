@@ -198,6 +198,11 @@ const STATE = {
   currentLiveBroadcaster: null,
   liveChatChannel: null, // canal Supabase Realtime da sala de live atual
   pkChannel: null, // canal Supabase Realtime da batalha PK atual
+  liveKitRoom: null, // conexão LiveKit como espectador (assistindo vídeo real)
+  myLiveKitRoom: null, // conexão LiveKit como transmissor (própria live)
+  realLiveSessions: [], // quem está transmitindo de verdade agora
+  realLiveSessionsChannel: null,
+  currentLiveIsReal: false,
   activeChatPartner: null,
   dmsList: [...INITIAL_DMS],
   
@@ -323,6 +328,7 @@ document.addEventListener("DOMContentLoaded", () => {
   scrollToSection("popular"); // Mostrar apenas populares por padrão no início
   renderInboxList();
   renderStories();
+  initRealLiveSessionsFeed();
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
@@ -503,20 +509,112 @@ function createLiveCardElement(b, badgeType = null) {
   return card;
 }
 
+// Lives reais acontecendo agora (pessoas de verdade transmitindo via LiveKit) —
+// carrega o estado inicial e mantém atualizado via Realtime, pra qualquer um
+// que estiver no app (logado ou não) ver quem está ao vivo de verdade.
+async function initRealLiveSessionsFeed() {
+  try {
+    const sessions = await DB.getActiveLiveSessions();
+    renderRealLiveSessions(sessions);
+  } catch (err) {
+    console.error("Falha ao carregar lives reais:", err);
+  }
+
+  if (STATE.realLiveSessionsChannel) sb.removeChannel(STATE.realLiveSessionsChannel);
+  STATE.realLiveSessionsChannel = DB.subscribeToLiveSessionsChanges(async () => {
+    try {
+      const sessions = await DB.getActiveLiveSessions();
+      renderRealLiveSessions(sessions);
+    } catch (err) {
+      console.error("Falha ao atualizar lives reais:", err);
+    }
+  });
+}
+
+function renderRealLiveSessions(sessions) {
+  STATE.realLiveSessions = sessions;
+  const section = document.getElementById("real-live-section");
+  const grid = document.getElementById("real-live-grid");
+  if (!section || !grid) return;
+
+  grid.innerHTML = "";
+  if (sessions.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+  section.style.display = "block";
+  sessions.forEach(s => grid.appendChild(createRealLiveCardElement(s)));
+}
+
+function createRealLiveCardElement(session) {
+  const profile = session.profiles || {};
+  const name = profile.display_name || profile.username || "Ao vivo";
+  const avatar = profile.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150";
+
+  const card = document.createElement("div");
+  card.className = "live-card";
+  card.onclick = () => enterRealLiveRoom(session.user_id);
+
+  card.innerHTML = `
+    <img class="live-thumbnail" src="${avatar}" alt="${name}">
+    <div class="card-overlay-gradient"></div>
+    <div class="card-viewers">
+      <span style="color: var(--primary); font-weight: 800;">🔴 AO VIVO</span>
+    </div>
+    <div class="card-details">
+      <span class="card-name">${name}</span>
+    </div>
+    <button class="card-btn-call" onclick="event.stopPropagation(); enterRealLiveRoom('${session.user_id}');">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+    </button>
+  `;
+  return card;
+}
+
 
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM)
 async function enterLiveRoom(broadcasterId) {
   const b = MOCK_BROADCASTERS.find(x => x.id === broadcasterId);
   if (!b) return;
+  await enterLiveRoomCore(b, false);
+}
 
-  // Sai de qualquer sala anterior antes de entrar nesta (evita vazar inscrição Realtime)
+// Entra numa transmissão de verdade (pessoa real, vídeo real via LiveKit) —
+// hostUserId é o id da conta de quem está transmitindo.
+async function enterRealLiveRoom(hostUserId) {
+  let profile;
+  try {
+    profile = await DB.getProfile(hostUserId);
+  } catch (err) {
+    showToast("Não foi possível entrar nessa live.");
+    return;
+  }
+  const descriptor = {
+    id: `real-${hostUserId}`,
+    name: profile.display_name || profile.username,
+    username: profile.username,
+    avatar: profile.avatar_url,
+    diamonds: "0",
+    diamondsCount: 0,
+    videoUrl: null
+  };
+  await enterLiveRoomCore(descriptor, true, hostUserId);
+}
+
+async function enterLiveRoomCore(b, isReal, hostUserId) {
+  // Sai de qualquer sala/conexão anterior antes de entrar nesta.
   if (STATE.liveChatChannel) {
     sb.removeChannel(STATE.liveChatChannel);
     STATE.liveChatChannel = null;
   }
+  if (STATE.liveKitRoom) {
+    STATE.liveKitRoom.disconnect();
+    STATE.liveKitRoom = null;
+  }
 
   STATE.currentLiveBroadcaster = b;
-  
+  STATE.currentLiveIsReal = isReal;
+
   // Atualizar dados da UI
   DOM.streamerAvatar.src = b.avatar;
   DOM.streamerName.textContent = b.name;
@@ -536,44 +634,48 @@ async function enterLiveRoom(broadcasterId) {
     DOM.btnFollowStreamer.textContent = "+ Seguir";
     DOM.btnFollowStreamer.classList.remove("followed");
   }
-  
+
   // Limpar chat anterior
   DOM.liveChatMessages.innerHTML = "";
-  
+
   // Navegar
   navigateTo("live-room");
-  
+
   // Iniciar vídeo
   const loader = DOM.liveRoom.querySelector(".video-loading-placeholder");
   loader.style.opacity = "1";
   loader.style.display = "flex";
-  
+
   DOM.liveVideo.poster = b.avatar.replace("w=150", "w=500");
 
-  if (!b.videoUrl) {
-    DOM.liveVideo.src = "https://assets.mixkit.co/videos/preview/mixkit-woman-looking-at-her-phone-in-the-dark-40019-large.mp4";
-    showToast("Canal offline. Carregando transmissão modelo 📡");
+  if (isReal) {
+    await connectToRealLiveVideo(hostUserId, loader);
   } else {
-    DOM.liveVideo.src = b.videoUrl;
+    if (!b.videoUrl) {
+      DOM.liveVideo.src = "https://assets.mixkit.co/videos/preview/mixkit-woman-looking-at-her-phone-in-the-dark-40019-large.mp4";
+      showToast("Canal offline. Carregando transmissão modelo 📡");
+    } else {
+      DOM.liveVideo.src = b.videoUrl;
+    }
+
+    // Simular conexão de streaming com fail-safe
+    let hasLoaded = false;
+    const hideLoader = () => {
+      if (hasLoaded) return;
+      hasLoaded = true;
+      loader.style.opacity = "0";
+      setTimeout(() => { loader.style.display = "none"; }, 500);
+      DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
+    };
+
+    DOM.liveVideo.oncanplay = hideLoader;
+    DOM.liveVideo.onloadedmetadata = hideLoader;
+    DOM.liveVideo.onplay = hideLoader;
+
+    // Fail-safe de 800ms
+    setTimeout(hideLoader, 800);
   }
-  
-  // Simular conexão de streaming com fail-safe
-  let hasLoaded = false;
-  const hideLoader = () => {
-    if (hasLoaded) return;
-    hasLoaded = true;
-    loader.style.opacity = "0";
-    setTimeout(() => { loader.style.display = "none"; }, 500);
-    DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
-  };
-  
-  DOM.liveVideo.oncanplay = hideLoader;
-  DOM.liveVideo.onloadedmetadata = hideLoader;
-  DOM.liveVideo.onplay = hideLoader;
-  
-  // Fail-safe de 800ms
-  setTimeout(hideLoader, 800);
-  
+
   // Mensagem de entrada e regras (aviso estático local, não é bot nem persistido)
   addSystemComment("Regras do chat: Seja gentil e siga as diretrizes.");
 
@@ -595,6 +697,35 @@ async function enterLiveRoom(broadcasterId) {
   });
 }
 
+// Conecta como espectador numa sala LiveKit real e anexa o vídeo/áudio
+// recebido de quem está transmitindo ao player da tela.
+async function connectToRealLiveVideo(hostUserId, loader) {
+  const roomName = `live-${hostUserId}`;
+  DOM.liveVideo.srcObject = null;
+  try {
+    const token = await DB.createLivekitToken(roomName);
+    const room = new LivekitClient.Room();
+    STATE.liveKitRoom = room;
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === "video") {
+        track.attach(DOM.liveVideo);
+        loader.style.opacity = "0";
+        setTimeout(() => { loader.style.display = "none"; }, 500);
+        DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
+      } else if (track.kind === "audio") {
+        track.attach(DOM.liveVideo);
+      }
+    });
+
+    await room.connect(LIVEKIT_URL, token);
+  } catch (err) {
+    console.error("Falha ao conectar na live real:", err);
+    showToast("Não foi possível conectar à transmissão.");
+    loader.style.display = "none";
+  }
+}
+
 function renderIncomingLiveChatRow(row) {
   if (row.type === "gift") {
     addLiveComment(row.username, row.text.replace(/^enviou /, ""), true, "");
@@ -606,13 +737,19 @@ function renderIncomingLiveChatRow(row) {
 function closeLiveRoom() {
   DOM.liveVideo.pause();
   DOM.liveVideo.src = "";
+  DOM.liveVideo.srcObject = null;
 
   if (STATE.liveChatChannel) {
     sb.removeChannel(STATE.liveChatChannel);
     STATE.liveChatChannel = null;
   }
+  if (STATE.liveKitRoom) {
+    STATE.liveKitRoom.disconnect();
+    STATE.liveKitRoom = null;
+  }
 
   STATE.currentLiveBroadcaster = null;
+  STATE.currentLiveIsReal = false;
 }
 
 async function toggleFollowStreamer() {
@@ -1118,6 +1255,8 @@ function applyFilter(btn, filterClass) {
 }
 
 function startOwnLiveStream() {
+  if (!requireAuth()) return;
+
   // Fechar painel de setup
   DOM.goLiveSetup.style.display = "none";
   
@@ -1147,37 +1286,71 @@ function startOwnLiveStream() {
   }
 }
 
-function launchBroadcastingSession() {
+async function launchBroadcastingSession() {
   // Exibir overlay de live ativa
   DOM.myLiveActiveOverlay.style.display = "flex";
-  
+
   // Limpar mensagens e resetar contadores
   DOM.myLiveChatMessages.innerHTML = "";
   STATE.myLiveViewerCount = 0;
   STATE.myLiveDiamonds = 0;
   DOM.myLiveViewerCount.textContent = "0";
   DOM.myLiveDiamonds.textContent = "💎 0 acumulados";
-  
+
   // Aviso de sistema (estático, não é bot)
   addMyLiveComment("Sistema", "Transmissão iniciada. Seus seguidores foram notificados! 📡", true);
+
+  // Publica a câmera de verdade no LiveKit — é isso que permite outra pessoa
+  // real entrar e assistir com vídeo de verdade, não só a prévia local.
+  try {
+    const user = await Auth.getUser();
+    const roomName = `live-${user.id}`;
+    const token = await DB.createLivekitToken(roomName);
+    const room = new LivekitClient.Room();
+    STATE.myLiveKitRoom = room;
+    await room.connect(LIVEKIT_URL, token);
+
+    if (STATE.localStream) {
+      const videoTrack = STATE.localStream.getVideoTracks()[0];
+      if (videoTrack) await room.localParticipant.publishTrack(videoTrack);
+      const audioTrack = STATE.localStream.getAudioTracks()[0];
+      if (audioTrack) await room.localParticipant.publishTrack(audioTrack);
+    }
+
+    await DB.startLiveSession(roomName);
+  } catch (err) {
+    console.error("Falha ao publicar transmissão real:", err);
+    showToast("Sua câmera está ativa, mas outras pessoas podem não conseguir assistir agora.");
+  }
 }
 
-function stopOwnLiveStream() {
+async function stopOwnLiveStream() {
   // Parar webcam
   if (STATE.localStream) {
     STATE.localStream.getTracks().forEach(track => track.stop());
     STATE.localStream = null;
     DOM.goLiveVideo.srcObject = null;
   }
-  
+
+  // Desconectar do LiveKit e encerrar a sessão real (some da lista "Ao Vivo Agora" de todo mundo)
+  if (STATE.myLiveKitRoom) {
+    STATE.myLiveKitRoom.disconnect();
+    STATE.myLiveKitRoom = null;
+  }
+  try {
+    await DB.endLiveSession();
+  } catch (err) {
+    console.error("Falha ao encerrar sessão de live:", err);
+  }
+
   // Reiniciar telas do go live
   DOM.goLiveSetup.style.display = "flex";
   DOM.myLiveActiveOverlay.style.display = "none";
   DOM.goLiveVideo.className = "";
-  
+
   const fallback = DOM.goLive.querySelector(".camera-fallback-msg");
   fallback.style.display = "flex";
-  
+
   showToast("Transmissão encerrada com sucesso!");
 }
 

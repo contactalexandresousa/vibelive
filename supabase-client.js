@@ -7,6 +7,11 @@
 const SUPABASE_URL = "https://mydudottsuvizwurrddz.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_vgVCQ6DxZV9D6NYL0Gz0SQ_3BM8BsDe";
 
+// URL pública do projeto LiveKit Cloud (vídeo ao vivo real via WebRTC).
+// Assim como a Supabase URL, é segura para ficar no cliente — a segurança
+// vem do token assinado no servidor (Edge Function create-livekit-token).
+const LIVEKIT_URL = "wss://vibelive-8axxiyus.livekit.cloud";
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const Auth = {
@@ -196,6 +201,56 @@ const DB = {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("follows").delete().eq("follower_id", user.id).eq("followed_handle", handle);
     if (error) throw error;
+  },
+
+  // Vídeo ao vivo real (LiveKit) — token assinado no servidor, o cliente nunca
+  // vê o API Secret do LiveKit.
+  async createLivekitToken(roomName) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-livekit-token`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ room_name: roomName })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Não foi possível conectar ao vídeo");
+    return body.token;
+  },
+
+  // Quem está transmitindo de verdade agora (separado dos streamers mockados).
+  async startLiveSession(roomName) {
+    const { data: { user } } = await sb.auth.getUser();
+    // Encerra qualquer sessão própria anterior que tenha ficado pendurada
+    // (ex: fechou a aba sem clicar em "Encerrar") antes de abrir uma nova.
+    await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
+    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName });
+    if (error) throw error;
+  },
+
+  async endLiveSession() {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
+    if (error) throw error;
+  },
+
+  async getActiveLiveSessions() {
+    const { data, error } = await sb
+      .from("live_sessions")
+      .select("*, profiles(username, display_name, avatar_url)")
+      .is("ended_at", null)
+      .order("started_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  subscribeToLiveSessionsChanges(onChange) {
+    const channel = sb.channel("live_sessions_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, onChange)
+      .subscribe();
+    return channel;
   },
 
   // Chat real da sala de live — mensagens persistidas e sincronizadas via Realtime

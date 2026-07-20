@@ -194,7 +194,17 @@
 
             <!-- Seções de Transmissões (Populares, Novatas e Próximas) -->
             <main class="discover-scroll-area">
-              
+
+              <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) — só aparece quando existe pelo menos uma.
+                   Propositalmente FORA da classe "discover-section": scrollToSection() indexa essas seções
+                   por posição (Populares/Novatas/Próximas) e uma 4ª seção quebraria essa lógica. -->
+              <section class="real-live-banner-section" id="real-live-section" style="display: none; margin-bottom: 26px;">
+                <div class="section-header">
+                  <h2>🔴 Ao Vivo Agora</h2>
+                </div>
+                <div class="lives-grid" id="real-live-grid"></div>
+              </section>
+
               <!-- Seção Populares -->
               <section class="discover-section">
                 <div class="section-header">
@@ -1225,6 +1235,8 @@
 
   <!-- Cliente Supabase (auth + banco de dados) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Cliente LiveKit (vídeo ao vivo real via WebRTC) -->
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script src="supabase-client.js"></script>
   <!-- Script Principal -->
   <script src="app.js"></script>
