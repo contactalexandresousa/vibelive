@@ -93,7 +93,7 @@
 
                 <div class="auth-form-body">
                   <div class="auth-form-group">
-                    <input type="text" id="auth-username" placeholder="E-mail ou Celular">
+                    <input type="email" id="auth-username" placeholder="E-mail">
                   </div>
                   <div class="auth-form-group">
                     <input type="password" id="auth-password" placeholder="Senha">
@@ -117,27 +117,10 @@
                 </button>
               </div>
 
-              <!-- 3 Perfis de Teste para Escolher -->
-              <div class="auth-presets-section" style="margin-top: 24px; text-align: center; width: 100%;">
-                <span style="font-size: 0.65rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 12px;">Selecione um Perfil de Teste</span>
-                <div class="presets-row" style="display: flex; justify-content: space-around; gap: 8px;">
-                  <button class="preset-profile-btn" onclick="selectPresetProfile(0)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
-                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Alexandre">
-                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Alexandre S.</span>
-                    <span style="font-size: 0.5rem; color: var(--primary);">@zcitando</span>
-                  </button>
-                  <button class="preset-profile-btn" onclick="selectPresetProfile(1)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
-                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Luana">
-                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Luana Becker</span>
-                    <span style="font-size: 0.5rem; color: var(--primary);">@luana.becker</span>
-                  </button>
-                  <button class="preset-profile-btn" onclick="selectPresetProfile(2)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
-                    <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Gabi">
-                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Gabi Silva</span>
-                    <span style="font-size: 0.5rem; color: var(--primary);">@gabi.silva</span>
-                  </button>
-                </div>
-              </div>
+              <!-- Acesso rápido sem cadastro: cada visitante recebe uma conta real e privada -->
+              <button class="btn-guest-login" onclick="loginAsGuest()" style="margin-top: 20px; width: 100%; height: 42px; background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 14px; color: var(--text-secondary); font-size: 0.72rem; font-weight: 600; cursor: pointer;">
+                Continuar como Visitante
+              </button>
             </div>
 
             <!-- Modal Social Auth Simulado -->
@@ -1295,6 +1278,9 @@
     </div> <!-- Fim de phone-shell -->
   </div> <!-- Fim de phone-wrapper -->
 
+  <!-- Cliente Supabase (auth + banco de dados) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="supabase-client.js"></script>
   <!-- Script Principal -->
   <script src="app.js"></script>
 </body>

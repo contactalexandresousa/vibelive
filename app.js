@@ -238,34 +238,13 @@ const STATE = {
   activeChatPartner: null,
   dmsList: [...INITIAL_DMS],
   
-  // Postagens no Perfil
+  // Postagens no Perfil — carregadas do banco (DB.getMyPosts) após o login;
+  // toda conta real começa sem posts.
   currentPostType: "image",
   activeLightboxPostId: null,
-  myPosts: [
-    {
-      id: 1,
-      type: "image",
-      src: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500",
-      caption: "Curtindo a vibe do final de semana! ✨✌️",
-      likes: 42,
-      comments: [
-        { author: "gabi.silva", text: "Maravilhosa! 😍" },
-        { author: "moranguinho", text: "Que lugar lindo!" }
-      ]
-    },
-    {
-      id: 2,
-      type: "video",
-      src: "https://assets.mixkit.co/videos/preview/mixkit-girl-taking-selfies-with-her-smart-phone-41444-large.mp4",
-      caption: "Preparando a live de hoje à noite! Não percam! 🎥💖",
-      likes: 128,
-      comments: [
-        { author: "aline.santos", text: "Já marquei presença!" },
-        { author: "zcitando", text: "A melhor streamer!" }
-      ]
-    }
-  ],
-  
+  activeLightboxLikeState: null,
+  myPosts: [],
+
   // Variáveis para simulação de Live Ativa (Assistindo)
   liveChatInterval: null,
   liveViewerInterval: null,
@@ -384,11 +363,32 @@ document.addEventListener("DOMContentLoaded", () => {
   renderInboxList();
   renderStories();
 
-  // Temporizador para esconder a Splash Screen
-  setTimeout(() => {
+  // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
+  setTimeout(async () => {
+    try {
+      const session = await Auth.getSession();
+      if (session) {
+        STATE.isLoggedIn = true;
+        const profile = await DB.getProfile(session.user.id);
+        await applyProfileToUI(profile);
+      }
+    } catch (err) {
+      console.error("Falha ao checar sessão:", err);
+    }
+    // Navegação sem login continua permitida (dados mockados); ações que gravam
+    // dado real checam STATE.isLoggedIn e pedem login na hora, via requireAuth().
     navigateTo("discover");
   }, 2500);
 });
+
+// Usado no início de qualquer ação que grava dado real no banco. Se não houver
+// sessão, manda para a tela de login em vez de deixar a chamada ao Supabase falhar.
+function requireAuth() {
+  if (STATE.isLoggedIn) return true;
+  showToast("Entre na sua conta para continuar.");
+  navigateTo("auth");
+  return false;
+}
 
 
 // 5. SISTEMA DE RELÓGIO (STATUS BAR)
@@ -573,7 +573,7 @@ function enterLiveRoom(broadcasterId) {
   STATE.liveViewerCount = b.viewers;
   
   // Atualizar botão de seguir
-  if (STATE.followedStreamers.includes(b.id)) {
+  if (STATE.followedStreamers.includes(b.username)) {
     DOM.btnFollowStreamer.textContent = "Seguindo";
     DOM.btnFollowStreamer.classList.add("followed");
   } else {
@@ -641,22 +641,30 @@ function closeLiveRoom() {
   STATE.currentLiveBroadcaster = null;
 }
 
-function toggleFollowStreamer() {
+async function toggleFollowStreamer() {
   const b = STATE.currentLiveBroadcaster;
   if (!b) return;
-  
-  const index = STATE.followedStreamers.indexOf(b.id);
-  if (index > -1) {
-    STATE.followedStreamers.splice(index, 1);
-    DOM.btnFollowStreamer.textContent = "+ Seguir";
-    DOM.btnFollowStreamer.classList.remove("followed");
-    showToast(`Deixou de seguir ${b.name}`);
-  } else {
-    STATE.followedStreamers.push(b.id);
-    DOM.btnFollowStreamer.textContent = "Seguindo";
-    DOM.btnFollowStreamer.classList.add("followed");
-    showToast(`Seguindo ${b.name}!`);
-    addSystemComment(`Você seguiu ${b.name}`);
+  if (!requireAuth()) return;
+
+  const alreadyFollowing = STATE.followedStreamers.includes(b.username);
+
+  try {
+    if (alreadyFollowing) {
+      await DB.unfollow(b.username);
+      STATE.followedStreamers = STATE.followedStreamers.filter(h => h !== b.username);
+      DOM.btnFollowStreamer.textContent = "+ Seguir";
+      DOM.btnFollowStreamer.classList.remove("followed");
+      showToast(`Deixou de seguir ${b.name}`);
+    } else {
+      await DB.follow(b.username);
+      STATE.followedStreamers.push(b.username);
+      DOM.btnFollowStreamer.textContent = "Seguindo";
+      DOM.btnFollowStreamer.classList.add("followed");
+      showToast(`Seguindo ${b.name}!`);
+      addSystemComment(`Você seguiu ${b.name}`);
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar. Tente novamente.");
   }
 }
 
@@ -740,29 +748,24 @@ function sendUserComment() {
 
 
 // 10. EMISSOR DE CORAÇÕES FLUTUANTES (INTERATIVO)
-function triggerFloatingHeart(event) {
-  // Descobrir a posição inicial do botão
-  const rect = event.currentTarget.getBoundingClientRect();
-  const startX = rect.left + rect.width / 2;
-  const startY = rect.top;
-  
+function triggerFloatingHeart(x, y) {
   const heart = document.createElement("div");
   heart.className = "floating-heart";
-  
+
   // Cores de corações aleatórias
   const colors = ["#ff4d6d", "#ff8ba0", "#f0b23d", "#ffffff"];
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
-  
+
   heart.innerHTML = `
     <svg viewBox="0 0 24 24" fill="${randomColor}">
       <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
     </svg>
   `;
-  
+
   // Variação no movimento horizontal (efeito zigue-zague via JS inline css)
   const drift = (Math.random() * 80 - 40); // Desvio de até 40px p/ esquerda ou direita
-  heart.style.left = `${event.clientX - 10}px`;
-  heart.style.top = `${event.clientY - 20}px`;
+  heart.style.left = `${x - 10}px`;
+  heart.style.top = `${y - 20}px`;
   
   // Aplicar variáveis customizadas CSS para a animação
   heart.style.setProperty("--drift", `${drift}px`);
@@ -807,59 +810,69 @@ function selectGift(element, name, price, icon) {
   DOM.btnSendGift.textContent = `Enviar ${name} (${price} Moeda${price > 1 ? 's' : ''})`;
 }
 
-function sendSelectedGift() {
+// Mapeia o nome exibido do presente (usado nos onclick do HTML) para o código
+// que a função RPC send_gift reconhece internamente.
+const GIFT_CODES = {
+  "Rosa": "rosa",
+  "Chocolate": "chocolate",
+  "Diamante": "diamante",
+  "Coroa VIP": "coroa_vip",
+  "Super Carro": "super_carro",
+  "Castelo": "castelo"
+};
+
+async function sendSelectedGift() {
   if (!STATE.selectedGift) return;
+  if (!requireAuth()) return;
   const gift = STATE.selectedGift;
-  
-  if (STATE.myCoins < gift.price) {
-    showToast("Saldo de moedas insuficiente. Compre mais!");
-    return;
-  }
-  
-  // Deduzir moedas
-  STATE.myCoins -= gift.price;
-  renderCoins();
-  DOM.drawerCoinsDisplay.textContent = STATE.myCoins;
-  
-  // Adicionar diamantes/pontos ao streamer da live
-  if (STATE.currentLiveBroadcaster) {
-    STATE.currentLiveBroadcaster.diamondsCount += gift.price;
-    // Formatar de volta
-    let display = "";
-    const count = STATE.currentLiveBroadcaster.diamondsCount;
-    if (count >= 1000000) {
-      display = (count / 1000000).toFixed(1) + " mi";
-    } else if (count >= 1000) {
-      display = (count / 1000).toFixed(0) + " mil";
-    } else {
-      display = count.toString();
+
+  try {
+    const profile = await DB.sendGift(GIFT_CODES[gift.name], STATE.currentLiveBroadcaster ? STATE.currentLiveBroadcaster.username : null);
+    await applyProfileToUI(profile);
+    DOM.drawerCoinsDisplay.textContent = STATE.myCoins;
+
+    // Adicionar diamantes/pontos ao streamer da live (cosmético — streamer é dado mockado)
+    if (STATE.currentLiveBroadcaster) {
+      STATE.currentLiveBroadcaster.diamondsCount += gift.price;
+      // Formatar de volta
+      let display = "";
+      const count = STATE.currentLiveBroadcaster.diamondsCount;
+      if (count >= 1000000) {
+        display = (count / 1000000).toFixed(1) + " mi";
+      } else if (count >= 1000) {
+        display = (count / 1000).toFixed(0) + " mil";
+      } else {
+        display = count.toString();
+      }
+      STATE.currentLiveBroadcaster.diamonds = display;
+      DOM.streamerStats.textContent = `${display} acumulados`;
     }
-    STATE.currentLiveBroadcaster.diamonds = display;
-    DOM.streamerStats.textContent = `${display} acumulados`;
+
+    // Fechar gaveta
+    closeGiftDrawer();
+
+    // Mostrar anúncio gráfico animado no centro
+    triggerGiftAnnouncement(gift.icon, `Você enviou um(a) ${gift.name}!`);
+
+    // Adicionar mensagem especial no chat
+    addLiveComment("Você", gift.name, true, gift.icon);
+
+    // Simular resposta alegre do streamer
+    setTimeout(() => {
+      if (STATE.currentLiveBroadcaster && STATE.activeScreen === "live-room") {
+        const audioAnswers = [
+          `Nossa!!! Obrigada pelo(a) ${gift.name}! Você é incrível! 💖`,
+          `👑 Omg, muito obrigada Você pelo presente! Beijo grande!`,
+          `Que lindo!!! Amei o presente ${gift.icon}. Valeu Você!`,
+          `Arrasou Você! Muito obrigada pelo suporte! 😍`
+        ];
+        const response = audioAnswers[Math.floor(Math.random() * audioAnswers.length)];
+        addLiveComment(STATE.currentLiveBroadcaster.name, response);
+      }
+    }, 1800);
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar o presente.");
   }
-  
-  // Fechar gaveta
-  closeGiftDrawer();
-  
-  // Mostrar anúncio gráfico animado no centro
-  triggerGiftAnnouncement(gift.icon, `Você enviou um(a) ${gift.name}!`);
-  
-  // Adicionar mensagem especial no chat
-  addLiveComment("Você", gift.name, true, gift.icon);
-  
-  // Simular resposta alegre do streamer
-  setTimeout(() => {
-    if (STATE.currentLiveBroadcaster && STATE.activeScreen === "live-room") {
-      const audioAnswers = [
-        `Nossa!!! Obrigada pelo(a) ${gift.name}! Você é incrível! 💖`,
-        `👑 Omg, muito obrigada Você pelo presente! Beijo grande!`,
-        `Que lindo!!! Amei o presente ${gift.icon}. Valeu Você!`,
-        `Arrasou Você! Muito obrigada pelo suporte! 😍`
-      ];
-      const response = audioAnswers[Math.floor(Math.random() * audioAnswers.length)];
-      addLiveComment(STATE.currentLiveBroadcaster.name, response);
-    }
-  }, 1800);
 }
 
 function triggerGiftAnnouncement(emoji, text) {
@@ -1075,28 +1088,31 @@ function copyPixCode() {
   showToast("Código Copia e Cola copiado!");
 }
 
-function simulatePixSuccess() {
+async function simulatePixSuccess() {
   if (!STATE.activePixPackage) return;
+  if (!requireAuth()) return;
   const p = STATE.activePixPackage;
-  
-  // Alterar status
-  DOM.pixStatusBox.style.background = "rgba(52, 211, 153, 0.15)";
-  DOM.pixStatusBox.innerHTML = `
-    <span style="font-size: 1.1rem;">✅</span>
-    <strong>Pagamento Recebido com Sucesso!</strong>
-  `;
-  
-  setTimeout(() => {
-    // Adicionar moedas
-    STATE.myCoins += p.coins;
-    renderCoins();
-    
-    // Fechar modal
-    closePixModal();
-    
-    // Toast com efeito sonoro visual
-    showToast(`Moedas Creditadas! +${p.coins} Moedas adicionadas.`);
-  }, 1500);
+
+  try {
+    // Recarga PIX real ainda não está integrada nesta fase — este RPC apenas
+    // credita as moedas do pacote de forma segura e persistente (sem dinheiro real envolvido).
+    const profile = await DB.redeemDemoPix(`p${p.coins}`);
+
+    // Alterar status
+    DOM.pixStatusBox.style.background = "rgba(52, 211, 153, 0.15)";
+    DOM.pixStatusBox.innerHTML = `
+      <span style="font-size: 1.1rem;">✅</span>
+      <strong>Pagamento Recebido com Sucesso!</strong>
+    `;
+
+    setTimeout(async () => {
+      await applyProfileToUI(profile);
+      closePixModal();
+      showToast(`Moedas Creditadas! +${p.coins} Moedas adicionadas.`);
+    }, 1500);
+  } catch (err) {
+    showToast(err.message || "Não foi possível confirmar o pagamento.");
+  }
 }
 
 
@@ -1358,13 +1374,28 @@ function switchProfileTab(tabName) {
   }
 }
 
-function renderProfilePosts() {
+async function renderProfilePosts() {
   const container = document.getElementById("profile-posts-grid-container");
   if (!container) return;
 
+  if (!STATE.isLoggedIn) {
+    container.innerHTML = "";
+    STATE.myPosts = [];
+    return;
+  }
+
+  let posts;
+  try {
+    posts = await DB.getMyPosts();
+  } catch (err) {
+    console.error("Falha ao carregar publicações:", err);
+    return;
+  }
+  STATE.myPosts = posts;
+
   container.innerHTML = "";
 
-  STATE.myPosts.forEach(post => {
+  posts.forEach(post => {
     const item = document.createElement("div");
     item.className = "post-grid-item";
     item.onclick = () => openPostLightbox(post.id);
@@ -1372,10 +1403,10 @@ function renderProfilePosts() {
     let mediaHtml = "";
     let indicatorHtml = "";
 
-    if (post.type === "image") {
-      mediaHtml = `<img src="${post.src}" alt="Post">`;
+    if (post.media_type === "image") {
+      mediaHtml = `<img src="${post.media_url}" alt="Post">`;
     } else {
-      mediaHtml = `<video src="${post.src}" muted playsinline></video>`;
+      mediaHtml = `<video src="${post.media_url}" muted playsinline></video>`;
       indicatorHtml = `<div class="post-video-indicator">▶ Video</div>`;
     }
 
@@ -1383,11 +1414,21 @@ function renderProfilePosts() {
       ${mediaHtml}
       ${indicatorHtml}
       <div class="post-grid-overlay">
-        <span>❤️ ${post.likes}</span>
-        <span>💬 ${post.comments.length}</span>
+        <span>❤️ <span class="post-likes-count" data-post="${post.id}">…</span></span>
+        <span>💬 <span class="post-comments-count" data-post="${post.id}">…</span></span>
       </div>
     `;
     container.appendChild(item);
+
+    // Contadores são preenchidos à parte para não travar a renderização da grade.
+    DB.getPostLikeState(post.id).then(state => {
+      const el = item.querySelector(".post-likes-count");
+      if (el) el.textContent = state.likesCount;
+    }).catch(() => {});
+    DB.getComments(post.id).then(comments => {
+      const el = item.querySelector(".post-comments-count");
+      if (el) el.textContent = comments.length;
+    }).catch(() => {});
   });
 }
 
@@ -1454,35 +1495,31 @@ function previewSelectedMedia() {
   }
 }
 
-function publishNewPost() {
+async function publishNewPost() {
+  if (!requireAuth()) return;
   const select = document.getElementById("post-media-preset");
   const caption = document.getElementById("post-caption-input").value.trim();
   const val = select.value;
 
   if (!val) return;
 
-  const newPost = {
-    id: STATE.myPosts.length + 1,
-    type: STATE.currentPostType,
-    src: val,
-    caption: caption || "Sem legenda.",
-    likes: 0,
-    comments: []
-  };
-
-  STATE.myPosts.unshift(newPost); // Adicionar no topo
-  renderProfilePosts();
-  closeNewPostModal();
-  showToast("Publicação realizada com sucesso!");
+  try {
+    await DB.createPost(val, STATE.currentPostType, caption || "Sem legenda.");
+    await renderProfilePosts();
+    closeNewPostModal();
+    showToast("Publicação realizada com sucesso!");
+  } catch (err) {
+    showToast(err.message || "Não foi possível publicar. Tente novamente.");
+  }
 }
 
 // Lightbox
-function openPostLightbox(postId) {
+async function openPostLightbox(postId) {
   const post = STATE.myPosts.find(p => p.id === postId);
   if (!post) return;
 
   STATE.activeLightboxPostId = postId;
-  
+
   const modal = document.getElementById("modal-post-lightbox");
   const img = document.getElementById("lightbox-img");
   const video = document.getElementById("lightbox-video");
@@ -1492,24 +1529,33 @@ function openPostLightbox(postId) {
 
   modal.style.display = "flex";
   caption.textContent = post.caption;
-  likes.textContent = `${post.likes} curtidas`;
-
-  // Like button active status
+  likes.textContent = "carregando…";
   likeBtn.classList.remove("active");
 
-  if (post.type === "image") {
+  if (post.media_type === "image") {
     img.style.display = "block";
     video.style.display = "none";
     video.pause();
-    img.src = post.src;
+    img.src = post.media_url;
   } else {
     img.style.display = "none";
     video.style.display = "block";
-    video.src = post.src;
+    video.src = post.media_url;
     video.play().catch(e => console.log(e));
   }
 
-  renderLightboxComments(post);
+  try {
+    const [likeState, comments] = await Promise.all([
+      DB.getPostLikeState(postId),
+      DB.getComments(postId)
+    ]);
+    STATE.activeLightboxLikeState = likeState;
+    likes.textContent = `${likeState.likesCount} curtidas`;
+    if (likeState.likedByMe) likeBtn.classList.add("active");
+    renderLightboxComments(comments);
+  } catch (err) {
+    console.error("Falha ao carregar curtidas/comentários:", err);
+  }
 }
 
 function closePostLightbox() {
@@ -1518,67 +1564,69 @@ function closePostLightbox() {
   STATE.activeLightboxPostId = null;
 }
 
-function renderLightboxComments(post) {
+function renderLightboxComments(comments) {
   const list = document.getElementById("lightbox-comments-list");
   list.innerHTML = "";
 
-  if (post.comments.length === 0) {
+  if (comments.length === 0) {
     list.innerHTML = `<div style="font-size: 0.65rem; color: var(--light-gray); padding: 4px 0;">Nenhum comentário. Seja o primeiro!</div>`;
     return;
   }
 
-  post.comments.forEach(c => {
+  comments.forEach(c => {
     const item = document.createElement("div");
     item.className = "lightbox-comment-item";
-    
-    let vipPrefix = "";
-    if ((c.author === "Você" || c.author === STATE.profileName) && STATE.isVIP) {
-      vipPrefix = `<span style="color:var(--secondary); font-weight:900; margin-right:4px; font-size:0.55rem; background:rgba(240,178,61,0.15); padding:1px 3px; border-radius:3px; border:1px solid rgba(240,178,61,0.3);">VIP</span>`;
-    }
-
-    item.innerHTML = `${vipPrefix}<strong>${c.author}</strong> ${c.text}`;
+    const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
+    item.innerHTML = `<strong>${authorName}</strong> ${c.text}`;
     list.appendChild(item);
   });
 }
 
-function likeLightboxPost() {
-  const post = STATE.myPosts.find(p => p.id === STATE.activeLightboxPostId);
-  if (!post) return;
+async function likeLightboxPost() {
+  if (!requireAuth()) return;
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
 
+  const currentlyLiked = STATE.activeLightboxLikeState ? STATE.activeLightboxLikeState.likedByMe : false;
   const btn = document.querySelector("#modal-post-lightbox .btn-lightbox-like");
-  
-  if (btn.classList.contains("active")) {
-    btn.classList.remove("active");
-    post.likes--;
-  } else {
-    btn.classList.add("active");
-    post.likes++;
-  }
 
-  document.getElementById("lightbox-likes-count").textContent = `${post.likes} curtidas`;
-  renderProfilePosts(); // Atualizar contagem no grid
+  try {
+    const newState = await DB.toggleLike(postId, currentlyLiked);
+    STATE.activeLightboxLikeState = newState;
+    btn.classList.toggle("active", newState.likedByMe);
+    document.getElementById("lightbox-likes-count").textContent = `${newState.likesCount} curtidas`;
+
+    const gridCounter = document.querySelector(`.post-likes-count[data-post="${postId}"]`);
+    if (gridCounter) gridCounter.textContent = newState.likesCount;
+  } catch (err) {
+    showToast(err.message || "Não foi possível curtir agora.");
+  }
 }
 
-function addLightboxComment() {
+async function addLightboxComment() {
+  if (!requireAuth()) return;
   const input = document.getElementById("lightbox-new-comment");
   const text = input.value.trim();
-
   if (!text) return;
 
-  const post = STATE.myPosts.find(p => p.id === STATE.activeLightboxPostId);
-  if (!post) return;
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
 
-  post.comments.push({
-    author: "Você",
-    text: text
-  });
+  try {
+    await DB.addComment(postId, text); // xp é concedido atomicamente pela RPC
+    input.value = "";
 
-  input.value = "";
-  renderLightboxComments(post);
-  renderProfilePosts(); // Atualizar contador no grid
-  
-  if (typeof addXP === "function") {
-    addXP(15);
+    const comments = await DB.getComments(postId);
+    renderLightboxComments(comments);
+
+    const gridCounter = document.querySelector(`.post-comments-count[data-post="${postId}"]`);
+    if (gridCounter) gridCounter.textContent = comments.length;
+
+    const user = await Auth.getUser();
+    const profile = await DB.getProfile(user.id);
+    await applyProfileToUI(profile);
+  } catch (err) {
+    showToast(err.message || "Não foi possível comentar agora.");
   }
 }
 
@@ -1667,31 +1715,14 @@ function saveProfileChanges() {
   closeProfileSettingsModal();
 }
 
-function deleteAccount() {
-  const confirmDelete = confirm("⚠️ ATENÇÃO: Tem certeza de que deseja EXCLUIR permanentemente a sua conta? Esta ação não poderá ser desfeita.");
-  
+async function deleteAccount() {
+  // Excluir a conta de verdade exige privilégio de administrador (não disponível no
+  // cliente com a chave pública) — por ora, essa ação encerra a sessão com segurança.
+  const confirmDelete = confirm("Deseja encerrar a sessão desta conta? A exclusão definitiva de conta ainda não está disponível nesta versão.");
+
   if (confirmDelete) {
     closeProfileSettingsModal();
-    showToast("Excluindo conta...");
-    
-    setTimeout(() => {
-      // Reiniciar dados de perfil para o padrão
-      const nameEl = document.querySelector(".profile-bio-info h3");
-      const handleEl = document.querySelector(".profile-handle");
-      const bioEl = document.querySelector(".profile-bio-text");
-      
-      if (nameEl) nameEl.innerHTML = `Novo Usuário <span class="premium-verified">✓</span>`;
-      if (handleEl) handleEl.textContent = "@novousuario";
-      if (bioEl) bioEl.textContent = "Olá! Acabei de me juntar ao VibeLive.";
-
-      STATE.myPosts = []; // Limpar postagens
-      renderProfilePosts();
-
-      // Deslogar
-      STATE.isLoggedIn = false;
-      navigateTo("auth");
-      showToast("Sua conta foi excluída com sucesso.");
-    }, 1200);
+    await handleLogout();
   }
 }
 
@@ -1862,20 +1893,20 @@ function updatePkBars() {
   document.getElementById("pk-bar-blue").style.width = `${pctB}%`;
 }
 
-function supportStreamer(side, event) {
-  const cost = side === "A" ? 1 : 25;
+async function supportStreamer(side, event) {
+  if (!requireAuth()) return;
   const giftName = side === "A" ? "Rosa 🌹" : "Diamante 💎";
   const points = side === "A" ? 100 : 250;
   const streamerName = side === "A" ? "MORANGUINHO 🍓" : "Luana Becker 👑";
 
-  if (STATE.myCoins < cost) {
-    showToast("Saldo de moedas insuficiente. Recarregue no Perfil!");
+  let profile;
+  try {
+    profile = await DB.supportPk(side);
+  } catch (err) {
+    showToast(err.message || "Saldo de moedas insuficiente. Recarregue no Perfil!");
     return;
   }
-
-  // Deduzir moedas
-  STATE.myCoins -= cost;
-  renderCoins();
+  await applyProfileToUI(profile);
 
   // Somar pontos
   if (side === "A") {
@@ -2025,47 +2056,84 @@ function toggleAuthTab(mode) {
     tabLogin.classList.add("active");
     tabRegister.classList.remove("active");
     submitBtn.textContent = "Entrar";
-    document.getElementById("auth-username").placeholder = "E-mail ou Celular";
+    document.getElementById("auth-username").placeholder = "E-mail";
   } else {
     tabLogin.classList.remove("active");
     tabRegister.classList.add("active");
     submitBtn.textContent = "Criar Conta";
-    document.getElementById("auth-username").placeholder = "Nome, E-mail ou Celular";
+    document.getElementById("auth-username").placeholder = "E-mail";
   }
 }
 
-function handleAuthSubmit() {
-  const userField = document.getElementById("auth-username").value.trim();
-  const passwordField = document.getElementById("auth-password").value.trim();
+// Aplica um profile carregado do banco ao STATE e à UI (usado no login e na checagem de sessão).
+async function applyProfileToUI(profile) {
+  const previousLevel = STATE.level;
 
-  if (!userField || !passwordField) {
+  try {
+    STATE.followedStreamers = await DB.getFollows();
+  } catch (err) {
+    console.error("Falha ao carregar quem você segue:", err);
+  }
+
+  STATE.myCoins = profile.coins;
+  STATE.xp = profile.xp;
+  STATE.level = profile.level;
+  STATE.isVIP = profile.is_vip;
+  STATE.profileName = profile.display_name || profile.username;
+
+  const nameEl = document.querySelector(".profile-bio-info h3");
+  const handleEl = document.querySelector(".profile-handle");
+  if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
+  if (handleEl) handleEl.textContent = `@${profile.username}`;
+
+  renderCoins();
+  updateXPProgressUI();
+
+  // O servidor decide o XP/nível (nunca o cliente) — anuncia o level-up comparando
+  // com o nível anterior, já que a RPC só devolve o estado final.
+  if (previousLevel && profile.level > previousLevel) {
+    showToast(`Parabéns! Você subiu para o Nível ${profile.level}! 🎉`);
+  }
+}
+
+async function handleAuthSubmit() {
+  const email = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value.trim();
+
+  if (!email || !password) {
     showToast("Por favor, preencha as credenciais!");
     return;
   }
 
+  const btn = document.getElementById("btn-auth-submit");
+  if (btn) btn.disabled = true;
   showToast("Autenticando...");
-  
-  setTimeout(() => {
-    STATE.isLoggedIn = true;
-    
-    // Atualizar dados do perfil com o nome digitado no formulário
-    const nameEl = document.querySelector(".profile-bio-info h3");
-    const handleEl = document.querySelector(".profile-handle");
-    
-    if (nameEl) nameEl.innerHTML = `${userField} <span class="premium-verified">✓</span>`;
-    if (handleEl) {
-      let handle = userField.toLowerCase().replace(/\s+/g, '.');
-      handleEl.textContent = `@${handle}`;
+
+  try {
+    const data = STATE.authMode === "login"
+      ? await Auth.signIn(email, password)
+      : await Auth.signUp(email, password);
+
+    if (!data.session) {
+      showToast("Conta criada! Verifique seu e-mail para confirmar o login.");
+      return;
     }
 
+    STATE.isLoggedIn = true;
+    const profile = await DB.getProfile(data.user.id);
+    await applyProfileToUI(profile);
+
     showToast(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
-    
-    // Limpar campos
+
     document.getElementById("auth-username").value = "";
     document.getElementById("auth-password").value = "";
-    
+
     navigateTo("discover");
-  }, 1000);
+  } catch (err) {
+    showToast(err.message || "Erro ao autenticar. Tente novamente.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function openSocialAuthModal(platform) {
@@ -2143,25 +2211,33 @@ function handleSocialVerification(platform) {
   }, 1200);
 }
 
-function handleLogout() {
+async function handleLogout() {
   showToast("Saindo...");
-  
-  setTimeout(() => {
-    STATE.isLoggedIn = false;
-    navigateTo("auth");
-    showToast("Sessão encerrada!");
-  }, 800);
+  try {
+    await Auth.signOut();
+  } catch (err) {
+    console.error(err);
+  }
+  STATE.isLoggedIn = false;
+  navigateTo("auth");
+  showToast("Sessão encerrada!");
 }
 
-function sendQuickRose(event) {
-  if (STATE.myCoins < 1) {
-    showToast("Saldo de moedas insuficiente. Recarregue no Perfil!");
+async function sendQuickRose(event) {
+  if (!requireAuth()) return;
+  // Captura as coordenadas AGORA — o objeto do evento nativo fica inválido
+  // depois que o navegador termina de despachar o evento, o que já vai ter
+  // acontecido quando o await abaixo (rede) resolver.
+  const clickX = event.clientX;
+  const clickY = event.clientY;
+  let profile;
+  try {
+    profile = await DB.sendQuickRose();
+  } catch (err) {
+    showToast(err.message || "Saldo de moedas insuficiente. Recarregue no Perfil!");
     return;
   }
-
-  // Deduzir 1 moeda
-  STATE.myCoins -= 1;
-  renderCoins();
+  await applyProfileToUI(profile);
 
   // Acionar aviso visual do presente na tela
   triggerGiftAnnouncement("🌹", "Você enviou uma Rosa");
@@ -2171,7 +2247,7 @@ function sendQuickRose(event) {
     addLiveComment("Você", "enviou uma Rosa 🌹", false, true);
 
     // Emitir corações flutuantes baseados nas coordenadas do clique
-    triggerFloatingHeart(event);
+    triggerFloatingHeart(clickX, clickY);
 
     // Simular agradecimento da streamer
     setTimeout(() => {
@@ -2283,63 +2359,18 @@ function openAtmosferaSelector() {
   showToast(`Atmosfera (Filtro): ${nextFilter.toUpperCase()}`);
 }
 
-const PRESET_PROFILES = [
-  {
-    name: "Alexandre Silva",
-    handle: "zcitando",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
-    bio: "Criador digital • Focado em lives interativas 🎬🍿",
-    following: "12",
-    followers: "145",
-    likes: "3,2k"
-  },
-  {
-    name: "Luana Becker",
-    handle: "luana.becker",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-    bio: "👑 Streamer Premium • Batalhas diárias às 21h ⚔️",
-    following: "420",
-    followers: "12,5k",
-    likes: "84k"
-  },
-  {
-    name: "Gabi Silva",
-    handle: "gabi.silva",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150",
-    bio: "Entediada o dia todo. Vamos conversar no Direct? 🥱✨",
-    following: "85",
-    followers: "1,2k",
-    likes: "5,4k"
+async function loginAsGuest() {
+  showToast("Entrando como visitante...");
+  try {
+    const data = await Auth.signInAnonymously();
+    STATE.isLoggedIn = true;
+    const profile = await DB.getProfile(data.user.id);
+    await applyProfileToUI(profile);
+    showToast("Bem-vindo(a), Visitante!");
+    navigateTo("discover");
+  } catch (err) {
+    showToast(err.message || "Não foi possível entrar como visitante.");
   }
-];
-
-function selectPresetProfile(idx) {
-  const p = PRESET_PROFILES[idx];
-  if (!p) return;
-
-  STATE.isLoggedIn = true;
-
-  // Atualizar DOM do perfil
-  const nameEl = document.querySelector(".profile-bio-info h3");
-  const handleEl = document.querySelector(".profile-handle");
-  const bioEl = document.querySelector(".profile-bio-text");
-  const avatarEl = document.querySelector(".profile-main-avatar");
-  
-  const statsElements = document.querySelectorAll(".quick-stat-box .stat-number");
-
-  if (nameEl) nameEl.innerHTML = `${p.name} <span class="premium-verified">✓</span>`;
-  if (handleEl) handleEl.textContent = `@${p.handle}`;
-  if (bioEl) bioEl.textContent = p.bio;
-  if (avatarEl) avatarEl.src = p.avatar;
-
-  if (statsElements && statsElements.length >= 3) {
-    statsElements[0].textContent = p.following;
-    statsElements[1].textContent = p.followers;
-    statsElements[2].textContent = p.likes;
-  }
-
-  showToast(`Logado como ${p.name}!`);
-  navigateTo("discover");
 }
 
 function renderStories() {
@@ -2426,43 +2457,36 @@ function closeRouletteModal() {
   if (modal) modal.style.display = "none";
 }
 
-function spinRoulette() {
-  if (STATE.myCoins < 10) {
-    showToast("Moedas insuficientes! Recarregue na carteira. 🪙");
-    return;
-  }
-
-  // Descontar moedas e atualizar displays
-  STATE.myCoins -= 10;
-  renderCoins();
-  if (typeof addXP === "function") {
-    addXP(30); // Ganhar 30 XP por interagir com minijogos!
-  }
+async function spinRoulette() {
+  if (!requireAuth()) return;
 
   const btn = document.getElementById("btn-spin-roulette");
   if (btn) btn.disabled = true;
 
+  let result;
+  try {
+    result = await DB.spinRoulette(); // { profile, prize } — servidor decide o prêmio, nunca o cliente
+  } catch (err) {
+    showToast(err.message || "Moedas insuficientes! Recarregue na carteira. 🪙");
+    if (btn) btn.disabled = false;
+    return;
+  }
+  await applyProfileToUI(result.profile);
+  const prize = result.prize;
+
   const wheel = document.getElementById("roulette-wheel-inner");
-  if (!wheel) return;
+  if (!wheel) { if (btn) btn.disabled = false; return; }
 
   // Resetar rotação anterior antes de girar de verdade
   wheel.style.transition = "none";
   wheel.style.transform = "rotate(0deg)";
 
-  // Permitir que o browser processe a rotação resetada
+  // A rotação é só decoração visual — o prêmio já veio decidido do servidor acima.
   setTimeout(() => {
     wheel.style.transition = "transform 4s cubic-bezier(0.17, 0.67, 0.1, 1)";
     const spins = 5;
     const degrees = spins * 360 + Math.floor(Math.random() * 360);
     wheel.style.transform = `rotate(${degrees}deg)`;
-
-    const sector = 360 - (degrees % 360);
-    let prize = "";
-    if (sector >= 0 && sector < 72) prize = "Super Beijo 💖";
-    else if (sector >= 72 && sector < 144) prize = "Abraço Virtual 🤗";
-    else if (sector >= 144 && sector < 216) prize = "Dueto VIP 👑";
-    else if (sector >= 216 && sector < 288) prize = "Parabéns Especial 🎉";
-    else prize = "Mentoria Exclusiva ⭐";
 
     setTimeout(() => {
       if (btn) btn.disabled = false;
@@ -2508,19 +2532,6 @@ function triggerMyLiveSfx(emoji, toastMsg) {
   }
 }
 
-function addXP(amount) {
-  STATE.xp += amount;
-  
-  const xpNeeded = STATE.level * 500;
-  if (STATE.xp >= xpNeeded) {
-    STATE.xp -= xpNeeded;
-    STATE.level += 1;
-    showToast(`Parabéns! Você subiu para o Nível ${STATE.level}! 🎉`);
-  }
-  
-  updateXPProgressUI();
-}
-
 function updateXPProgressUI() {
   const levelBadge = document.getElementById("profile-level-badge");
   const fill = document.getElementById("xp-progress-fill");
@@ -2536,23 +2547,24 @@ function updateXPProgressUI() {
   if (nextLabel) nextLabel.textContent = `Próximo nível: +${xpNeeded - STATE.xp} XP`;
 }
 
-function claimDailyCheckIn() {
-  const currentClaimCount = STATE.claimedDays.length;
-  if (currentClaimCount >= 7) {
-    showToast("Você já completou todo o calendário semanal! 🗓️");
+async function claimDailyCheckIn() {
+  if (!requireAuth()) return;
+
+  let result;
+  try {
+    result = await DB.claimDailyCheckin(); // { profile, day, reward } — servidor decide tudo
+  } catch (err) {
+    showToast(err.message || "Você já completou todo o calendário semanal! 🗓️");
     return;
   }
 
-  const nextDay = currentClaimCount + 1;
-  STATE.claimedDays.push(nextDay);
+  await applyProfileToUI(result.profile);
+  const nextDay = result.day;
+  const coinsReward = result.reward;
 
-  let coinsReward = nextDay * 5;
-  
   if (nextDay === 7) {
-    coinsReward = 50;
-    STATE.isVIP = true;
     showToast("Parabéns! Check-in concluído! Ganhou 50 moedas e Passe VIP Ouro! 👑");
-    
+
     // Atualizar botões de VIP se houver
     const vipBtn = document.getElementById("btn-buy-vip");
     if (vipBtn) {
@@ -2565,10 +2577,6 @@ function claimDailyCheckIn() {
   } else {
     showToast(`Check-in de hoje feito! Ganhou 🪙 ${coinsReward} moedas e +100 XP!`);
   }
-
-  STATE.myCoins += coinsReward;
-  renderCoins();
-  addXP(100);
 
   const box = document.getElementById(`chk-day-${nextDay}`);
   if (box) {
@@ -2606,21 +2614,22 @@ function claimDailyCheckIn() {
   }
 }
 
-function purchaseVIPBadge() {
+async function purchaseVIPBadge() {
+  if (!requireAuth()) return;
+
   if (STATE.isVIP) {
     showToast("Você já possui o Passe VIP Ouro ativo! 👑");
     return;
   }
 
-  if (STATE.myCoins < 100) {
-    showToast("Moedas insuficientes! VIP Ouro custa 100 moedas. 🪙");
+  let profile;
+  try {
+    profile = await DB.purchaseVip();
+  } catch (err) {
+    showToast(err.message || "Moedas insuficientes! VIP Ouro custa 100 moedas. 🪙");
     return;
   }
-
-  STATE.myCoins -= 100;
-  STATE.isVIP = true;
-  renderCoins();
-  addXP(250);
+  await applyProfileToUI(profile);
   showToast("Você adquiriu o Passe VIP Ouro! 👑 Selo ativo nos chats!");
 
   const btn = document.getElementById("btn-buy-vip");
