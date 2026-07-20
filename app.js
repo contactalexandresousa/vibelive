@@ -142,45 +142,6 @@ const MOCK_BROADCASTERS = [
   }
 ];
 
-// Pool de Comentários para Simular o Chat da Live
-const MOCK_COMMENTS = [
-  "Olá linda! 😍",
-  "De onde você é?",
-  "Manda um beijo para São Paulo!",
-  "Que vibe boa essa live",
-  "Você é muito simpática! ❤️",
-  "Entra na chamada comigo?",
-  "O que você está fazendo?",
-  "Uau, maravilhosa!",
-  "Manda corações galera!",
-  "Acabei de entrar, oi!",
-  "Qual seu Instagram?",
-  "Faz cara de bravo haha",
-  "Top de verdade 🚀",
-  "🔥 Live incrível!",
-  "Seu cabelo é muito lindo!",
-  "Qual sua música favorita?",
-  "Quero te mandar presentes 🎁",
-  "Simpatia pura!",
-  "Lindíssima!",
-  "Passando para deixar um oi."
-];
-
-const MOCK_SYSTEM_MESSAGES = [
-  "⚠️ Evite compartilhar informações pessoais como senhas e números de telefone.",
-  "✨ Apoie este streamer enviando presentes da carteira!",
-  "💬 Mantenha o chat amigável e respeitoso. Denuncie comportamentos impróprios.",
-  "🚀 Compartilhe esta live para trazer mais amigos!"
-];
-
-// Nomes de usuários fictícios que comentam no chat
-const MOCK_USERNAMES = [
-  "lucas_santos", "mari_oliveira", "thiago.lima", "carla_souza", "diego.costa", 
-  "anabeatriz", "felipe_r", "juliana_m", "rodrigo_silva", "gabriel.p", 
-  "bruna_lima", "pedro_s", "amanda_g", "matheus_c", "leticia_n", 
-  "vitor_almeida", "camila_f", "andre_m", "patricia_s", "gustavo_h"
-];
-
 // Conversas Direct Messages (DMs) Iniciais
 const INITIAL_DMS = [
   {
@@ -245,9 +206,7 @@ const STATE = {
   activeLightboxLikeState: null,
   myPosts: [],
 
-  // Variáveis para simulação de Live Ativa (Assistindo)
-  liveChatInterval: null,
-  liveViewerInterval: null,
+  // Tela de Live (Assistindo)
   liveViewerCount: 128,
   
   // Presente selecionado na gaveta
@@ -259,7 +218,6 @@ const STATE = {
   
   // Transmissão Própria (Webcam)
   localStream: null,
-  myLiveIntervals: [],
   myLiveViewerCount: 0,
   currentVideoFilter: "none",
   stories: [
@@ -302,8 +260,7 @@ const DOM = {
   profileCoinsDisplay: document.getElementById("profile-coins-display"),
   drawerCoinsDisplay: document.getElementById("drawer-coins-count"),
   toast: document.getElementById("toast-message"),
-  statusClock: document.getElementById("status-clock"),
-  
+
   // Tela Discover
   livesGrid: document.getElementById("lives-grid-container"),
   categoryTabs: document.querySelectorAll(".category-tab"),
@@ -356,7 +313,6 @@ const DOM = {
 
 // 4. INICIALIZAÇÃO DO APP
 document.addEventListener("DOMContentLoaded", () => {
-  setupClock();
   renderCoins();
   renderLivesGrid();
   scrollToSection("popular"); // Mostrar apenas populares por padrão no início
@@ -388,19 +344,6 @@ function requireAuth() {
   showToast("Entre na sua conta para continuar.");
   navigateTo("auth");
   return false;
-}
-
-
-// 5. SISTEMA DE RELÓGIO (STATUS BAR)
-function setupClock() {
-  const updateTime = () => {
-    const now = new Date();
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    DOM.statusClock.textContent = `${hours}:${minutes}`;
-  };
-  updateTime();
-  setInterval(updateTime, 60000);
 }
 
 
@@ -618,25 +561,14 @@ function enterLiveRoom(broadcasterId) {
   // Fail-safe de 800ms
   setTimeout(hideLoader, 800);
   
-  // Iniciar chat simulado
+  // Mensagem de entrada e regras (aviso estático, não é bot)
   addSystemComment("zcitando entrou na live");
   addSystemComment("Regras do chat: Seja gentil e siga as diretrizes.");
-  
-  STATE.liveChatInterval = setInterval(simulateIncomingLiveChat, 2000);
-  STATE.liveViewerInterval = setInterval(() => {
-    // Variar telespectadores em +- 3
-    const diff = Math.floor(Math.random() * 7) - 3;
-    STATE.liveViewerCount = Math.max(10, STATE.liveViewerCount + diff);
-    DOM.liveViewerCount.textContent = STATE.liveViewerCount;
-  }, 5000);
 }
 
 function closeLiveRoom() {
   DOM.liveVideo.pause();
   DOM.liveVideo.src = "";
-
-  if (STATE.liveChatInterval) clearInterval(STATE.liveChatInterval);
-  if (STATE.liveViewerInterval) clearInterval(STATE.liveViewerInterval);
 
   STATE.currentLiveBroadcaster = null;
 }
@@ -706,18 +638,6 @@ function scrollLiveChatToBottom() {
   DOM.liveChatMessages.scrollTop = DOM.liveChatMessages.scrollHeight;
 }
 
-function simulateIncomingLiveChat() {
-  // 15% de chance de mensagem do sistema, senão usuário normal
-  if (Math.random() < 0.15) {
-    const sysMsg = MOCK_SYSTEM_MESSAGES[Math.floor(Math.random() * MOCK_SYSTEM_MESSAGES.length)];
-    addSystemComment(sysMsg);
-  } else {
-    const user = MOCK_USERNAMES[Math.floor(Math.random() * MOCK_USERNAMES.length)];
-    const text = MOCK_COMMENTS[Math.floor(Math.random() * MOCK_COMMENTS.length)];
-    addLiveComment(user, text);
-  }
-}
-
 function handleChatInputKey(event) {
   if (event.key === "Enter") {
     sendUserComment();
@@ -727,23 +647,9 @@ function handleChatInputKey(event) {
 function sendUserComment() {
   const text = DOM.liveChatInput.value.trim();
   if (text === "") return;
-  
+
   addLiveComment("Você", text);
   DOM.liveChatInput.value = "";
-  
-  // Chance de a streamer responder à mensagem do usuário no chat após 2 segundos!
-  setTimeout(() => {
-    if (STATE.currentLiveBroadcaster && STATE.activeScreen === "live-room") {
-      const answers = [
-        `Obrigada pelo carinho, Você! 😍`,
-        `Oi Você, tudo bem lindo?`,
-        `Você! Fofo demais.`,
-        `Valeu pelo comentário Você! Manda um presentinho? 🙈`
-      ];
-      const res = answers[Math.floor(Math.random() * answers.length)];
-      addLiveComment(STATE.currentLiveBroadcaster.name, res);
-    }
-  }, 2200);
 }
 
 
@@ -856,20 +762,6 @@ async function sendSelectedGift() {
 
     // Adicionar mensagem especial no chat
     addLiveComment("Você", gift.name, true, gift.icon);
-
-    // Simular resposta alegre do streamer
-    setTimeout(() => {
-      if (STATE.currentLiveBroadcaster && STATE.activeScreen === "live-room") {
-        const audioAnswers = [
-          `Nossa!!! Obrigada pelo(a) ${gift.name}! Você é incrível! 💖`,
-          `👑 Omg, muito obrigada Você pelo presente! Beijo grande!`,
-          `Que lindo!!! Amei o presente ${gift.icon}. Valeu Você!`,
-          `Arrasou Você! Muito obrigada pelo suporte! 😍`
-        ];
-        const response = audioAnswers[Math.floor(Math.random() * audioAnswers.length)];
-        addLiveComment(STATE.currentLiveBroadcaster.name, response);
-      }
-    }, 1800);
   } catch (err) {
     showToast(err.message || "Não foi possível enviar o presente.");
   }
@@ -1009,37 +901,11 @@ function sendPrivateChatMessage() {
   
   renderPrivateChatHistory(username);
   DOM.privateChatInput.value = "";
-  
-  // Simular resposta automática inteligente do parceiro após 1.5s
-  setTimeout(() => {
-    if (STATE.activeChatPartner === username && STATE.activeScreen === "private-chat") {
-      let replyText = "Obrigada por mandar mensagem! 🥰";
-      if (username === "moranguinho") {
-        replyText = "Oii! Estou online na minha live agora, entra lá para conversarmos por vídeo! Beijos 💋";
-      } else if (username === "zcitando") {
-        replyText = "Kkkk rindo de nervoso do seu direct! Passa na minha live mais tarde mano ✌️";
-      } else if (username === "gabi.silva") {
-        replyText = "Ei Alexandre, estou meio ocupada agora. Me chama na videochamada privada lá no app!";
-      }
-      
-      const replyMsg = { sender: "them", text: replyText, time: timeStr };
-      chat.history.push(replyMsg);
-      chat.lastMessage = replyText;
-      
-      renderPrivateChatHistory(username);
-      renderInboxList();
-    }
-  }, 1500);
+  renderInboxList();
 }
 
 function simulatePrivateVideoCall() {
-  showToast("Iniciando videochamada... Conectando...");
-  setTimeout(() => {
-    const localChat = STATE.dmsList.find(x => x.username === STATE.activeChatPartner);
-    if (localChat) {
-      showToast(`${localChat.name} está ocupada e não pôde atender.`);
-    }
-  }, 3000);
+  showToast("Chamada de vídeo ainda não disponível nesta versão.");
 }
 
 
@@ -1197,84 +1063,11 @@ function launchBroadcastingSession() {
   DOM.myLiveViewerCount.textContent = "0";
   DOM.myLiveDiamonds.textContent = "💎 0 acumulados";
   
-  // Simular conexão estável
+  // Aviso de sistema (estático, não é bot)
   addMyLiveComment("Sistema", "Transmissão iniciada. Seus seguidores foram notificados! 📡", true);
-  
-  // 1. Simular espectadores chegando e aumentando gradualmente
-  const viewerInt = setInterval(() => {
-    const incoming = Math.floor(Math.random() * 8) + 1;
-    STATE.myLiveViewerCount += incoming;
-    DOM.myLiveViewerCount.textContent = STATE.myLiveViewerCount;
-    
-    // Simular mensagem de entrada "fulano entrou"
-    if (Math.random() < 0.7) {
-      const user = MOCK_USERNAMES[Math.floor(Math.random() * MOCK_USERNAMES.length)];
-      addMyLiveComment("Entrou", `${user} entrou na transmissão`, true);
-    }
-  }, 2500);
-  STATE.myLiveIntervals.push(viewerInt);
-  
-  // 2. Simular chat dinâmico dos espectadores mandando mensagem
-  const chatInt = setInterval(() => {
-    if (STATE.myLiveViewerCount > 0) {
-      const user = MOCK_USERNAMES[Math.floor(Math.random() * MOCK_USERNAMES.length)];
-      
-      const phrases = [
-        "Olá, boa live!", "Adorei a câmera!", "Qual o seu setup?", "Legal demais",
-        "Manda beijo!", "Oi, fala comigo!", "Bela live amigo", "Tamo junto!",
-        "De onde você fala?", "Te dou nota 10!", "Gostei do filtro da live!"
-      ];
-      const comment = phrases[Math.floor(Math.random() * phrases.length)];
-      addMyLiveComment(user, comment);
-    }
-  }, 3500);
-  STATE.myLiveIntervals.push(chatInt);
-  
-  // 3. Simular presentes enviados para o usuário
-  const giftInt = setInterval(() => {
-    if (STATE.myLiveViewerCount > 5) {
-      const user = MOCK_USERNAMES[Math.floor(Math.random() * MOCK_USERNAMES.length)];
-      const gifts = [
-        { name: "Rosa", coins: 1, icon: "🌹" },
-        { name: "Chocolate", coins: 5, icon: "🍫" },
-        { name: "Diamante", coins: 25, icon: "💎" },
-        { name: "Coroa VIP", coins: 100, icon: "👑" }
-      ];
-      const g = gifts[Math.floor(Math.random() * gifts.length)];
-      
-      // Somente manda de maior valor se tiver mais audiência
-      if (g.coins > 20 && Math.random() > 0.4) return;
-      
-      // Incrementar moedas/diamantes
-      STATE.myLiveDiamonds += g.coins;
-      DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
-      
-      // Exibir no chat
-      addMyLiveComment(user, `enviou um(a) ${g.name} ${g.icon}`, false, true);
-      
-      // Emitir coração flutuante automático da esquerda
-      emitAutoHeart();
-    }
-  }, 8000);
-  STATE.myLiveIntervals.push(giftInt);
-  
-  // 4. Simular curtidas (corações flutuantes)
-  const heartsInt = setInterval(() => {
-    if (STATE.myLiveViewerCount > 2) {
-      const loops = Math.floor(Math.random() * 3) + 1;
-      for (let i = 0; i < loops; i++) {
-        setTimeout(emitAutoHeart, i * 400);
-      }
-    }
-  }, 4000);
-  STATE.myLiveIntervals.push(heartsInt);
 }
 
 function stopOwnLiveStream() {
-  // Limpar loops de simulação
-  STATE.myLiveIntervals.forEach(clearInterval);
-  STATE.myLiveIntervals = [];
-  
   // Parar webcam
   if (STATE.localStream) {
     STATE.localStream.getTracks().forEach(track => track.stop());
@@ -1307,39 +1100,6 @@ function addMyLiveComment(author, content, isSystem = false, isGift = false) {
   }
   DOM.myLiveChatMessages.appendChild(msgEl);
   DOM.myLiveChatMessages.scrollTop = DOM.myLiveChatMessages.scrollHeight;
-}
-
-// Emissão automática de corações flutuantes na live própria
-function emitAutoHeart() {
-  if (STATE.activeScreen !== "go-live") return;
-  
-  const heart = document.createElement("div");
-  heart.className = "floating-heart";
-  
-  const colors = ["#ff4d6d", "#ff8ba0", "#f0b23d", "#ffffff"];
-  const randomColor = colors[Math.floor(Math.random() * colors.length)];
-  
-  heart.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="${randomColor}">
-      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-    </svg>
-  `;
-  
-  // Posicionar aleatoriamente perto do canto inferior direito
-  const randomX = Math.floor(Math.random() * 60) + 260; // Entre 260px e 320px
-  const randomY = Math.floor(Math.random() * 40) + 700; // Perto do rodapé
-  const drift = (Math.random() * 80 - 40);
-  
-  heart.style.left = `${randomX}px`;
-  heart.style.top = `${randomY}px`;
-  heart.style.setProperty("--drift", `${drift}px`);
-  
-  // Adiciona ao container de tela do Go Live
-  DOM.goLive.appendChild(heart);
-  
-  setTimeout(() => {
-    heart.remove();
-  }, 2200);
 }
 
 // ==========================================================================
@@ -1814,10 +1574,9 @@ function initiatePkSimulator() {
   videoA.play().catch(e => console.log(e));
   videoB.play().catch(e => console.log(e));
 
-  // Resetar pontuações no estado
+  // Pontuação inicial (estática) — muda de verdade só quando alguém apoia um lado
   STATE.pkScoreA = 12500;
   STATE.pkScoreB = 10200;
-  STATE.pkIntervals = [];
 
   // Atualizar pontuação gráfica na tela
   updatePkBars();
@@ -1825,41 +1584,6 @@ function initiatePkSimulator() {
   // Limpar chat anterior do PK
   chatMessages.innerHTML = "";
   addPkSystemMessage("Batalha PK iniciada! Apoie sua streamer enviando presentes! ⚔️");
-
-  // 1. Simular chat dinâmico da batalha
-  const chatInt = setInterval(() => {
-    const user = MOCK_USERNAMES[Math.floor(Math.random() * MOCK_USERNAMES.length)];
-    const pkComments = [
-      "VAI MORANGUINHO!! 🍓🔥", "Luana Becker rainha! 👑", "Mandei presentes!",
-      "Nossa, batalha disputada!", "Moranguinho vai vencer com certeza!",
-      "Luana linda de mais", "Duas perfeitas!", "Manda corações galera!",
-      "Rosa nela!! 🌹🌹", "Diamante pra Luana! 💎💎"
-    ];
-    const text = pkComments[Math.floor(Math.random() * pkComments.length)];
-    
-    // Adiciona comentário de usuário no chat
-    const msgEl = document.createElement("div");
-    msgEl.className = "chat-msg";
-    msgEl.innerHTML = `<span class="msg-author">${user}:</span> <span class="msg-content">${text}</span>`;
-    chatMessages.appendChild(msgEl);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }, 1800);
-  STATE.pkIntervals.push(chatInt);
-
-  // 2. Simular pequenas flutuações de pontos da audiência automática
-  const pointsInt = setInterval(() => {
-    // Adiciona pontos aleatórios a ambos os lados
-    STATE.pkScoreA += Math.floor(Math.random() * 50) + 10;
-    STATE.pkScoreB += Math.floor(Math.random() * 55) + 10;
-    updatePkBars();
-
-    // 15% de chance de emitir corações automáticos de apoio
-    if (Math.random() < 0.25) {
-      const side = Math.random() < 0.5 ? "A" : "B";
-      emitPkAutoHeart(side);
-    }
-  }, 1500);
-  STATE.pkIntervals.push(pointsInt);
 }
 
 function closePkSimulator() {
@@ -1868,10 +1592,6 @@ function closePkSimulator() {
 
   if (videoA) videoA.pause();
   if (videoB) videoB.pause();
-
-  // Limpar intervalos
-  if (STATE.pkIntervals) STATE.pkIntervals.forEach(clearInterval);
-  STATE.pkIntervals = [];
 
   // Resetar Badges de Vencedor
   document.getElementById("pk-win-a").style.display = "none";
@@ -1935,21 +1655,6 @@ async function supportStreamer(side, event) {
     }, i * 200);
   }
 
-  // Simular agradecimento do streamer apoiado
-  setTimeout(() => {
-    const thanks = [
-      `Aee! Obrigada pelo apoio no PK, você é demais! ❤️`,
-      `Obrigada pelo presente! Batalha garantida com você! 😍`,
-      `Nossa, salvou meu PK! Valeu pelo carinho! ✨`
-    ];
-    const text = thanks[Math.floor(Math.random() * thanks.length)];
-    const replyEl = document.createElement("div");
-    replyEl.className = "chat-msg system";
-    replyEl.innerHTML = `<span class="msg-content"><strong>${streamerName}</strong>: ${text}</span>`;
-    chatMessages.appendChild(replyEl);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }, 1200);
-
   // Verificar se venceu
   checkPkWinner();
 }
@@ -2000,39 +1705,6 @@ function emitPkHeartFromClick(side, event) {
   
   heart.style.left = `${randomX}px`;
   heart.style.top = `400px`; // Sobe a partir da metade da tela
-  heart.style.setProperty("--drift", `${drift}px`);
-
-  container.appendChild(heart);
-
-  setTimeout(() => {
-    heart.remove();
-  }, 2200);
-}
-
-// Coração flutuante gerado automaticamente pela audiência virtual
-function emitPkAutoHeart(side) {
-  const container = document.getElementById("pk-hearts-container");
-  if (!container || STATE.activeScreen !== "pk-simulator") return;
-
-  const heart = document.createElement("div");
-  heart.className = "floating-heart";
-
-  const color = side === "A" ? "#ff8ba0" : "#8cc4ff";
-  
-  heart.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="${color}">
-      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-    </svg>
-  `;
-
-  const randomX = side === "A" 
-    ? Math.floor(Math.random() * 60) + 30 
-    : Math.floor(Math.random() * 60) + 230;
-    
-  const drift = (Math.random() * 80 - 40);
-  
-  heart.style.left = `${randomX}px`;
-  heart.style.top = `450px`;
   heart.style.setProperty("--drift", `${drift}px`);
 
   container.appendChild(heart);
@@ -2248,20 +1920,6 @@ async function sendQuickRose(event) {
 
     // Emitir corações flutuantes baseados nas coordenadas do clique
     triggerFloatingHeart(clickX, clickY);
-
-    // Simular agradecimento da streamer
-    setTimeout(() => {
-      if (STATE.currentLiveBroadcaster && STATE.activeScreen === "live-room") {
-        const streamerName = STATE.currentLiveBroadcaster.name;
-        const thanks = [
-          `Nossa, obrigada pela rosa! 🌹❤️`,
-          `Que linda! Amei a rosa! 😍`,
-          `Obrigada pelo presente! Beijos! 💋`
-        ];
-        const text = thanks[Math.floor(Math.random() * thanks.length)];
-        addLiveComment(streamerName, text);
-      }
-    }, 1200);
   }
 }
 

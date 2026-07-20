@@ -30,48 +30,20 @@
 </head>
 <body>
 
-  <!-- Mockup do Smartphone (Apenas para Desktop, em Mobile fica invisível/tela cheia) -->
-  <div class="phone-wrapper">
-    <div class="phone-shell">
-      <div class="phone-notch"></div>
-      <div class="phone-buttons left">
-        <div class="btn-volume-up"></div>
-        <div class="btn-volume-down"></div>
-      </div>
-      <div class="phone-buttons right">
-        <div class="btn-power"></div>
-      </div>
-      
-      <!-- Tela Interna do Celular -->
-      <div class="phone-screen">
-        
-        <!-- Partículas de Fundo Animadas -->
-        <div class="particles-bg-container">
-          <div class="particle-dot"></div>
-          <div class="particle-dot"></div>
-          <div class="particle-dot"></div>
-          <div class="particle-dot"></div>
-          <div class="particle-dot"></div>
-        </div>
-        
-        <!-- Status Bar do Celular -->
-        <div class="status-bar">
-          <div class="status-time" id="status-clock">09:00</div>
-          <div class="status-notch-spacer"></div>
-          <div class="status-icons">
-            <svg class="icon-status" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.07 19.58 10.48 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
-            <svg class="icon-status" viewBox="0 0 24 24"><path fill="currentColor" d="M17 5H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3zm1 11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8z"/></svg>
-            <div class="battery-container">
-              <span class="battery-percent">80</span>
-              <div class="battery-icon">
-                <div class="battery-level" style="width: 80%"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+  <!-- Contêiner principal do app -->
+  <div class="phone-screen">
 
-        <!-- CONTAINER DE TELAS (Single Page App) -->
-        <div class="app-container">
+    <!-- Partículas de Fundo Animadas -->
+    <div class="particles-bg-container">
+      <div class="particle-dot"></div>
+      <div class="particle-dot"></div>
+      <div class="particle-dot"></div>
+      <div class="particle-dot"></div>
+      <div class="particle-dot"></div>
+    </div>
+
+    <!-- CONTAINER DE TELAS (Single Page App) -->
+    <div class="app-container">
 
           <!-- 0. TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO) -->
           <section id="screen-auth" class="screen">
@@ -1274,9 +1246,7 @@
           </div>
         </div>
 
-      </div> <!-- Fim de phone-screen -->
-    </div> <!-- Fim de phone-shell -->
-  </div> <!-- Fim de phone-wrapper -->
+  </div> <!-- Fim de phone-screen -->
 
   <!-- Cliente Supabase (auth + banco de dados) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
