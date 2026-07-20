@@ -24,7 +24,10 @@ const STATE = {
   activeChatPartner: null, // id (uuid) da pessoa com quem a conversa privada está aberta
   dmsList: [], // conversas reais, carregadas de direct_messages
   dmInboxChannel: null, // canal Supabase Realtime único p/ toda mensagem recebida
-  
+  notifications: [], // notificações reais (novo seguidor, foi ao vivo)
+  notificationsChannel: null,
+  unreadNotificationCount: 0,
+
   // Postagens no Perfil — carregadas do banco (DB.getMyPosts) após o login;
   // toda conta real começa sem posts.
   currentPostType: "image",
@@ -240,8 +243,100 @@ function showToast(message) {
   }, 2500);
 }
 
-function showNotificationPanel() {
-  showToast("Você não possui novas notificações.");
+function updateNotificationBadgeUI() {
+  const badge = document.getElementById("notification-badge");
+  if (!badge) return;
+  badge.style.display = STATE.unreadNotificationCount > 0 ? "block" : "none";
+}
+
+async function refreshNotificationBadge() {
+  try {
+    STATE.unreadNotificationCount = await DB.getUnreadNotificationCount();
+  } catch (err) {
+    console.error("Falha ao carregar notificações não lidas:", err);
+  }
+  updateNotificationBadgeUI();
+}
+
+async function showNotificationPanel() {
+  if (!requireAuth()) return;
+  const modal = document.getElementById("modal-notifications");
+  const container = document.getElementById("notifications-list-container");
+  if (!modal || !container) return;
+
+  container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  modal.style.display = "flex";
+
+  try {
+    STATE.notifications = await DB.getNotifications();
+  } catch (err) {
+    console.error("Falha ao carregar notificações:", err);
+    STATE.notifications = [];
+  }
+  renderNotificationsList();
+
+  try {
+    await DB.markNotificationsRead();
+    STATE.unreadNotificationCount = 0;
+    updateNotificationBadgeUI();
+  } catch (err) {
+    console.error("Falha ao marcar notificações como lidas:", err);
+  }
+}
+
+function closeNotificationPanel() {
+  document.getElementById("modal-notifications").style.display = "none";
+}
+
+function renderNotificationsList() {
+  const container = document.getElementById("notifications-list-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (STATE.notifications.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">🔔</div>
+        <h3>Nenhuma notificação ainda</h3>
+        <p>Quando alguém te seguir ou uma pessoa que você segue for ao vivo, aparece aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  STATE.notifications.forEach((n, index) => {
+    const actorName = n.actor ? (n.actor.display_name || n.actor.username) : "Alguém";
+    const avatar = n.actor ? n.actor.avatar_url : "";
+    const text = n.type === "new_follower"
+      ? `${actorName} começou a seguir você`
+      : `${actorName} está ao vivo agora!`;
+    const icon = n.type === "new_follower" ? "👤" : "🔴";
+
+    const item = document.createElement("div");
+    item.className = n.read_at ? "inbox-item" : "inbox-item unread";
+    item.onclick = () => handleNotificationClick(index);
+    item.innerHTML = `
+      <div class="inbox-avatar">
+        <img src="${avatar}" alt="${actorName}">
+      </div>
+      <div class="inbox-details">
+        <span class="inbox-name">${icon} ${text}</span>
+        <span class="inbox-message">${formatMessageTime(n.created_at)}</span>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function handleNotificationClick(index) {
+  const n = STATE.notifications[index];
+  if (!n || !n.actor) return;
+  closeNotificationPanel();
+  if (n.type === "went_live") {
+    enterRealLiveRoom(n.actor_id);
+  } else if (n.type === "new_follower") {
+    openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
+  }
 }
 
 
@@ -1708,6 +1803,14 @@ async function applyProfileToUI(profile) {
     renderInboxList();
   }
 
+  // Idem para notificações reais (novo seguidor, alguém que você segue foi ao vivo).
+  if (!STATE.notificationsChannel) {
+    STATE.notificationsChannel = DB.subscribeToNotifications(profile.id, () => {
+      refreshNotificationBadge();
+    });
+    refreshNotificationBadge();
+  }
+
   // O servidor decide o XP/nível (nunca o cliente) — anuncia o level-up comparando
   // com o nível anterior, já que a RPC só devolve o estado final.
   if (previousLevel && profile.level > previousLevel) {
@@ -1842,8 +1945,15 @@ async function handleLogout() {
     sb.removeChannel(STATE.dmInboxChannel);
     STATE.dmInboxChannel = null;
   }
+  if (STATE.notificationsChannel) {
+    sb.removeChannel(STATE.notificationsChannel);
+    STATE.notificationsChannel = null;
+  }
   STATE.dmsList = [];
+  STATE.notifications = [];
+  STATE.unreadNotificationCount = 0;
   renderInboxList();
+  updateNotificationBadgeUI();
   navigateTo("auth");
   showToast("Sessão encerrada!");
 }

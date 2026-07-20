@@ -152,7 +152,7 @@
                 </button>
                 <button class="header-btn" onclick="showNotificationPanel()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 4.36 6 6.92 6 10v5l-2 2v1h16v-1l-2-2z"/></svg>
-                  <span class="notification-badge"></span>
+                  <span class="notification-badge" id="notification-badge" style="display: none;"></span>
                 </button>
               </div>
             </header>
@@ -1030,6 +1030,22 @@
             </header>
             <textarea id="report-reason-input" placeholder="Descreva o motivo da denúncia..." style="min-height: 90px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 10px; font-family: var(--font-body); font-size: 0.8rem; margin-top: 10px; resize: none;"></textarea>
             <button class="btn-publish-post" onclick="submitReport()" style="margin-top: 14px;">Enviar Denúncia</button>
+          </div>
+        </div>
+
+        <!-- Modal de Notificações Reais -->
+        <div class="new-post-modal" id="modal-notifications" style="display: none;">
+          <div class="new-post-overlay" onclick="closeNotificationPanel()"></div>
+          <div class="new-post-content" style="height: 75%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>Notificações</h3>
+              <button class="btn-close-new-post" onclick="closeNotificationPanel()">×</button>
+            </header>
+            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
+              <div class="inbox-list" id="notifications-list-container">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
           </div>
         </div>
 

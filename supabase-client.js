@@ -410,5 +410,64 @@ const DB = {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("user_reports").insert({ reporter_id: user.id, reported_id: reportedId, reason });
     if (error) throw error;
+  },
+
+  // Notificações reais (novo seguidor, alguém que você segue foi ao vivo) —
+  // as linhas são criadas por triggers no banco (follows/live_sessions),
+  // nunca pelo cliente.
+  async getNotifications(limit = 30) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data: rows, error } = await sb
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+
+    const actorIds = [...new Set(rows.filter(r => r.actor_id).map(r => r.actor_id))];
+    let profileMap = new Map();
+    if (actorIds.length > 0) {
+      const { data: profiles, error: profErr } = await sb
+        .from("profiles")
+        .select("id, username, display_name, avatar_url")
+        .in("id", actorIds);
+      if (profErr) throw profErr;
+      profileMap = new Map(profiles.map(p => [p.id, p]));
+    }
+    return rows.map(r => ({ ...r, actor: profileMap.get(r.actor_id) }));
+  },
+
+  async getUnreadNotificationCount() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return 0;
+    const { count, error } = await sb
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .is("read_at", null);
+    if (error) throw error;
+    return count || 0;
+  },
+
+  async markNotificationsRead() {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .is("read_at", null);
+    if (error) throw error;
+  },
+
+  subscribeToNotifications(myUserId, onNotification) {
+    const channel = sb.channel(`notifications:${myUserId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "notifications",
+        filter: `user_id=eq.${myUserId}`
+      }, (payload) => onNotification(payload.new))
+      .subscribe();
+    return channel;
   }
 };
