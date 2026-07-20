@@ -57,7 +57,11 @@ Deno.serve(async (req) => {
       transaction_amount: pkg.brl,
       description: `VibeLive - ${pkg.coins} moedas`,
       payment_method_id: "pix",
-      payer: { email: user.email ?? `${user.id}@vibelive.anon` },
+      // Contas anônimas (visitante) não têm e-mail — o Supabase Auth devolve
+      // "" (string vazia), não null/undefined, então "??" não pega esse caso.
+      // Usa um placeholder com TLD válido (a API do Mercado Pago rejeita ".anon"
+      // como TLD inválido; ".app" passa).
+      payer: { email: user.email || `visitante-${user.id}@vibelive.app` },
     }),
   });
 

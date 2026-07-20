@@ -96,10 +96,32 @@ const DB = {
     return data;
   },
 
-  async redeemDemoPix(packageCode) {
-    const { data, error } = await sb.rpc("redeem_demo_pix", { p_package_code: packageCode });
-    if (error) throw error;
-    return data;
+  // PIX real via Mercado Pago — a Edge Function decide o valor a partir do
+  // código do pacote (o cliente nunca manda quantia), e só o webhook do
+  // Mercado Pago (server-side, nunca o cliente) confirma o pagamento.
+  async createPixPayment(packageCode) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-pix-payment`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ package_code: packageCode })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Não foi possível gerar o pagamento PIX");
+    return body.payment;
+  },
+
+  subscribeToPixPayment(paymentRowId, onUpdate) {
+    const channel = sb.channel(`pix_payment:${paymentRowId}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pix_payments",
+        filter: `id=eq.${paymentRowId}`
+      }, (payload) => onUpdate(payload.new))
+      .subscribe();
+    return channel;
   },
 
   // Posts / curtidas / comentários

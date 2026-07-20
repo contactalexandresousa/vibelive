@@ -1694,6 +1694,8 @@ body {
   width: 150px;
   height: 150px;
   border-radius: 12px;
+  object-fit: contain;
+  background: #fff;
 }
 
 .qr-timer {
@@ -1781,19 +1783,6 @@ body {
   border-top-color: var(--success);
   border-radius: 50%;
   animation: spinner 0.8s linear infinite;
-}
-
-.btn-pix-confirm-demo {
-  height: 40px;
-  background: var(--success);
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.78rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  margin-top: 6px;
-  box-shadow: 0 4px 10px rgba(50, 179, 166, 0.3);
 }
 
 /* 13. TELA DE WEBCAM (GO LIVE) */

@@ -595,23 +595,23 @@
                 <p class="shop-subtitle">⚠️ Compre com PIX e receba na hora!</p>
                 
                 <div class="coin-packages-grid">
-                  <div class="package-card" onclick="openPixModal(50, 4.99)">
+                  <div class="package-card" onclick="openPixModal('p50')">
                     <div class="package-coins">🪙 50</div>
                     <div class="package-bonus">+5 bônus</div>
                     <button class="btn-buy-package">R$ 4,99</button>
                   </div>
-                  <div class="package-card featured" onclick="openPixModal(150, 12.99)">
+                  <div class="package-card featured" onclick="openPixModal('p150')">
                     <div class="popular-ribbon">Popular</div>
                     <div class="package-coins">🪙 150</div>
                     <div class="package-bonus">+25 bônus</div>
                     <button class="btn-buy-package">R$ 12,99</button>
                   </div>
-                  <div class="package-card" onclick="openPixModal(500, 39.99)">
+                  <div class="package-card" onclick="openPixModal('p500')">
                     <div class="package-coins">🪙 500</div>
                     <div class="package-bonus">+100 bônus</div>
                     <button class="btn-buy-package">R$ 39,99</button>
                   </div>
-                  <div class="package-card" onclick="openPixModal(1200, 79.99)">
+                  <div class="package-card" onclick="openPixModal('p1200')">
                     <div class="package-coins">🪙 1200</div>
                     <div class="package-bonus">+300 bônus</div>
                     <button class="btn-buy-package">R$ 79,99</button>
@@ -676,37 +676,16 @@
                 <div class="pix-body">
                   <p>Escaneie o QR Code ou copie o código abaixo para finalizar a compra de <strong id="pix-package-name">50 Moedas</strong>.</p>
                   
-                  <!-- QR Code Simulado com SVG -->
+                  <!-- QR Code PIX real, gerado pela API do Mercado Pago -->
                   <div class="pix-qr-container">
-                    <svg class="qr-svg" viewBox="0 0 100 100">
-                      <rect width="100" height="100" fill="white"/>
-                      <!-- Padrão Pix Mockado -->
-                      <rect x="10" y="10" width="20" height="20" fill="black"/>
-                      <rect x="15" y="15" width="10" height="10" fill="white"/>
-                      <rect x="70" y="10" width="20" height="20" fill="black"/>
-                      <rect x="75" y="15" width="10" height="10" fill="white"/>
-                      <rect x="10" y="70" width="20" height="20" fill="black"/>
-                      <rect x="15" y="75" width="10" height="10" fill="white"/>
-                      <rect x="40" y="40" width="20" height="20" fill="black"/>
-                      <!-- Pontos aleatórios para simular QR Code -->
-                      <rect x="45" y="10" width="5" height="10" fill="black"/>
-                      <rect x="55" y="20" width="10" height="5" fill="black"/>
-                      <rect x="35" y="70" width="15" height="5" fill="black"/>
-                      <rect x="55" y="60" width="5" height="15" fill="black"/>
-                      <rect x="70" y="45" width="10" height="10" fill="black"/>
-                      <rect x="80" y="75" width="10" height="5" fill="black"/>
-                      <rect x="15" y="45" width="5" height="10" fill="black"/>
-                      <!-- Logo do Pix Centralizado -->
-                      <rect x="43" y="43" width="14" height="14" fill="#32b3a6" rx="2"/>
-                      <path d="M50 46l3 3-3 3-3-3z" fill="white"/>
-                    </svg>
-                    <div class="qr-timer">Expira em <span id="pix-timer">05:00</span></div>
+                    <img class="qr-svg" id="pix-qr-image" alt="QR Code PIX" src="">
+                    <div class="qr-timer">Expira em <span id="pix-timer">24:00:00</span></div>
                   </div>
 
                   <div class="pix-copy-paste-container">
                     <label>Código Pix Copia e Cola:</label>
                     <div class="pix-copy-input-row">
-                      <input type="text" id="pix-copy-code" readonly value="00020101021226870014br.gov.bcb.pix2565pix.vibelive.app/recharge/token8792hjd892h8dhuw892">
+                      <input type="text" id="pix-copy-code" readonly value="">
                       <button class="btn-copy-pix" onclick="copyPixCode()">Copiar</button>
                     </div>
                   </div>
@@ -720,10 +699,6 @@
                     <div class="spinner-small"></div>
                     <span>Aguardando confirmação do pagamento...</span>
                   </div>
-
-                  <button class="btn-pix-confirm-demo" onclick="simulatePixSuccess()">
-                    Simular Aprovação (Demo)
-                  </button>
                 </div>
               </div>
             </div>

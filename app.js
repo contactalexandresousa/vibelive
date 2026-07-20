@@ -217,6 +217,8 @@ const STATE = {
   // Carteira/Pix
   pixTimerInterval: null,
   activePixPackage: null,
+  activePixPayment: null,
+  pixPaymentChannel: null,
   
   // Transmissão Própria (Webcam)
   localStream: null,
@@ -301,6 +303,7 @@ const DOM = {
   pixTimer: document.getElementById("pix-timer"),
   pixCopyCode: document.getElementById("pix-copy-code"),
   pixStatusBox: document.getElementById("pix-status-box"),
+  pixQrImage: document.getElementById("pix-qr-image"),
   
   // Tela Transmitir ao Vivo
   goLiveVideo: document.getElementById("go-live-video"),
@@ -956,27 +959,63 @@ function simulatePrivateVideoCall() {
 }
 
 
-// 13. LOJA DE MOEDAS E MODAL PIX SIMULADO
-function openPixModal(coinsAmount, price) {
-  STATE.activePixPackage = { coins: coinsAmount, price: price };
-  
-  DOM.pixPackageName.textContent = `${coinsAmount} Moedas`;
-  DOM.pixTotalPrice.textContent = `R$ ${price.toFixed(2).replace('.', ',')}`;
-  
+// 13. LOJA DE MOEDAS E PAGAMENTO PIX REAL (MERCADO PAGO)
+// Catálogo só para exibição (nome/preço na tela) — o valor que realmente
+// conta é decidido no servidor (Edge Function create-pix-payment), a partir
+// só do código do pacote, nunca de um número vindo do cliente.
+const PIX_PACKAGES_DISPLAY = {
+  p50: { coins: 50, price: 4.99 },
+  p150: { coins: 150, price: 12.99 },
+  p500: { coins: 500, price: 39.99 },
+  p1200: { coins: 1200, price: 79.99 }
+};
+
+async function openPixModal(packageCode) {
+  if (!requireAuth()) return;
+  const display = PIX_PACKAGES_DISPLAY[packageCode];
+  if (!display) return;
+
+  STATE.activePixPackage = { code: packageCode, ...display };
+
+  DOM.pixPackageName.textContent = `${display.coins} Moedas`;
+  DOM.pixTotalPrice.textContent = `R$ ${display.price.toFixed(2).replace('.', ',')}`;
+  DOM.pixQrImage.src = "";
+  DOM.pixCopyCode.value = "";
+  DOM.pixStatusBox.style.background = "";
   DOM.pixStatusBox.innerHTML = `
     <div class="spinner-small"></div>
-    <span>Aguardando confirmação do pagamento...</span>
+    <span>Gerando cobrança PIX...</span>
   `;
-  
-  // Abrir modal
   DOM.pixModal.classList.add("active");
-  
-  // Inicializar temporizador de 5 minutos
-  let duration = 300; // 5 minutos
+
+  try {
+    const payment = await DB.createPixPayment(packageCode);
+    STATE.activePixPayment = payment;
+
+    DOM.pixQrImage.src = `data:image/png;base64,${payment.qr_code_base64}`;
+    DOM.pixCopyCode.value = payment.qr_code;
+    DOM.pixStatusBox.innerHTML = `
+      <div class="spinner-small"></div>
+      <span>Aguardando confirmação do pagamento...</span>
+    `;
+
+    startPixCountdown();
+
+    if (STATE.pixPaymentChannel) sb.removeChannel(STATE.pixPaymentChannel);
+    STATE.pixPaymentChannel = DB.subscribeToPixPayment(payment.id, handlePixPaymentUpdate);
+  } catch (err) {
+    DOM.pixStatusBox.innerHTML = `<span>⚠️ ${err.message || "Não foi possível gerar o pagamento PIX."}</span>`;
+  }
+}
+
+function startPixCountdown() {
+  // Cobranças PIX reais do Mercado Pago expiram em 24h.
+  let duration = 24 * 60 * 60;
   const updateTimer = () => {
-    const mins = String(Math.floor(duration / 60)).padStart(2, '0');
+    const hrs = String(Math.floor(duration / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((duration % 3600) / 60)).padStart(2, '0');
     const secs = String(duration % 60).padStart(2, '0');
-    DOM.pixTimer.textContent = `${mins}:${secs}`;
+    DOM.pixTimer.textContent = `${hrs}:${mins}:${secs}`;
     if (duration <= 0) {
       clearInterval(STATE.pixTimerInterval);
       closePixModal();
@@ -985,13 +1024,49 @@ function openPixModal(coinsAmount, price) {
     duration--;
   };
   updateTimer();
+  if (STATE.pixTimerInterval) clearInterval(STATE.pixTimerInterval);
   STATE.pixTimerInterval = setInterval(updateTimer, 1000);
+}
+
+// Chamado pelo Realtime quando o webhook do Mercado Pago (via mp-webhook)
+// confirma o pagamento — nunca por um botão de "simular".
+async function handlePixPaymentUpdate(row) {
+  STATE.activePixPayment = row;
+
+  if (row.status === "approved") {
+    if (STATE.pixTimerInterval) clearInterval(STATE.pixTimerInterval);
+    DOM.pixStatusBox.style.background = "rgba(52, 211, 153, 0.15)";
+    DOM.pixStatusBox.innerHTML = `
+      <span style="font-size: 1.1rem;">✅</span>
+      <strong>Pagamento Recebido com Sucesso!</strong>
+    `;
+    try {
+      const user = await Auth.getUser();
+      const profile = await DB.getProfile(user.id);
+      await applyProfileToUI(profile);
+    } catch (err) {
+      console.error("Falha ao atualizar saldo após PIX aprovado:", err);
+    }
+    setTimeout(() => {
+      closePixModal();
+      showToast(`Moedas creditadas! +${row.coins_amount} Moedas adicionadas.`);
+    }, 1500);
+  } else if (row.status === "rejected" || row.status === "expired") {
+    if (STATE.pixTimerInterval) clearInterval(STATE.pixTimerInterval);
+    DOM.pixStatusBox.style.background = "rgba(241, 85, 76, 0.15)";
+    DOM.pixStatusBox.innerHTML = `<strong>Pagamento não concluído. Tente novamente.</strong>`;
+  }
 }
 
 function closePixModal() {
   DOM.pixModal.classList.remove("active");
   if (STATE.pixTimerInterval) clearInterval(STATE.pixTimerInterval);
+  if (STATE.pixPaymentChannel) {
+    sb.removeChannel(STATE.pixPaymentChannel);
+    STATE.pixPaymentChannel = null;
+  }
   STATE.activePixPackage = null;
+  STATE.activePixPayment = null;
 }
 
 function copyPixCode() {
@@ -999,33 +1074,6 @@ function copyPixCode() {
   DOM.pixCopyCode.setSelectionRange(0, 99999);
   navigator.clipboard.writeText(DOM.pixCopyCode.value);
   showToast("Código Copia e Cola copiado!");
-}
-
-async function simulatePixSuccess() {
-  if (!STATE.activePixPackage) return;
-  if (!requireAuth()) return;
-  const p = STATE.activePixPackage;
-
-  try {
-    // Recarga PIX real ainda não está integrada nesta fase — este RPC apenas
-    // credita as moedas do pacote de forma segura e persistente (sem dinheiro real envolvido).
-    const profile = await DB.redeemDemoPix(`p${p.coins}`);
-
-    // Alterar status
-    DOM.pixStatusBox.style.background = "rgba(52, 211, 153, 0.15)";
-    DOM.pixStatusBox.innerHTML = `
-      <span style="font-size: 1.1rem;">✅</span>
-      <strong>Pagamento Recebido com Sucesso!</strong>
-    `;
-
-    setTimeout(async () => {
-      await applyProfileToUI(profile);
-      closePixModal();
-      showToast(`Moedas Creditadas! +${p.coins} Moedas adicionadas.`);
-    }, 1500);
-  } catch (err) {
-    showToast(err.message || "Não foi possível confirmar o pagamento.");
-  }
 }
 
 
