@@ -197,14 +197,56 @@ const DB = {
     if (error) throw error;
   },
 
-  // Retorna o canal inscrito — quem chamar é responsável por dar sb.removeChannel(canal) ao sair da sala.
-  subscribeToLiveChat(broadcasterHandle, onMessage) {
-    const channel = sb.channel(`live_chat:${broadcasterHandle}`)
+  // Batalha PK real — placar é a soma de todo o histórico de apoios (mesmo
+  // padrão de ledger append-only usado na carteira), sincronizado via Realtime.
+  async getPkScores(battleKey) {
+    const { data, error } = await sb.from("pk_battle_events").select("side, points").eq("battle_key", battleKey);
+    if (error) throw error;
+    const scores = { A: 0, B: 0 };
+    data.forEach(r => { scores[r.side] += r.points; });
+    return scores;
+  },
+
+  async getPkRecentEvents(battleKey, limit = 20) {
+    const { data, error } = await sb
+      .from("pk_battle_events")
+      .select("*")
+      .eq("battle_key", battleKey)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data.reverse();
+  },
+
+  subscribeToPkBattle(battleKey, onEvent) {
+    const channel = sb.channel(`pk_battle:${battleKey}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "pk_battle_events",
+        filter: `battle_key=eq.${battleKey}`
+      }, (payload) => onEvent(payload.new))
+      .subscribe();
+    return channel;
+  },
+
+  // Inscreve num único canal por sala: mensagens novas (postgres_changes) +
+  // contagem real de quem está conectado agora (Presence). Quem chamar é
+  // responsável por dar sb.removeChannel(canal) ao sair da sala.
+  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange }) {
+    const channel = sb.channel(`live_chat:${broadcasterHandle}`, {
+      config: { presence: { key: crypto.randomUUID() } }
+    })
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "live_chat_messages",
         filter: `broadcaster_handle=eq.${broadcasterHandle}`
       }, (payload) => onMessage(payload.new))
-      .subscribe();
+      .on("presence", { event: "sync" }, () => {
+        onViewerCountChange(Object.keys(channel.presenceState()).length);
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.track({ online_at: new Date().toISOString() });
+        }
+      });
     return channel;
   }
 };

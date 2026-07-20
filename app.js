@@ -197,6 +197,7 @@ const STATE = {
   followedStreamers: [], // IDs dos streamers seguidos
   currentLiveBroadcaster: null,
   liveChatChannel: null, // canal Supabase Realtime da sala de live atual
+  pkChannel: null, // canal Supabase Realtime da batalha PK atual
   activeChatPartner: null,
   dmsList: [...INITIAL_DMS],
   
@@ -519,9 +520,11 @@ async function enterLiveRoom(broadcasterId) {
   if (DOM.streamerStats) {
     DOM.streamerStats.textContent = `${b.diamonds} acumulados`;
   }
-  DOM.liveViewerCount.textContent = b.viewers;
-  STATE.liveViewerCount = b.viewers;
-  
+  // Contagem real de espectadores (Presence) substitui o número mockado assim
+  // que a inscrição na sala conectar — até lá, mostra você mesmo entrando.
+  DOM.liveViewerCount.textContent = "1";
+  STATE.liveViewerCount = 1;
+
   // Atualizar botão de seguir
   if (STATE.followedStreamers.includes(b.username)) {
     DOM.btnFollowStreamer.textContent = "Seguindo";
@@ -580,7 +583,13 @@ async function enterLiveRoom(broadcasterId) {
     console.log("Não foi possível carregar o histórico do chat", err);
   }
 
-  STATE.liveChatChannel = DB.subscribeToLiveChat(b.username, renderIncomingLiveChatRow);
+  STATE.liveChatChannel = DB.subscribeToLiveRoom(b.username, {
+    onMessage: renderIncomingLiveChatRow,
+    onViewerCountChange: (count) => {
+      STATE.liveViewerCount = count;
+      DOM.liveViewerCount.textContent = count;
+    }
+  });
 }
 
 function renderIncomingLiveChatRow(row) {
@@ -1490,27 +1499,40 @@ function closeProfileSettingsModal() {
   document.getElementById("modal-profile-settings").style.display = "none";
 }
 
-function saveProfileChanges() {
+async function saveProfileChanges() {
   const newName = document.getElementById("edit-profile-name").value.trim();
-  const newHandle = document.getElementById("edit-profile-handle").value.trim();
+  const newHandle = document.getElementById("edit-profile-handle").value.trim().replace(/^@/, "");
   const newBio = document.getElementById("edit-profile-bio").value.trim();
 
   if (!newName || !newHandle) {
     showToast("Nome e Username não podem ser vazios!");
     return;
   }
+  if (!requireAuth()) return;
 
-  // Atualizar na UI
-  const nameEl = document.querySelector(".profile-bio-info h3");
-  const handleEl = document.querySelector(".profile-handle");
-  const bioEl = document.querySelector(".profile-bio-text");
+  try {
+    const user = await Auth.getUser();
+    const profile = await DB.updateProfile(user.id, { display_name: newName, username: newHandle, bio: newBio });
 
-  if (nameEl) nameEl.innerHTML = `${newName} <span class="premium-verified">✓</span>`;
-  if (handleEl) handleEl.textContent = newHandle.startsWith("@") ? newHandle : "@" + newHandle;
-  if (bioEl) bioEl.textContent = newBio;
+    // Refletir exatamente o que foi salvo no servidor (não o que foi digitado) —
+    // o nome usado no chat ao vivo (STATE.profileName) também é atualizado aqui.
+    STATE.profileName = profile.display_name || profile.username;
+    const nameEl = document.querySelector(".profile-bio-info h3");
+    const handleEl = document.querySelector(".profile-handle");
+    const bioEl = document.querySelector(".profile-bio-text");
+    if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
+    if (handleEl) handleEl.textContent = `@${profile.username}`;
+    if (bioEl) bioEl.textContent = profile.bio;
 
-  showToast("Alterações salvas com sucesso!");
-  closeProfileSettingsModal();
+    showToast("Alterações salvas com sucesso!");
+    closeProfileSettingsModal();
+  } catch (err) {
+    if (err.code === "23505" || /duplicate key|already exists/i.test(err.message || "")) {
+      showToast("Esse nome de usuário já está em uso. Escolha outro.");
+    } else {
+      showToast(err.message || "Não foi possível salvar as alterações.");
+    }
+  }
 }
 
 async function deleteAccount() {
@@ -1597,7 +1619,9 @@ function performProfileSearch() {
 // 20. SIMULADOR DE BATALHA PK (FUNÇÕES)
 // ==========================================================================
 
-function initiatePkSimulator() {
+const PK_BATTLE_KEY = "moranguinho_vs_luana";
+
+async function initiatePkSimulator() {
   // Configurar elementos de vídeo
   const videoA = document.getElementById("pk-video-a");
   const videoB = document.getElementById("pk-video-b");
@@ -1612,16 +1636,51 @@ function initiatePkSimulator() {
   videoA.play().catch(e => console.log(e));
   videoB.play().catch(e => console.log(e));
 
-  // Pontuação inicial (estática) — muda de verdade só quando alguém apoia um lado
-  STATE.pkScoreA = 12500;
-  STATE.pkScoreB = 10200;
-
-  // Atualizar pontuação gráfica na tela
-  updatePkBars();
-
   // Limpar chat anterior do PK
   chatMessages.innerHTML = "";
   addPkSystemMessage("Batalha PK iniciada! Apoie sua streamer enviando presentes! ⚔️");
+  document.getElementById("pk-win-a").style.display = "none";
+  document.getElementById("pk-win-b").style.display = "none";
+
+  // Placar real: soma de todo apoio já recebido por todo mundo, compartilhado
+  // de verdade entre quem estiver assistindo (não é mais um número inicial falso).
+  try {
+    const scores = await DB.getPkScores(PK_BATTLE_KEY);
+    STATE.pkScoreA = scores.A;
+    STATE.pkScoreB = scores.B;
+    updatePkBars();
+    checkPkWinner();
+
+    const events = await DB.getPkRecentEvents(PK_BATTLE_KEY);
+    events.forEach(renderPkEvent);
+  } catch (err) {
+    console.log("Não foi possível carregar o placar do PK", err);
+  }
+
+  if (STATE.pkChannel) {
+    sb.removeChannel(STATE.pkChannel);
+  }
+  STATE.pkChannel = DB.subscribeToPkBattle(PK_BATTLE_KEY, handleIncomingPkEvent);
+}
+
+function renderPkEvent(row) {
+  const chatMessages = document.getElementById("pk-chat-messages");
+  const msgEl = document.createElement("div");
+  msgEl.className = "chat-msg gift-ann";
+  msgEl.innerHTML = `<span class="msg-author">${row.username}</span> <span class="msg-content">enviou um(a) ${row.gift_label} (+${row.points} pts)</span>`;
+  chatMessages.appendChild(msgEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function handleIncomingPkEvent(row) {
+  if (row.side === "A") {
+    STATE.pkScoreA += row.points;
+  } else {
+    STATE.pkScoreB += row.points;
+  }
+  updatePkBars();
+  renderPkEvent(row);
+  checkPkWinner();
 }
 
 function closePkSimulator() {
@@ -1631,9 +1690,10 @@ function closePkSimulator() {
   if (videoA) videoA.pause();
   if (videoB) videoB.pause();
 
-  // Resetar Badges de Vencedor
-  document.getElementById("pk-win-a").style.display = "none";
-  document.getElementById("pk-win-b").style.display = "none";
+  if (STATE.pkChannel) {
+    sb.removeChannel(STATE.pkChannel);
+    STATE.pkChannel = null;
+  }
 }
 
 function updatePkBars() {
@@ -1654,7 +1714,6 @@ function updatePkBars() {
 async function supportStreamer(side, event) {
   if (!requireAuth()) return;
   const giftName = side === "A" ? "Rosa 🌹" : "Diamante 💎";
-  const points = side === "A" ? 100 : 250;
   const streamerName = side === "A" ? "MORANGUINHO 🍓" : "Luana Becker 👑";
 
   let profile;
@@ -1666,25 +1725,11 @@ async function supportStreamer(side, event) {
   }
   await applyProfileToUI(profile);
 
-  // Somar pontos
-  if (side === "A") {
-    STATE.pkScoreA += points;
-  } else {
-    STATE.pkScoreB += points;
-  }
-
-  updatePkBars();
-
   // Mostrar aviso de presente na tela
   showToast(`Você enviou um(a) ${giftName} para apoiar ${streamerName}!`);
 
-  // Adicionar aviso de presente no chat
-  const chatMessages = document.getElementById("pk-chat-messages");
-  const msgEl = document.createElement("div");
-  msgEl.className = "chat-msg gift-ann";
-  msgEl.innerHTML = `<span class="msg-author">Você</span> <span class="msg-content">enviou um(a) ${giftName} (+${points} pts)</span>`;
-  chatMessages.appendChild(msgEl);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  // Placar e mensagem no chat do PK chegam via Realtime (compartilhados de
+  // verdade com todo mundo assistindo, não só localmente).
 
   // Emitir corações flutuantes baseados nas coordenadas do clique
   for (let i = 0; i < 3; i++) {
@@ -1692,9 +1737,6 @@ async function supportStreamer(side, event) {
       emitPkHeartFromClick(side, event);
     }, i * 200);
   }
-
-  // Verificar se venceu
-  checkPkWinner();
 }
 
 function checkPkWinner() {
