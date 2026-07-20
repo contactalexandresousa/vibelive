@@ -382,5 +382,33 @@ const DB = {
       }, (payload) => onMessage(payload.new))
       .subscribe();
     return channel;
+  },
+
+  // Bloqueio e denúncia — o bloqueio de DM é reforçado no servidor (trigger),
+  // isto aqui é só a interface pro cliente gerenciar a própria lista.
+  async blockUser(blockedId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("blocked_users").insert({ blocker_id: user.id, blocked_id: blockedId });
+    if (error) throw error;
+  },
+
+  async unblockUser(blockedId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("blocked_users").delete().eq("blocker_id", user.id).eq("blocked_id", blockedId);
+    if (error) throw error;
+  },
+
+  async getBlockedUsers() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb.from("blocked_users").select("blocked_id").eq("blocker_id", user.id);
+    if (error) throw error;
+    return data.map(r => r.blocked_id);
+  },
+
+  async reportUser(reportedId, reason) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("user_reports").insert({ reporter_id: user.id, reported_id: reportedId, reason });
+    if (error) throw error;
   }
 };

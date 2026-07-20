@@ -11,6 +11,9 @@ const STATE = {
   myCoins: 99,
   activeScreen: "splash",
   followedStreamers: [], // IDs dos streamers seguidos
+  blockedUsers: [], // ids (uuid) de quem eu bloqueei
+  optionsTargetUserId: null, // usado pelo modal de bloquear/denunciar
+  optionsTargetUserName: null,
   currentLiveBroadcaster: null,
   liveChatChannel: null, // canal Supabase Realtime da sala de live atual
   liveKitRoom: null, // conexão LiveKit como espectador (assistindo vídeo real)
@@ -265,7 +268,10 @@ async function initRealLiveSessionsFeed() {
   });
 }
 
-function renderRealLiveSessions(sessions) {
+function renderRealLiveSessions(allSessions) {
+  // Não mostra quem eu bloqueei (nem quem me bloqueou não teria motivo de aparecer,
+  // mas isso já é decidido do lado de quem bloqueou, não meu).
+  const sessions = allSessions.filter(s => !STATE.blockedUsers.includes(s.user_id));
   STATE.realLiveSessions = sessions;
   const grid = document.getElementById("real-live-grid");
   const emptyState = document.getElementById("discover-empty-state");
@@ -320,6 +326,7 @@ async function enterRealLiveRoom(hostUserId) {
     return;
   }
   const b = {
+    id: hostUserId,
     name: profile.display_name || profile.username,
     username: profile.username,
     avatar: profile.avatar_url
@@ -424,6 +431,8 @@ async function connectToRealLiveVideo(hostUserId, loader) {
 }
 
 function renderIncomingLiveChatRow(row) {
+  // Mensagem pública da sala, mas eu escolhi não ver essa pessoa.
+  if (row.user_id && STATE.blockedUsers.includes(row.user_id)) return;
   if (row.type === "gift") {
     addLiveComment(row.username, row.text.replace(/^enviou /, ""), true, "");
   } else {
@@ -692,14 +701,16 @@ async function renderInboxList() {
     }
   }
 
-  STATE.dmsList = conversations.map(c => ({
-    partnerId: c.partnerId,
-    name: c.profile ? (c.profile.display_name || c.profile.username) : "Usuário",
-    avatar: c.profile ? c.profile.avatar_url : "",
-    lastMessage: c.lastMessage,
-    time: formatMessageTime(c.lastAt),
-    unread: c.unread
-  }));
+  STATE.dmsList = conversations
+    .filter(c => !STATE.blockedUsers.includes(c.partnerId))
+    .map(c => ({
+      partnerId: c.partnerId,
+      name: c.profile ? (c.profile.display_name || c.profile.username) : "Usuário",
+      avatar: c.profile ? c.profile.avatar_url : "",
+      lastMessage: c.lastMessage,
+      time: formatMessageTime(c.lastAt),
+      unread: c.unread
+    }));
 
   DOM.inboxList.innerHTML = "";
 
@@ -819,6 +830,92 @@ async function sendPrivateChatMessage() {
 
 function simulatePrivateVideoCall() {
   showToast("Chamada de vídeo ainda não disponível nesta versão.");
+}
+
+
+// 12.1 BLOQUEAR E DENUNCIAR USUÁRIOS
+function openChatPartnerOptions() {
+  if (!STATE.activeChatPartner) return;
+  openUserOptionsMenu(STATE.activeChatPartner, DOM.chatPartnerName.textContent);
+}
+
+function openLiveStreamerOptions() {
+  if (!STATE.currentLiveBroadcaster || !STATE.currentLiveBroadcaster.id) return;
+  openUserOptionsMenu(STATE.currentLiveBroadcaster.id, STATE.currentLiveBroadcaster.name);
+}
+
+function openUserOptionsMenu(userId, userName) {
+  if (!requireAuth()) return;
+  STATE.optionsTargetUserId = userId;
+  STATE.optionsTargetUserName = userName;
+  document.getElementById("user-options-title").textContent = userName;
+  const isBlocked = STATE.blockedUsers.includes(userId);
+  document.getElementById("btn-toggle-block").textContent = isBlocked ? "Desbloquear" : "Bloquear";
+  document.getElementById("modal-user-options").style.display = "flex";
+}
+
+function closeUserOptionsMenu() {
+  document.getElementById("modal-user-options").style.display = "none";
+}
+
+async function handleToggleBlock() {
+  const userId = STATE.optionsTargetUserId;
+  if (!userId) return;
+  const wasBlocked = STATE.blockedUsers.includes(userId);
+
+  try {
+    if (wasBlocked) {
+      await DB.unblockUser(userId);
+      STATE.blockedUsers = STATE.blockedUsers.filter(id => id !== userId);
+      showToast("Usuário desbloqueado.");
+    } else {
+      await DB.blockUser(userId);
+      STATE.blockedUsers.push(userId);
+      showToast(`Você bloqueou ${STATE.optionsTargetUserName}.`);
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível concluir a ação.");
+    return;
+  }
+
+  closeUserOptionsMenu();
+  renderInboxList();
+
+  // Se acabou de bloquear a pessoa cuja conversa/live você está vendo agora, sai da tela.
+  if (!wasBlocked) {
+    if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === userId) {
+      navigateTo("messages");
+    }
+    if (STATE.activeScreen === "live-room" && STATE.currentLiveBroadcaster && STATE.currentLiveBroadcaster.id === userId) {
+      closeLiveRoom();
+      navigateTo("discover");
+    }
+  }
+}
+
+function openReportPrompt() {
+  closeUserOptionsMenu();
+  document.getElementById("report-reason-input").value = "";
+  document.getElementById("modal-report-user").style.display = "flex";
+}
+
+function closeReportModal() {
+  document.getElementById("modal-report-user").style.display = "none";
+}
+
+async function submitReport() {
+  const reason = document.getElementById("report-reason-input").value.trim();
+  if (!reason) {
+    showToast("Descreva o motivo da denúncia.");
+    return;
+  }
+  try {
+    await DB.reportUser(STATE.optionsTargetUserId, reason);
+    showToast("Denúncia enviada. Obrigado por ajudar a manter o VibeLive seguro.");
+    closeReportModal();
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar a denúncia.");
+  }
 }
 
 
@@ -1493,7 +1590,7 @@ function performProfileSearch() {
   searchDebounceTimer = setTimeout(async () => {
     let matches;
     try {
-      matches = await DB.searchProfiles(query);
+      matches = (await DB.searchProfiles(query)).filter(p => !STATE.blockedUsers.includes(p.id));
     } catch (err) {
       container.innerHTML = `
         <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
@@ -1575,6 +1672,12 @@ async function applyProfileToUI(profile) {
     STATE.followedStreamers = await DB.getFollows();
   } catch (err) {
     console.error("Falha ao carregar quem você segue:", err);
+  }
+
+  try {
+    STATE.blockedUsers = await DB.getBlockedUsers();
+  } catch (err) {
+    console.error("Falha ao carregar lista de bloqueios:", err);
   }
 
   STATE.myCoins = profile.coins;

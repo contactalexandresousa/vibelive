@@ -213,7 +213,7 @@
                     <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=50" class="viewer-mini-avatar" alt="Viewer">
                   </div>
                   <span id="live-viewer-count" class="viewers-count-number">115</span>
-                  <button class="btn-header-chevron">
+                  <button class="btn-header-chevron" onclick="openLiveStreamerOptions()">
                     <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
                   </button>
                   <button class="btn-close-live-x" onclick="closeLiveRoom(); navigateTo('discover');">×</button>
@@ -393,6 +393,9 @@
                 </button>
                 <button class="chat-action-btn" onclick="simulatePrivateVideoCall()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                </button>
+                <button class="chat-action-btn" onclick="openChatPartnerOptions()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                 </button>
               </div>
             </header>
@@ -1004,6 +1007,31 @@
           </div>
         </div>
 
+        <!-- Modal de Opções do Usuário (Bloquear/Denunciar) -->
+        <div class="new-post-modal" id="modal-user-options" style="display: none;">
+          <div class="new-post-overlay" onclick="closeUserOptionsMenu()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header" style="margin-bottom: 4px;">
+              <h3 id="user-options-title">Opções</h3>
+              <button class="btn-close-new-post" onclick="closeUserOptionsMenu()">×</button>
+            </header>
+            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" id="btn-toggle-block" onclick="handleToggleBlock()">Bloquear</button>
+            <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger);" onclick="openReportPrompt()">Denunciar</button>
+          </div>
+        </div>
+
+        <!-- Modal de Denúncia de Usuário -->
+        <div class="new-post-modal" id="modal-report-user" style="display: none;">
+          <div class="new-post-overlay" onclick="closeReportModal()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header">
+              <h3>Denunciar usuário</h3>
+              <button class="btn-close-new-post" onclick="closeReportModal()">×</button>
+            </header>
+            <textarea id="report-reason-input" placeholder="Descreva o motivo da denúncia..." style="min-height: 90px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 10px; font-family: var(--font-body); font-size: 0.8rem; margin-top: 10px; resize: none;"></textarea>
+            <button class="btn-publish-post" onclick="submitReport()" style="margin-top: 14px;">Enviar Denúncia</button>
+          </div>
+        </div>
 
   </div> <!-- Fim de phone-screen -->
 
