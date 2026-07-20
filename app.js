@@ -18,8 +18,9 @@ const STATE = {
   realLiveSessions: [], // quem está transmitindo de verdade agora
   realLiveSessionsChannel: null,
   currentLiveIsReal: false,
-  activeChatPartner: null,
-  dmsList: [], // sem conversas fictícias — só conversas reais no futuro
+  activeChatPartner: null, // id (uuid) da pessoa com quem a conversa privada está aberta
+  dmsList: [], // conversas reais, carregadas de direct_messages
+  dmInboxChannel: null, // canal Supabase Realtime único p/ toda mensagem recebida
   
   // Postagens no Perfil — carregadas do banco (DB.getMyPosts) após o login;
   // toda conta real começa sem posts.
@@ -671,7 +672,35 @@ function renderCoins() {
 
 
 // 12. TELA DE MENSAGENS E DIRECT MESSAGES (INBOX)
-function renderInboxList() {
+function formatMessageTime(isoString) {
+  const d = new Date(isoString);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+async function renderInboxList() {
+  let conversations = [];
+  if (STATE.isLoggedIn) {
+    try {
+      conversations = await DB.getConversations();
+    } catch (err) {
+      console.error("Falha ao carregar conversas:", err);
+    }
+  }
+
+  STATE.dmsList = conversations.map(c => ({
+    partnerId: c.partnerId,
+    name: c.profile ? (c.profile.display_name || c.profile.username) : "Usuário",
+    avatar: c.profile ? c.profile.avatar_url : "",
+    lastMessage: c.lastMessage,
+    time: formatMessageTime(c.lastAt),
+    unread: c.unread
+  }));
+
   DOM.inboxList.innerHTML = "";
 
   if (STATE.dmsList.length === 0) {
@@ -695,7 +724,7 @@ function renderInboxList() {
     const item = document.createElement("div");
     item.className = chat.unread ? "inbox-item unread" : "inbox-item";
 
-    item.onclick = () => openPrivateChat(chat.name, chat.avatar, chat.lastMessage, chat.username);
+    item.onclick = () => openPrivateChat(chat.partnerId, chat.name, chat.avatar);
 
     item.innerHTML = `
       <div class="inbox-avatar">
@@ -723,53 +752,44 @@ function renderInboxList() {
   }
 }
 
-function openPrivateChat(name, avatar, note, username) {
-  STATE.activeChatPartner = username;
+async function openPrivateChat(partnerId, name, avatar) {
+  if (!requireAuth()) return;
 
-  // Atualizar UI
+  STATE.activeChatPartner = partnerId;
   DOM.chatPartnerAvatar.src = avatar;
   DOM.chatPartnerName.textContent = name;
+  DOM.privateChatHistory.innerHTML = "";
 
-  // Primeira conversa com essa pessoa ainda não existe na lista — cria uma
-  // entrada vazia agora, em vez de exigir dados fictícios pré-carregados.
-  let localChat = STATE.dmsList.find(x => x.username === username);
-  if (!localChat) {
-    localChat = { username, name, avatar, lastMessage: note || "", time: "", unread: false, history: [] };
-    STATE.dmsList.unshift(localChat);
-  } else {
-    localChat.unread = false;
+  navigateTo("private-chat");
+
+  try {
+    const user = await Auth.getUser();
+    const history = await DB.getConversationHistory(partnerId);
+    history.forEach(msg => appendPrivateChatBubble(msg, user.id));
+    await DB.markConversationRead(partnerId);
+  } catch (err) {
+    console.error("Falha ao carregar conversa:", err);
   }
   renderInboxList();
-
-  renderPrivateChatHistory(username);
-  navigateTo("private-chat");
 }
 
-function renderPrivateChatHistory(username) {
-  DOM.privateChatHistory.innerHTML = "";
-  const chat = STATE.dmsList.find(x => x.username === username);
-  if (!chat) return;
-  
-  chat.history.forEach(msg => {
-    const bubble = document.createElement("div");
-    bubble.className = msg.sender === "me" ? "chat-bubble sent" : "chat-bubble received";
-    
-    let vipSuffix = "";
-    if (msg.sender === "me" && STATE.isVIP) {
-      vipSuffix = `<span style="font-size: 0.58rem; display: block; color: var(--secondary); font-weight: bold; margin-bottom: 2px;">👑 VIP Ouro</span>`;
-    }
-    
-    bubble.innerHTML = `
-      ${vipSuffix}
-      <span>${msg.text}</span>
-      <span class="chat-bubble-time">${msg.time}</span>
-    `;
-    DOM.privateChatHistory.appendChild(bubble);
-  });
-  
-  setTimeout(() => {
-    DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
-  }, 100);
+function appendPrivateChatBubble(msg, myUserId) {
+  const bubble = document.createElement("div");
+  const isMine = msg.sender_id === myUserId;
+  bubble.className = isMine ? "chat-bubble sent" : "chat-bubble received";
+
+  let vipSuffix = "";
+  if (isMine && STATE.isVIP) {
+    vipSuffix = `<span style="font-size: 0.58rem; display: block; color: var(--secondary); font-weight: bold; margin-bottom: 2px;">👑 VIP Ouro</span>`;
+  }
+
+  bubble.innerHTML = `
+    ${vipSuffix}
+    <span>${msg.text}</span>
+    <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
+  `;
+  DOM.privateChatHistory.appendChild(bubble);
+  DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
 }
 
 function handlePrivateChatKey(event) {
@@ -778,26 +798,23 @@ function handlePrivateChatKey(event) {
   }
 }
 
-function sendPrivateChatMessage() {
+async function sendPrivateChatMessage() {
   const text = DOM.privateChatInput.value.trim();
   if (text === "") return;
-  
-  const username = STATE.activeChatPartner;
-  const chat = STATE.dmsList.find(x => x.username === username);
-  if (!chat) return;
-  
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  
-  // Adicionar ao histórico local
-  const newMsg = { sender: "me", text: text, time: timeStr };
-  chat.history.push(newMsg);
-  chat.lastMessage = text;
-  chat.time = timeStr;
-  
-  renderPrivateChatHistory(username);
+  if (!requireAuth()) return;
+
+  const partnerId = STATE.activeChatPartner;
+  if (!partnerId) return;
+
   DOM.privateChatInput.value = "";
-  renderInboxList();
+  try {
+    const user = await Auth.getUser();
+    const sent = await DB.sendDirectMessage(partnerId, text);
+    appendPrivateChatBubble(sent, user.id);
+    renderInboxList();
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar a mensagem.");
+  }
 }
 
 function simulatePrivateVideoCall() {
@@ -1505,7 +1522,7 @@ function performProfileSearch() {
 
       item.onclick = () => {
         closeSearchOverlay();
-        openPrivateChat(name, p.avatar_url, "Oii!", p.username);
+        openPrivateChat(p.id, name, p.avatar_url);
       };
 
       item.innerHTML = `
@@ -1573,6 +1590,20 @@ async function applyProfileToUI(profile) {
 
   renderCoins();
   updateXPProgressUI();
+
+  // Inscreve no canal global de DMs recebidas (uma vez por sessão, não a cada
+  // chamada — applyProfileToUI roda depois de toda ação de carteira) e carrega
+  // as conversas reais.
+  if (!STATE.dmInboxChannel) {
+    STATE.dmInboxChannel = DB.subscribeToDirectMessages(profile.id, (row) => {
+      if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.sender_id) {
+        appendPrivateChatBubble(row, profile.id);
+        DB.markConversationRead(row.sender_id).catch(() => {});
+      }
+      renderInboxList();
+    });
+    renderInboxList();
+  }
 
   // O servidor decide o XP/nível (nunca o cliente) — anuncia o level-up comparando
   // com o nível anterior, já que a RPC só devolve o estado final.
@@ -1704,6 +1735,12 @@ async function handleLogout() {
     console.error(err);
   }
   STATE.isLoggedIn = false;
+  if (STATE.dmInboxChannel) {
+    sb.removeChannel(STATE.dmInboxChannel);
+    STATE.dmInboxChannel = null;
+  }
+  STATE.dmsList = [];
+  renderInboxList();
   navigateTo("auth");
   showToast("Sessão encerrada!");
 }

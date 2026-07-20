@@ -61,7 +61,7 @@ const DB = {
   async searchProfiles(query) {
     const { data, error } = await sb
       .from("profiles")
-      .select("username, display_name, avatar_url, bio")
+      .select("id, username, display_name, avatar_url, bio")
       .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
       .limit(20);
     if (error) throw error;
@@ -297,6 +297,90 @@ const DB = {
           channel.track({ online_at: new Date().toISOString() });
         }
       });
+    return channel;
+  },
+
+  // Mensagens diretas (DM) reais — persistidas e sincronizadas via Realtime.
+  async getConversations() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return []; // sem sessão ainda (ex: chamado antes do login carregar) — sem conversas, não é erro
+    const { data: messages, error } = await sb
+      .from("direct_messages")
+      .select("*")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    // Agrupa por "outro participante", mantendo só a mensagem mais recente de cada.
+    const byPartner = new Map();
+    for (const m of messages) {
+      const partnerId = m.sender_id === user.id ? m.recipient_id : m.sender_id;
+      if (!byPartner.has(partnerId)) {
+        byPartner.set(partnerId, {
+          partnerId,
+          lastMessage: m.text,
+          lastAt: m.created_at,
+          unread: m.recipient_id === user.id && !m.read_at
+        });
+      }
+    }
+
+    const partnerIds = [...byPartner.keys()];
+    if (partnerIds.length === 0) return [];
+
+    const { data: profiles, error: profErr } = await sb
+      .from("profiles")
+      .select("id, username, display_name, avatar_url")
+      .in("id", partnerIds);
+    if (profErr) throw profErr;
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    return [...byPartner.values()].map(c => ({ ...c, profile: profileMap.get(c.partnerId) }));
+  },
+
+  async getConversationHistory(partnerId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data, error } = await sb
+      .from("direct_messages")
+      .select("*")
+      .or(`and(sender_id.eq.${user.id},recipient_id.eq.${partnerId}),and(sender_id.eq.${partnerId},recipient_id.eq.${user.id})`)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  async sendDirectMessage(recipientId, text) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data, error } = await sb
+      .from("direct_messages")
+      .insert({ sender_id: user.id, recipient_id: recipientId, text })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async markConversationRead(partnerId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb
+      .from("direct_messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("sender_id", partnerId)
+      .eq("recipient_id", user.id)
+      .is("read_at", null);
+    if (error) throw error;
+  },
+
+  // Um único canal por sessão: qualquer mensagem que EU receber (de quem for)
+  // passa por aqui. Quem chamar decide o que fazer (atualizar inbox, anexar
+  // na conversa aberta etc.) — mesmo padrão de canal único usado na sala de live.
+  subscribeToDirectMessages(myUserId, onMessage) {
+    const channel = sb.channel(`dm_inbox:${myUserId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "direct_messages",
+        filter: `recipient_id=eq.${myUserId}`
+      }, (payload) => onMessage(payload.new))
+      .subscribe();
     return channel;
   }
 };
