@@ -58,6 +58,16 @@ const DB = {
     return data;
   },
 
+  async searchProfiles(query) {
+    const { data, error } = await sb
+      .from("profiles")
+      .select("username, display_name, avatar_url, bio")
+      .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+      .limit(20);
+    if (error) throw error;
+    return data;
+  },
+
   async updateProfile(userId, fields) {
     const { data, error } = await sb.from("profiles").update(fields).eq("id", userId).select().single();
     if (error) throw error;
@@ -73,12 +83,6 @@ const DB = {
 
   async sendQuickRose(broadcasterHandle) {
     const { data, error } = await sb.rpc("send_quick_rose", { p_broadcaster_handle: broadcasterHandle || null });
-    if (error) throw error;
-    return data;
-  },
-
-  async supportPk(side) {
-    const { data, error } = await sb.rpc("support_pk", { p_side: side });
     if (error) throw error;
     return data;
   },
@@ -272,37 +276,6 @@ const DB = {
       broadcaster_handle: broadcasterHandle, user_id: user.id, username, text, type: "chat"
     });
     if (error) throw error;
-  },
-
-  // Batalha PK real — placar é a soma de todo o histórico de apoios (mesmo
-  // padrão de ledger append-only usado na carteira), sincronizado via Realtime.
-  async getPkScores(battleKey) {
-    const { data, error } = await sb.from("pk_battle_events").select("side, points").eq("battle_key", battleKey);
-    if (error) throw error;
-    const scores = { A: 0, B: 0 };
-    data.forEach(r => { scores[r.side] += r.points; });
-    return scores;
-  },
-
-  async getPkRecentEvents(battleKey, limit = 20) {
-    const { data, error } = await sb
-      .from("pk_battle_events")
-      .select("*")
-      .eq("battle_key", battleKey)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    return data.reverse();
-  },
-
-  subscribeToPkBattle(battleKey, onEvent) {
-    const channel = sb.channel(`pk_battle:${battleKey}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "pk_battle_events",
-        filter: `battle_key=eq.${battleKey}`
-      }, (payload) => onEvent(payload.new))
-      .subscribe();
-    return channel;
   },
 
   // Inscreve num único canal por sala: mensagens novas (postgres_changes) +

@@ -2,191 +2,7 @@
    VibeLive - Main Application Logic (Vanilla JS)
    ========================================================================== */
 
-// 1. DADOS DE SIMULAÇÃO (MOCK DATA)
-
-// Lista de Streamers e Canais de Vídeo
-const MOCK_BROADCASTERS = [
-  {
-    id: 1,
-    name: "MORANGUINHO 🍓",
-    username: "moranguinho",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-    diamonds: "469 mil",
-    diamondsCount: 469000,
-    viewers: 76,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-lighting-12347-large.mp4",
-    section: "popular",
-    note: "Live ON! 🔥",
-    bio: "Conversa e entretenimento. Seja bem-vindo! 💋"
-  },
-  {
-    id: 2,
-    name: "Luana Becker 👑",
-    username: "luana.becker",
-    avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150",
-    diamonds: "3,6 mi",
-    diamondsCount: 3600000,
-    viewers: 88,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-with-neon-makeup-in-dark-40011-large.mp4",
-    section: "popular",
-    note: "Tabela de valores nos stories 💸",
-    bio: "VIP Bronze, Silver e Gold. Vem conversar!"
-  },
-  {
-    id: 3,
-    name: "Aline Santos ✨",
-    username: "aline.santos",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150",
-    diamonds: "625 mil",
-    diamondsCount: 625000,
-    viewers: 112,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-woman-looking-at-her-phone-in-the-dark-40019-large.mp4",
-    section: "novata",
-    note: "Alguém para call?",
-    bio: "Apenas conversando e ouvindo música."
-  },
-  {
-    id: 4,
-    name: "Gabi Silva 🥱",
-    username: "gabi.silva",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-    diamonds: "539 mil",
-    diamondsCount: 539000,
-    viewers: 95,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-woman-filming-herself-with-a-smartphone-41436-large.mp4",
-    section: "novata",
-    note: "Entediada em casa...",
-    bio: "Conversando sobre tudo! Me manda um oi."
-  },
-  {
-    id: 5,
-    name: "Ponto por Ponto 🧶",
-    username: "ponto.ponto",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150",
-    diamonds: "115 mil",
-    diamondsCount: 115000,
-    viewers: 115,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-taking-selfies-with-her-smart-phone-41444-large.mp4",
-    section: "proxima",
-    distance: "1,2 km",
-    note: "Crochê ao vivo 🧶",
-    bio: "Sou artesã de crochê. Envio para todo o Brasil."
-  },
-  {
-    id: 6,
-    name: "zcitando 💭",
-    username: "zcitando",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
-    diamonds: "12 mil",
-    diamondsCount: 12000,
-    viewers: 125,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-woman-filming-herself-with-a-smartphone-41436-large.mp4",
-    section: "proxima",
-    distance: "800 m",
-    note: "Zoar > Chorar 💔",
-    bio: "Minha conta do Instagram é pra zoar triste..."
-  },
-  {
-    id: 7,
-    name: "Carol Dias 🌸",
-    username: "carol.dias",
-    avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150",
-    diamonds: "45 mil",
-    diamondsCount: 45000,
-    viewers: 42,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-lighting-12347-large.mp4",
-    section: "proxima",
-    distance: "300 m",
-    note: "Bora papear? 💬",
-    bio: "Carol aqui! Passando o tempo nas lives."
-  },
-  {
-    id: 8,
-    name: "Julia Cruz ⚡",
-    username: "julia.cruz",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-    diamonds: "8 mil",
-    diamondsCount: 8000,
-    viewers: 18,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-with-neon-makeup-in-dark-40011-large.mp4",
-    section: "novata",
-    note: "Novidade na área! 😊",
-    bio: "Criando conteúdo novo! Manda um oi no direct."
-  },
-  {
-    id: 9,
-    name: "Larissa Rocha 🦋",
-    username: "larissa.rocha",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-    diamonds: "780 mil",
-    diamondsCount: 780000,
-    viewers: 154,
-    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-woman-looking-at-her-phone-in-the-dark-40019-large.mp4",
-    section: "popular",
-    note: "Live da Lari 💖",
-    bio: "Sejam bem-vindos! Vamos curtir a noite juntas."
-  },
-  {
-    id: 10,
-    name: "⚔️ BATALHA PK",
-    username: "batalha.pk",
-    avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150",
-    diamonds: "940 mil",
-    diamondsCount: 940000,
-    viewers: 840,
-    videoUrl: "", // Trata na lógica de abertura
-    section: "popular",
-    note: "Simulador de PK ao vivo! ⚔️",
-    bio: "Batalha disputada. Quem vence hoje?",
-    isPk: true
-  }
-];
-
-// Conversas Direct Messages (DMs) Iniciais
-const INITIAL_DMS = [
-  {
-    username: "moranguinho",
-    name: "MORANGUINHO 🍓",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-    lastMessage: "Obrigada pelo carinho! Vem me ver na live... 💋",
-    time: "10:14",
-    unread: true,
-    history: [
-      { sender: "them", text: "Oi Alexandre, tudo bem?", time: "09:30" },
-      { sender: "me", text: "Oi! Tudo bem e com você? Adorei sua live ontem.", time: "09:32" },
-      { sender: "them", text: "Que fofo! Obrigada por assistir. 🥰", time: "09:35" },
-      { sender: "them", text: "Vou entrar em live daqui a pouco, fica de olho!", time: "09:36" },
-      { sender: "me", text: "Pode deixar, vou entrar sim!", time: "09:40" },
-      { sender: "them", text: "Obrigada pelo carinho! Vem me ver na live... 💋", time: "10:14" }
-    ]
-  },
-  {
-    username: "zcitando",
-    name: "zcitando 💭",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
-    lastMessage: "Minha conta é pra rir pra não chorar",
-    time: "Ontem",
-    unread: false,
-    history: [
-      { sender: "me", text: "Mano, seus posts são muito engraçados, me identifico", time: "Ontem 18:20" },
-      { sender: "them", text: "Valeu cara! Tamo junto", time: "Ontem 18:22" },
-      { sender: "them", text: "Minha conta é pra rir pra não chorar", time: "Ontem 18:23" }
-    ]
-  },
-  {
-    username: "gabi.silva",
-    name: "Gabi Silva 🥱",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-    lastMessage: "Te respondo na chamada de vídeo",
-    time: "2 dias atrás",
-    unread: false,
-    history: [
-      { sender: "me", text: "Como funciona a chamada de vídeo privada?", time: "17 Jul" },
-      { sender: "them", text: "Oi! É só mandar 100 moedas que liberamos a call de 10 min", time: "17 Jul" },
-      { sender: "them", text: "Te respondo na chamada de vídeo", time: "17 Jul" }
-    ]
-  }
-];
+// 1. DADOS INICIAIS
 
 
 const STATE = {
@@ -197,14 +13,13 @@ const STATE = {
   followedStreamers: [], // IDs dos streamers seguidos
   currentLiveBroadcaster: null,
   liveChatChannel: null, // canal Supabase Realtime da sala de live atual
-  pkChannel: null, // canal Supabase Realtime da batalha PK atual
   liveKitRoom: null, // conexão LiveKit como espectador (assistindo vídeo real)
   myLiveKitRoom: null, // conexão LiveKit como transmissor (própria live)
   realLiveSessions: [], // quem está transmitindo de verdade agora
   realLiveSessionsChannel: null,
   currentLiveIsReal: false,
   activeChatPartner: null,
-  dmsList: [...INITIAL_DMS],
+  dmsList: [], // sem conversas fictícias — só conversas reais no futuro
   
   // Postagens no Perfil — carregadas do banco (DB.getMyPosts) após o login;
   // toda conta real começa sem posts.
@@ -229,11 +44,9 @@ const STATE = {
   localStream: null,
   myLiveViewerCount: 0,
   currentVideoFilter: "none",
+  // Sem stories fictícias de outras pessoas — só o placeholder do seu próprio status.
   stories: [
-    { username: "Seu status", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", media: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500", caption: "Preparando a live de hoje! 🎬🍿", viewed: false, isSelf: true },
-    { username: "moranguinho", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150", media: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=500", caption: "Show ao vivo mais tarde! Quem vem? 💋🌹", viewed: false },
-    { username: "gabi.silva", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150", media: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500", caption: "Cantando umas músicas no violão 🎸🎙️", viewed: false },
-    { username: "luana.becker", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150", media: "https://images.unsplash.com/photo-1516280440614-37939bbacd6a?w=500", caption: "Batalha PK pesada hoje à noite! 🏆🔥", viewed: false }
+    { username: "Seu status", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", media: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500", caption: "Preparando a live de hoje! 🎬🍿", viewed: false, isSelf: true }
   ],
   activeStoryIndex: 0,
   storyInterval: null,
@@ -255,7 +68,6 @@ const DOM = {
     "private-chat": document.getElementById("screen-private-chat"),
     profile: document.getElementById("screen-profile"),
     "go-live": document.getElementById("screen-go-live"),
-    "pk-simulator": document.getElementById("screen-pk-simulator"),
     auth: document.getElementById("screen-auth")
   },
   
@@ -324,8 +136,6 @@ const DOM = {
 // 4. INICIALIZAÇÃO DO APP
 document.addEventListener("DOMContentLoaded", () => {
   renderCoins();
-  renderLivesGrid();
-  scrollToSection("popular"); // Mostrar apenas populares por padrão no início
   renderInboxList();
   renderStories();
   initRealLiveSessionsFeed();
@@ -361,8 +171,7 @@ function requireAuth() {
 // 6. NAVEGAÇÃO E ROTAS (SPA)
 function navigateTo(screenId) {
   // Guarda a tela anterior e já atualiza o estado antes da limpeza,
-  // evitando recursão infinita quando closeLiveRoom/closePkSimulator
-  // chamam navigateTo() de volta.
+  // evitando recursão infinita quando closeLiveRoom chama navigateTo() de volta.
   const previousScreen = STATE.activeScreen;
   STATE.activeScreen = screenId;
 
@@ -373,26 +182,23 @@ function navigateTo(screenId) {
   if (previousScreen === "go-live" && screenId !== "go-live") {
     stopOwnLiveStream();
   }
-  if (previousScreen === "pk-simulator" && screenId !== "pk-simulator") {
-    closePkSimulator();
-  }
 
   // Ocultar todas as telas
   Object.keys(DOM.screens).forEach(key => {
     DOM.screens[key].classList.remove("active");
   });
-  
+
   // Exibir a tela selecionada
   DOM.screens[screenId].classList.add("active");
   STATE.activeScreen = screenId;
-  
+
   // Gerenciamento da navegação inferior
-  const hideNavScreens = ["splash", "live-room", "private-chat", "auth", "go-live", "pk-simulator"];
+  const hideNavScreens = ["splash", "live-room", "private-chat", "auth", "go-live"];
   if (hideNavScreens.includes(screenId)) {
     DOM.bottomNav.style.display = "none";
   } else {
     DOM.bottomNav.style.display = "flex";
-    
+
     // Atualizar item ativo na barra
     const navItems = DOM.bottomNav.querySelectorAll(".nav-item");
     navItems.forEach(item => {
@@ -402,15 +208,13 @@ function navigateTo(screenId) {
       }
     });
   }
-  
+
   // Ações de tela específicas ao entrar
   if (screenId === "discover") {
     renderCoins();
   } else if (screenId === "profile") {
     renderCoins();
     renderProfilePosts();
-  } else if (screenId === "pk-simulator") {
-    initiatePkSimulator();
   } else if (screenId === "go-live") {
     initiateCameraStream();
   }
@@ -437,78 +241,7 @@ function showNotificationPanel() {
 }
 
 
-// 8. TELA DISCOVER - GRADE E SEÇÕES DE LIVES
-function renderLivesGrid() {
-  const popularContainer = document.getElementById("popular-lives-grid");
-  const newContainer = document.getElementById("new-lives-list");
-  const nearbyContainer = document.getElementById("nearby-lives-list");
-
-  if (!popularContainer || !newContainer || !nearbyContainer) return;
-
-  popularContainer.innerHTML = "";
-  newContainer.innerHTML = "";
-  nearbyContainer.innerHTML = "";
-
-  // 1. POPULARES (Grid de duas colunas)
-  const popularLives = MOCK_BROADCASTERS.filter(b => b.section === "popular");
-  popularLives.forEach(b => {
-    popularContainer.appendChild(createLiveCardElement(b));
-  });
-
-  // 2. NOVATAS (Scroll Horizontal com badge 'Novo')
-  const newLives = MOCK_BROADCASTERS.filter(b => b.section === "novata");
-  newLives.forEach(b => {
-    newContainer.appendChild(createLiveCardElement(b, "new"));
-  });
-
-  // 3. PRÓXIMAS (Scroll Horizontal com badge de Distância)
-  const nearbyLives = MOCK_BROADCASTERS.filter(b => b.section === "proxima");
-  nearbyLives.forEach(b => {
-    nearbyContainer.appendChild(createLiveCardElement(b, "nearby"));
-  });
-}
-
-// Auxiliar para criar elementos de card de live dinamicamente
-function createLiveCardElement(b, badgeType = null) {
-  const card = document.createElement("div");
-  card.className = "live-card";
-  card.onclick = () => {
-    if (b.isPk) {
-      navigateTo("pk-simulator");
-    } else {
-      enterLiveRoom(b.id);
-    }
-  };
-
-  let badgeHtml = "";
-  if (badgeType === "new") {
-    badgeHtml = `<div class="card-badge-right new">Novo</div>`;
-  } else if (badgeType === "nearby") {
-    badgeHtml = `<div class="card-badge-right nearby">📍 ${b.distance || '1.0 km'}</div>`;
-  }
-
-  card.innerHTML = `
-    <img class="live-thumbnail" src="${b.avatar}" alt="${b.name}">
-    <div class="card-overlay-gradient"></div>
-    <div class="card-viewers">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-      <span>👁️ ${b.viewers}</span>
-    </div>
-    ${badgeHtml}
-    <div class="card-details">
-      <span class="card-name">${b.name} <span style="color: var(--primary); font-size: 0.65rem;">●</span></span>
-      <span class="card-coins">
-        <svg class="icon-coin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
-        ${b.diamonds}
-      </span>
-    </div>
-    <button class="card-btn-call" onclick="event.stopPropagation(); if (${b.isPk}) { navigateTo('pk-simulator'); } else { enterLiveRoom(${b.id}); }">
-      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-    </button>
-  `;
-  return card;
-}
-
+// 8. TELA DISCOVER - LIVES REAIS ACONTECENDO AGORA
 // Lives reais acontecendo agora (pessoas de verdade transmitindo via LiveKit) —
 // carrega o estado inicial e mantém atualizado via Realtime, pra qualquer um
 // que estiver no app (logado ou não) ver quem está ao vivo de verdade.
@@ -533,16 +266,18 @@ async function initRealLiveSessionsFeed() {
 
 function renderRealLiveSessions(sessions) {
   STATE.realLiveSessions = sessions;
-  const section = document.getElementById("real-live-section");
   const grid = document.getElementById("real-live-grid");
-  if (!section || !grid) return;
+  const emptyState = document.getElementById("discover-empty-state");
+  if (!grid) return;
 
   grid.innerHTML = "";
   if (sessions.length === 0) {
-    section.style.display = "none";
+    grid.style.display = "none";
+    if (emptyState) emptyState.style.display = "flex";
     return;
   }
-  section.style.display = "block";
+  grid.style.display = "grid";
+  if (emptyState) emptyState.style.display = "none";
   sessions.forEach(s => grid.appendChild(createRealLiveCardElement(s)));
 }
 
@@ -572,13 +307,7 @@ function createRealLiveCardElement(session) {
 }
 
 
-// 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM)
-async function enterLiveRoom(broadcasterId) {
-  const b = MOCK_BROADCASTERS.find(x => x.id === broadcasterId);
-  if (!b) return;
-  await enterLiveRoomCore(b, false);
-}
-
+// 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM REAL)
 // Entra numa transmissão de verdade (pessoa real, vídeo real via LiveKit) —
 // hostUserId é o id da conta de quem está transmitindo.
 async function enterRealLiveRoom(hostUserId) {
@@ -589,19 +318,12 @@ async function enterRealLiveRoom(hostUserId) {
     showToast("Não foi possível entrar nessa live.");
     return;
   }
-  const descriptor = {
-    id: `real-${hostUserId}`,
+  const b = {
     name: profile.display_name || profile.username,
     username: profile.username,
-    avatar: profile.avatar_url,
-    diamonds: "0",
-    diamondsCount: 0,
-    videoUrl: null
+    avatar: profile.avatar_url
   };
-  await enterLiveRoomCore(descriptor, true, hostUserId);
-}
 
-async function enterLiveRoomCore(b, isReal, hostUserId) {
   // Sai de qualquer sala/conexão anterior antes de entrar nesta.
   if (STATE.liveChatChannel) {
     sb.removeChannel(STATE.liveChatChannel);
@@ -613,13 +335,13 @@ async function enterLiveRoomCore(b, isReal, hostUserId) {
   }
 
   STATE.currentLiveBroadcaster = b;
-  STATE.currentLiveIsReal = isReal;
+  STATE.currentLiveIsReal = true;
 
   // Atualizar dados da UI
   DOM.streamerAvatar.src = b.avatar;
   DOM.streamerName.textContent = b.name;
   if (DOM.streamerStats) {
-    DOM.streamerStats.textContent = `${b.diamonds} acumulados`;
+    DOM.streamerStats.textContent = "ao vivo agora";
   }
   // Contagem real de espectadores (Presence) substitui o número mockado assim
   // que a inscrição na sala conectar — até lá, mostra você mesmo entrando.
@@ -648,33 +370,7 @@ async function enterLiveRoomCore(b, isReal, hostUserId) {
 
   DOM.liveVideo.poster = b.avatar.replace("w=150", "w=500");
 
-  if (isReal) {
-    await connectToRealLiveVideo(hostUserId, loader);
-  } else {
-    if (!b.videoUrl) {
-      DOM.liveVideo.src = "https://assets.mixkit.co/videos/preview/mixkit-woman-looking-at-her-phone-in-the-dark-40019-large.mp4";
-      showToast("Canal offline. Carregando transmissão modelo 📡");
-    } else {
-      DOM.liveVideo.src = b.videoUrl;
-    }
-
-    // Simular conexão de streaming com fail-safe
-    let hasLoaded = false;
-    const hideLoader = () => {
-      if (hasLoaded) return;
-      hasLoaded = true;
-      loader.style.opacity = "0";
-      setTimeout(() => { loader.style.display = "none"; }, 500);
-      DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
-    };
-
-    DOM.liveVideo.oncanplay = hideLoader;
-    DOM.liveVideo.onloadedmetadata = hideLoader;
-    DOM.liveVideo.onplay = hideLoader;
-
-    // Fail-safe de 800ms
-    setTimeout(hideLoader, 800);
-  }
+  await connectToRealLiveVideo(hostUserId, loader);
 
   // Mensagem de entrada e regras (aviso estático local, não é bot nem persistido)
   addSystemComment("Regras do chat: Seja gentil e siga as diretrizes.");
@@ -977,24 +673,33 @@ function renderCoins() {
 // 12. TELA DE MENSAGENS E DIRECT MESSAGES (INBOX)
 function renderInboxList() {
   DOM.inboxList.innerHTML = "";
-  
+
+  if (STATE.dmsList.length === 0) {
+    DOM.inboxList.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">💬</div>
+        <h3>Nenhuma conversa ainda</h3>
+        <p>Busque um perfil real e mande uma mensagem pra começar.</p>
+        <button class="btn-follow-primary" onclick="openSearchOverlay()">Buscar Perfis</button>
+      </div>
+    `;
+    DOM.navChatBadge.style.display = "none";
+    return;
+  }
+
   let unreadCount = 0;
-  
+
   STATE.dmsList.forEach(chat => {
     if (chat.unread) unreadCount++;
-    
+
     const item = document.createElement("div");
-    // Se o streamer correspondente for moranguinho ou zcitando, destaca com borda de live
-    const isStreaming = ["moranguinho", "zcitando"].includes(chat.username);
     item.className = chat.unread ? "inbox-item unread" : "inbox-item";
-    if (isStreaming) item.classList.add("live");
-    
+
     item.onclick = () => openPrivateChat(chat.name, chat.avatar, chat.lastMessage, chat.username);
-    
+
     item.innerHTML = `
       <div class="inbox-avatar">
         <img src="${chat.avatar}" alt="${chat.name}">
-        ${isStreaming ? '<span class="live-badge-small">LIVE</span>' : ''}
       </div>
       <div class="inbox-details">
         <span class="inbox-name">${chat.name}</span>
@@ -1005,10 +710,10 @@ function renderInboxList() {
         ${chat.unread ? '<div class="unread-dot"></div>' : ''}
       </div>
     `;
-    
+
     DOM.inboxList.appendChild(item);
   });
-  
+
   // Atualizar badge do chat na bottom nav
   if (unreadCount > 0) {
     DOM.navChatBadge.style.display = "flex";
@@ -1020,18 +725,22 @@ function renderInboxList() {
 
 function openPrivateChat(name, avatar, note, username) {
   STATE.activeChatPartner = username;
-  
+
   // Atualizar UI
   DOM.chatPartnerAvatar.src = avatar;
   DOM.chatPartnerName.textContent = name;
-  
-  // Marcar como lido
-  const localChat = STATE.dmsList.find(x => x.username === username);
-  if (localChat) {
+
+  // Primeira conversa com essa pessoa ainda não existe na lista — cria uma
+  // entrada vazia agora, em vez de exigir dados fictícios pré-carregados.
+  let localChat = STATE.dmsList.find(x => x.username === username);
+  if (!localChat) {
+    localChat = { username, name, avatar, lastMessage: note || "", time: "", unread: false, history: [] };
+    STATE.dmsList.unshift(localChat);
+  } else {
     localChat.unread = false;
-    renderInboxList();
   }
-  
+  renderInboxList();
+
   renderPrivateChatHistory(username);
   navigateTo("private-chat");
 }
@@ -1658,43 +1367,6 @@ async function addLightboxComment() {
   }
 }
 
-function scrollToSection(sectionName) {
-  // Atualizar classe ativa das cápsulas
-  const capsules = document.querySelectorAll(".transmission-types-card .type-capsule");
-  capsules.forEach(cap => {
-    cap.classList.remove("active");
-    const h4 = cap.querySelector("h4");
-    if (h4 && h4.textContent.toLowerCase().includes(sectionName === "popular" ? "populares" : sectionName === "novata" ? "novatas" : "próximas")) {
-      cap.classList.add("active");
-    }
-  });
-
-  // Mostrar SOMANTE a seção selecionada, ocultando as outras
-  const sections = document.querySelectorAll(".discover-section");
-  if (sections.length >= 3) {
-    sections.forEach(sec => {
-      sec.style.display = "none";
-    });
-
-    if (sectionName === "popular") {
-      sections[0].style.display = "block";
-    } else if (sectionName === "novata") {
-      sections[1].style.display = "block";
-    } else if (sectionName === "proxima") {
-      sections[2].style.display = "block";
-    }
-  }
-
-  // Rolar suavemente para o topo do scroll Discover
-  const scrollArea = document.querySelector(".discover-scroll-area");
-  if (scrollArea) {
-    scrollArea.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-  }
-}
-
 // ==========================================================================
 // 23. EDICÃO DE PERFIL E EXCLUSÃO DE CONTA (SETTINGS)
 // ==========================================================================
@@ -1782,237 +1454,77 @@ function closeSearchOverlay() {
   document.getElementById("modal-search-overlay").style.display = "none";
 }
 
+let searchDebounceTimer = null;
 function performProfileSearch() {
-  const query = document.getElementById("search-profile-input").value.trim().toLowerCase();
+  const query = document.getElementById("search-profile-input").value.trim();
   const container = document.getElementById("search-results-container");
-
   if (!container) return;
-  container.innerHTML = "";
 
-  // Filtrar streamers pelo nome ou username
-  const matches = MOCK_BROADCASTERS.filter(b => {
-    return b.name.toLowerCase().includes(query) || b.username.toLowerCase().includes(query);
-  });
+  clearTimeout(searchDebounceTimer);
 
-  if (matches.length === 0) {
+  if (!query) {
     container.innerHTML = `
       <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
-        Nenhum perfil encontrado para "${query}".
+        Digite um nome ou @usuário para buscar pessoas reais no VibeLive.
       </div>
     `;
     return;
   }
 
-  matches.forEach(b => {
-    const item = document.createElement("div");
-    item.className = "inbox-item";
-    item.style.padding = "10px 0";
-    item.style.borderBottom = "1px solid var(--glass-border)";
-    
-    item.onclick = () => {
-      closeSearchOverlay();
-      if (b.isPk) {
-        navigateTo("pk-simulator");
-      } else {
-        enterLiveRoom(b.id);
-      }
-    };
+  // Busca real na tabela profiles (com um pequeno atraso pra não bater no
+  // banco a cada tecla digitada).
+  searchDebounceTimer = setTimeout(async () => {
+    let matches;
+    try {
+      matches = await DB.searchProfiles(query);
+    } catch (err) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
+          Não foi possível buscar agora. Tente de novo.
+        </div>
+      `;
+      return;
+    }
 
-    item.innerHTML = `
-      <div class="inbox-avatar" style="width: 44px; height: 44px;">
-        <img src="${b.avatar}" alt="${b.name}" style="border-radius: 50%;">
-      </div>
-      <div class="inbox-details" style="margin-left: 12px;">
-        <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${b.name}</span>
-        <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">${b.note || '@' + b.username}</span>
-      </div>
-      <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
-        <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
-          ${b.isPk ? 'Ver PK' : 'Assistir'}
-        </button>
-      </div>
-    `;
-    container.appendChild(item);
-  });
-}
+    container.innerHTML = "";
+    if (matches.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
+          Nenhum perfil encontrado para "${query}".
+        </div>
+      `;
+      return;
+    }
 
-// ==========================================================================
-// 20. SIMULADOR DE BATALHA PK (FUNÇÕES)
-// ==========================================================================
+    matches.forEach(p => {
+      const name = p.display_name || p.username;
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.style.padding = "10px 0";
+      item.style.borderBottom = "1px solid var(--glass-border)";
 
-const PK_BATTLE_KEY = "moranguinho_vs_luana";
+      item.onclick = () => {
+        closeSearchOverlay();
+        openPrivateChat(name, p.avatar_url, "Oii!", p.username);
+      };
 
-async function initiatePkSimulator() {
-  // Configurar elementos de vídeo
-  const videoA = document.getElementById("pk-video-a");
-  const videoB = document.getElementById("pk-video-b");
-  const chatMessages = document.getElementById("pk-chat-messages");
-
-  if (!videoA || !videoB) return;
-
-  // Carregar vídeos reais em loop (usando perfis de Moranguinho e Luana Becker)
-  videoA.src = "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-lighting-12347-large.mp4";
-  videoB.src = "https://assets.mixkit.co/videos/preview/mixkit-young-woman-with-neon-makeup-in-dark-40011-large.mp4";
-
-  videoA.play().catch(e => console.log(e));
-  videoB.play().catch(e => console.log(e));
-
-  // Limpar chat anterior do PK
-  chatMessages.innerHTML = "";
-  addPkSystemMessage("Batalha PK iniciada! Apoie sua streamer enviando presentes! ⚔️");
-  document.getElementById("pk-win-a").style.display = "none";
-  document.getElementById("pk-win-b").style.display = "none";
-
-  // Placar real: soma de todo apoio já recebido por todo mundo, compartilhado
-  // de verdade entre quem estiver assistindo (não é mais um número inicial falso).
-  try {
-    const scores = await DB.getPkScores(PK_BATTLE_KEY);
-    STATE.pkScoreA = scores.A;
-    STATE.pkScoreB = scores.B;
-    updatePkBars();
-    checkPkWinner();
-
-    const events = await DB.getPkRecentEvents(PK_BATTLE_KEY);
-    events.forEach(renderPkEvent);
-  } catch (err) {
-    console.log("Não foi possível carregar o placar do PK", err);
-  }
-
-  if (STATE.pkChannel) {
-    sb.removeChannel(STATE.pkChannel);
-  }
-  STATE.pkChannel = DB.subscribeToPkBattle(PK_BATTLE_KEY, handleIncomingPkEvent);
-}
-
-function renderPkEvent(row) {
-  const chatMessages = document.getElementById("pk-chat-messages");
-  const msgEl = document.createElement("div");
-  msgEl.className = "chat-msg gift-ann";
-  msgEl.innerHTML = `<span class="msg-author">${row.username}</span> <span class="msg-content">enviou um(a) ${row.gift_label} (+${row.points} pts)</span>`;
-  chatMessages.appendChild(msgEl);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function handleIncomingPkEvent(row) {
-  if (row.side === "A") {
-    STATE.pkScoreA += row.points;
-  } else {
-    STATE.pkScoreB += row.points;
-  }
-  updatePkBars();
-  renderPkEvent(row);
-  checkPkWinner();
-}
-
-function closePkSimulator() {
-  const videoA = document.getElementById("pk-video-a");
-  const videoB = document.getElementById("pk-video-b");
-
-  if (videoA) videoA.pause();
-  if (videoB) videoB.pause();
-
-  if (STATE.pkChannel) {
-    sb.removeChannel(STATE.pkChannel);
-    STATE.pkChannel = null;
-  }
-}
-
-function updatePkBars() {
-  const scoreA = STATE.pkScoreA;
-  const scoreB = STATE.pkScoreB;
-  const total = scoreA + scoreB;
-
-  const pctA = Math.round((scoreA / total) * 100);
-  const pctB = 100 - pctA;
-
-  document.getElementById("pk-score-a").textContent = scoreA.toLocaleString('pt-BR');
-  document.getElementById("pk-score-b").textContent = scoreB.toLocaleString('pt-BR');
-  
-  document.getElementById("pk-bar-red").style.width = `${pctA}%`;
-  document.getElementById("pk-bar-blue").style.width = `${pctB}%`;
-}
-
-async function supportStreamer(side, event) {
-  if (!requireAuth()) return;
-  const giftName = side === "A" ? "Rosa 🌹" : "Diamante 💎";
-  const streamerName = side === "A" ? "MORANGUINHO 🍓" : "Luana Becker 👑";
-
-  let profile;
-  try {
-    profile = await DB.supportPk(side);
-  } catch (err) {
-    showToast(err.message || "Saldo de moedas insuficiente. Recarregue no Perfil!");
-    return;
-  }
-  await applyProfileToUI(profile);
-
-  // Mostrar aviso de presente na tela
-  showToast(`Você enviou um(a) ${giftName} para apoiar ${streamerName}!`);
-
-  // Placar e mensagem no chat do PK chegam via Realtime (compartilhados de
-  // verdade com todo mundo assistindo, não só localmente).
-
-  // Emitir corações flutuantes baseados nas coordenadas do clique
-  for (let i = 0; i < 3; i++) {
-    setTimeout(() => {
-      emitPkHeartFromClick(side, event);
-    }, i * 200);
-  }
-}
-
-function checkPkWinner() {
-  // Declara vitória se atingir diferença significativa
-  if (STATE.pkScoreA > 15000 && STATE.pkScoreA - STATE.pkScoreB > 4000) {
-    document.getElementById("pk-win-a").style.display = "block";
-    document.getElementById("pk-win-b").style.display = "none";
-  } else if (STATE.pkScoreB > 15000 && STATE.pkScoreB - STATE.pkScoreA > 4000) {
-    document.getElementById("pk-win-b").style.display = "block";
-    document.getElementById("pk-win-a").style.display = "none";
-  }
-}
-
-function addPkSystemMessage(text) {
-  const chatMessages = document.getElementById("pk-chat-messages");
-  const msgEl = document.createElement("div");
-  msgEl.className = "chat-msg system";
-  msgEl.innerHTML = `<span class="msg-content">${text}</span>`;
-  chatMessages.appendChild(msgEl);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Coração flutuante a partir de cliques em botões
-function emitPkHeartFromClick(side, event) {
-  const container = document.getElementById("pk-hearts-container");
-  if (!container) return;
-
-  const heart = document.createElement("div");
-  heart.className = "floating-heart";
-
-  // Determinar cor do coração baseado na streamer apoiada
-  const color = side === "A" ? "#ff4d6d" : "#4e9eff";
-  
-  heart.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="${color}">
-      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-    </svg>
-  `;
-
-  // Ponto de início: lado esquerdo ou direito do container correspondente
-  const randomX = side === "A" 
-    ? Math.floor(Math.random() * 50) + 40   // Esquerda (Moranguinho)
-    : Math.floor(Math.random() * 50) + 240; // Direita (Luana Becker)
-    
-  const drift = (Math.random() * 60 - 30);
-  
-  heart.style.left = `${randomX}px`;
-  heart.style.top = `400px`; // Sobe a partir da metade da tela
-  heart.style.setProperty("--drift", `${drift}px`);
-
-  container.appendChild(heart);
-
-  setTimeout(() => {
-    heart.remove();
-  }, 2200);
+      item.innerHTML = `
+        <div class="inbox-avatar" style="width: 44px; height: 44px;">
+          <img src="${p.avatar_url}" alt="${name}" style="border-radius: 50%;">
+        </div>
+        <div class="inbox-details" style="margin-left: 12px;">
+          <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${name}</span>
+          <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${p.username}</span>
+        </div>
+        <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
+          <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
+            Mensagem
+          </button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }, 300);
 }
 
 // ==========================================================================
@@ -2224,81 +1736,8 @@ async function sendQuickRose(event) {
 }
 
 // ==========================================================================
-// 27. VISITANTES DO PERFIL & SELEÇÃO DE ATMOSFERA (LIVES)
+// 27. SELEÇÃO DE ATMOSFERA (LIVES)
 // ==========================================================================
-
-STATE.profileVisitors = [
-  { name: "Larissa Rocha", username: "larissa.rocha", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150", time: "Há 2 horas", note: "Visitou através de Populares" },
-  { name: "Gabi Silva", username: "gabi.silva", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150", time: "Há 4 horas", note: "Visitou através de DMs" },
-  { name: "Luana Becker", username: "luana.becker", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150", time: "Há 12 horas", note: "Assistiu a sua última live" },
-  { name: "Aline Santos", username: "aline.santos", avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150", time: "Há 18 horas", note: "Visitou através da Busca" },
-  { name: "Zcitando", username: "zcitando", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", time: "Há 23 horas", note: "Curtiu sua publicação" }
-];
-
-function openProfileVisitorsModal() {
-  const modal = document.getElementById("modal-profile-visitors");
-  const container = document.getElementById("visitors-list-container");
-  if (!modal || !container) return;
-
-  container.innerHTML = "";
-  
-  STATE.profileVisitors.forEach((v, index) => {
-    const item = document.createElement("div");
-    item.className = "inbox-item";
-    item.style.background = "rgba(255, 255, 255, 0.02)";
-    item.style.marginBottom = "8px";
-    item.style.cursor = "pointer";
-    item.innerHTML = `
-      <div class="inbox-avatar" onclick="openVisitorProfile(${index})">
-        <img src="${v.avatar}" alt="${v.name}">
-      </div>
-      <div class="inbox-details" style="margin-left: 12px;" onclick="openVisitorProfile(${index})">
-        <span class="inbox-name" style="font-size: 0.78rem; font-weight: 700; color: #fff; display: block;">${v.name}</span>
-        <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">${v.note}</span>
-      </div>
-      <div class="inbox-right" style="align-items: flex-end;">
-        <span class="inbox-time" style="font-size: 0.62rem; color: rgba(255,255,255,0.4);">${v.time}</span>
-        <button class="btn-follow-primary" style="height: 20px; font-size: 0.58rem; margin-top: 4px; padding: 0 6px;" onclick="showToast('Seguindo ${v.name}!')">Seguir</button>
-      </div>
-    `;
-    container.appendChild(item);
-  });
-
-  modal.style.display = "flex";
-}
-
-function closeProfileVisitorsModal() {
-  const modal = document.getElementById("modal-profile-visitors");
-  if (modal) modal.style.display = "none";
-}
-
-function openVisitorProfile(index) {
-  const v = STATE.profileVisitors[index];
-  if (!v) return;
-
-  // Fechar o modal de lista de visitantes
-  closeProfileVisitorsModal();
-
-  // Preencher os dados do perfil do visitante
-  document.getElementById("visitor-p-avatar").src = v.avatar;
-  document.getElementById("visitor-p-name").textContent = v.name;
-  document.getElementById("visitor-p-handle").textContent = `@${v.username}`;
-  document.getElementById("visitor-p-bio").textContent = `${v.name} é membro ativo da comunidade VibeLive e adora apoiar criadores. 😊✨`;
-  
-  // Ação de enviar mensagem direto pelo perfil do visitante
-  const msgBtn = document.getElementById("btn-visitor-message");
-  msgBtn.onclick = () => {
-    closeVisitorProfile();
-    openPrivateChat(v.name, v.avatar, "Oii!", v.username);
-  };
-
-  // Exibir o modal de perfil de visitante
-  document.getElementById("modal-visitor-profile").style.display = "flex";
-}
-
-function closeVisitorProfile() {
-  document.getElementById("modal-visitor-profile").style.display = "none";
-}
 
 function openAtmosferaSelector() {
   let filters = ["none", "vintage", "neon", "bw"];

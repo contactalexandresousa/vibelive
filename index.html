@@ -164,80 +164,20 @@
               </div>
             </div>
 
-            <!-- Categorias Deslizantes (Populares, Novatas, Próximas) -->
-            <div class="transmission-types-card">
-              <span class="card-section-title">Navegar por Categoria</span>
-              <div class="types-row">
-                <div class="type-capsule active" onclick="scrollToSection('popular')">
-                  <span class="type-icon">🔥</span>
-                  <div class="type-text">
-                    <h4>Populares</h4>
-                    <p>Mais assistidas</p>
-                  </div>
-                </div>
-                <div class="type-capsule" onclick="scrollToSection('novata')">
-                  <span class="type-icon">✨</span>
-                  <div class="type-text">
-                    <h4>Novatas</h4>
-                    <p>Recém chegadas</p>
-                  </div>
-                </div>
-                <div class="type-capsule" onclick="scrollToSection('proxima')">
-                  <span class="type-icon">📍</span>
-                  <div class="type-text">
-                    <h4>Próximas</h4>
-                    <p>Perto de você</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Seções de Transmissões (Populares, Novatas e Próximas) -->
+            <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
-
-              <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) — só aparece quando existe pelo menos uma.
-                   Propositalmente FORA da classe "discover-section": scrollToSection() indexa essas seções
-                   por posição (Populares/Novatas/Próximas) e uma 4ª seção quebraria essa lógica. -->
-              <section class="real-live-banner-section" id="real-live-section" style="display: none; margin-bottom: 26px;">
+              <section class="discover-section">
                 <div class="section-header">
                   <h2>🔴 Ao Vivo Agora</h2>
                 </div>
                 <div class="lives-grid" id="real-live-grid"></div>
-              </section>
-
-              <!-- Seção Populares -->
-              <section class="discover-section">
-                <div class="section-header">
-                  <h2>🔥 Populares</h2>
-                  <span class="view-all" onclick="showToast('Ver todas populares')">Ver tudo</span>
-                </div>
-                <div class="lives-grid" id="popular-lives-grid">
-                  <!-- Inserido via JS -->
+                <div class="discover-empty-state" id="discover-empty-state" style="display: flex;">
+                  <div class="discover-empty-icon">📡</div>
+                  <h3>Nenhuma transmissão agora</h3>
+                  <p>Quando alguém começar uma live de verdade, ela aparece aqui.</p>
+                  <button class="btn-follow-primary" onclick="navigateTo('go-live')">Ir Ao Vivo</button>
                 </div>
               </section>
-
-              <!-- Seção Novatas -->
-              <section class="discover-section">
-                <div class="section-header">
-                  <h2>✨ Novatas</h2>
-                  <span class="view-all" onclick="showToast('Ver todas novatas')">Ver tudo</span>
-                </div>
-                <div class="lives-grid" id="new-lives-list">
-                  <!-- Inserido via JS -->
-                </div>
-              </section>
-
-              <!-- Seção Próximas -->
-              <section class="discover-section">
-                <div class="section-header">
-                  <h2>📍 Próximas de Você</h2>
-                  <span class="view-all" onclick="showToast('Ver todas próximas')">Ver tudo</span>
-                </div>
-                <div class="lives-grid" id="nearby-lives-list">
-                  <!-- Inserido via JS -->
-                </div>
-              </section>
-
             </main>
           </section>
 
@@ -561,22 +501,6 @@
                   </div>
                 </div>
 
-                <!-- Visualizações do Perfil (Últimas 24 horas) -->
-                <div class="profile-visitors-preview-card" onclick="openProfileVisitorsModal()">
-                  <div class="visitors-left-info">
-                    <span class="visitors-icon">👁️</span>
-                    <div class="visitors-text-stack">
-                      <span class="visitors-title">Visualizações de Perfil</span>
-                      <span class="visitors-subtitle">84 pessoas visitaram seu canal hoje</span>
-                    </div>
-                  </div>
-                  <div class="visitors-avatars-pile">
-                    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50" alt="Visitor">
-                    <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=50" alt="Visitor">
-                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50" alt="Visitor">
-                  </div>
-                </div>
-
                 <!-- Botões de Ação do Perfil -->
                 <div class="profile-actions-row">
                   <button class="profile-action-btn primary" onclick="openNewPostModal()">
@@ -848,67 +772,6 @@
             </div>
           </section>
 
-          <!-- 8. TELA DE SIMULADOR DE BATALHA PK -->
-          <section id="screen-pk-simulator" class="screen">
-            <!-- Header do PK -->
-            <header class="pk-header">
-              <div class="pk-header-left">
-                <span class="pk-live-badge">Batalha PK</span>
-                <span class="pk-viewers">👁️ 840</span>
-              </div>
-              <h3 class="pk-title">Simulador de Batalha</h3>
-              <button class="btn-close-pk" onclick="closePkSimulator(); navigateTo('discover');">
-                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-            </header>
-
-            <!-- Barra de Pontos PK (Barra de Progresso Vermelho vs Azul) -->
-            <div class="pk-progress-container">
-              <div class="pk-score red" id="pk-score-a">12.500</div>
-              <div class="pk-bar-wrapper">
-                <div class="pk-bar-red" id="pk-bar-red" style="width: 55%"></div>
-                <div class="pk-bar-blue" id="pk-bar-blue" style="width: 45%"></div>
-              </div>
-              <div class="pk-score blue" id="pk-score-b">10.200</div>
-            </div>
-
-            <!-- Vídeos Divididos Side-by-Side -->
-            <div class="pk-video-split-container">
-              <div class="pk-video-panel red">
-                <video id="pk-video-a" loop playsinline muted poster="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500"></video>
-                <div class="pk-streamer-label">MORANGUINHO 🍓</div>
-                <div class="pk-win-badge-a" id="pk-win-a" style="display: none;">VENCEDOR 👑</div>
-              </div>
-              <div class="pk-video-panel blue">
-                <video id="pk-video-b" loop playsinline muted poster="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500"></video>
-                <div class="pk-streamer-label">Luana Becker 👑</div>
-                <div class="pk-win-badge-b" id="pk-win-b" style="display: none;">VENCEDOR 👑</div>
-              </div>
-            </div>
-
-            <!-- Chat Flutuante e Barra de Ações -->
-            <div class="pk-overlay-bottom">
-              <!-- Chat do PK -->
-              <div class="live-chat-area pk-chat" id="pk-chat-messages">
-                <!-- Comentários gerados via JS -->
-              </div>
-
-              <!-- Controles de Suporte de Audiência -->
-              <div class="pk-controls-row">
-                <button class="pk-support-btn red" onclick="supportStreamer('A', event)">
-                  <span>🌹 Apoiar Streamer A</span>
-                  <strong>+100 pts</strong>
-                </button>
-                <button class="pk-support-btn blue" onclick="supportStreamer('B', event)">
-                  <span>💎 Apoiar Streamer B</span>
-                  <strong>+250 pts</strong>
-                </button>
-              </div>
-            </div>
-
-            <!-- Área de corações flutuantes virtual -->
-            <div class="hearts-container" id="pk-hearts-container"></div>
-          </section>
 
         </div> <!-- Fim de app-container -->
 
@@ -1141,95 +1004,6 @@
           </div>
         </div>
 
-        <!-- Modal de Visitantes do Perfil (Perfil) -->
-        <div class="new-post-modal" id="modal-profile-visitors" style="display: none;">
-          <div class="new-post-overlay" onclick="closeProfileVisitorsModal()"></div>
-          <div class="new-post-content" style="height: 80%; align-items: stretch;">
-            <header class="new-post-header" style="margin-bottom: 12px;">
-              <h3>Visitantes Recentes</h3>
-              <button class="btn-close-new-post" onclick="closeProfileVisitorsModal()">×</button>
-            </header>
-            <p style="font-size: 0.72rem; color: var(--light-gray); margin-bottom: 16px;">
-              Estas pessoas visitaram o seu perfil nas últimas 24 horas. Somente você pode ver isso.
-            </p>
-            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
-              <div class="inbox-list" id="visitors-list-container">
-                <!-- Preenchido via JS com visitantes e botões de atalho -->
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Modal de Perfil de Visitante Simulado (Poder Entrar no Perfil) -->
-        <div class="new-post-modal" id="modal-visitor-profile" style="display: none;">
-          <div class="new-post-overlay" onclick="closeVisitorProfile()"></div>
-          <div class="new-post-content" style="height: 85%; align-items: stretch;">
-            <header class="new-post-header" style="margin-bottom: 12px;">
-              <h3>Perfil do Visitante</h3>
-              <button class="btn-close-new-post" onclick="closeVisitorProfile()">×</button>
-            </header>
-            
-            <div class="profile-scroll-area" style="overflow-y: auto; flex: 1; padding: 10px 0;">
-              <div class="profile-card-premium" style="padding: 10px; border-bottom: none; background: none;">
-                <div class="profile-header-top">
-                  <div class="profile-avatar-container">
-                    <img id="visitor-p-avatar" class="profile-main-avatar" src="" alt="Avatar">
-                    <div class="premium-ring-glow"></div>
-                  </div>
-                  <div class="profile-quick-stats">
-                    <div class="quick-stat-box">
-                      <span class="stat-number">482</span>
-                      <span class="stat-label">Seguindo</span>
-                    </div>
-                    <div class="quick-stat-box">
-                      <span class="stat-number">12,5k</span>
-                      <span class="stat-label">Seguidores</span>
-                    </div>
-                    <div class="quick-stat-box">
-                      <span class="stat-number">84k</span>
-                      <span class="stat-label">Curtidas</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="profile-bio-info" style="margin-top: 14px; margin-bottom: 14px;">
-                  <h3 id="visitor-p-name">Nome</h3>
-                  <p id="visitor-p-handle" class="profile-handle">@username</p>
-                  <p id="visitor-p-bio" class="profile-bio-text">Membro apaixonado por música e lives ao vivo no VibeLive! 🎤🌟</p>
-                </div>
-
-                <!-- Botões de ação com o visitante -->
-                <div class="profile-actions-row" style="margin-bottom: 18px;">
-                  <button class="profile-action-btn primary" id="btn-visitor-message">
-                    <span>Enviar Mensagem</span>
-                  </button>
-                  <button class="profile-action-btn secondary" onclick="showToast('Seguindo com sucesso!')">
-                    <span>Seguir</span>
-                  </button>
-                </div>
-
-                <!-- Grid de fotos mockadas do visitante -->
-                <div class="profile-tabs">
-                  <button class="profile-tab-header-btn active" style="width: 100%;">Galeria de Mídias</button>
-                </div>
-                
-                <div class="profile-posts-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding-top: 8px;">
-                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
-                    <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
-                  </div>
-                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
-                    <img src="https://images.unsplash.com/photo-1516280440614-37939bbacd6a?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
-                  </div>
-                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
-                    <img src="https://images.unsplash.com/photo-1506157786151-b8491531f063?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-          </div>
-        </div>
 
   </div> <!-- Fim de phone-screen -->
 
