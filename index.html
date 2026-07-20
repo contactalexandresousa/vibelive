@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VibeLive - App de Vídeos ao Vivo</title>
+  <!-- Google Fonts para tipografia moderna -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS customizado -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Mockup do Smartphone (Apenas para Desktop, em Mobile fica invisível/tela cheia) -->
+  <div class="phone-wrapper">
+    <div class="phone-shell">
+      <div class="phone-notch"></div>
+      <div class="phone-buttons left">
+        <div class="btn-volume-up"></div>
+        <div class="btn-volume-down"></div>
+      </div>
+      <div class="phone-buttons right">
+        <div class="btn-power"></div>
+      </div>
+      
+      <!-- Tela Interna do Celular -->
+      <div class="phone-screen">
+        
+        <!-- Partículas de Fundo Animadas -->
+        <div class="particles-bg-container">
+          <div class="particle-dot"></div>
+          <div class="particle-dot"></div>
+          <div class="particle-dot"></div>
+          <div class="particle-dot"></div>
+          <div class="particle-dot"></div>
+        </div>
+        
+        <!-- Status Bar do Celular -->
+        <div class="status-bar">
+          <div class="status-time" id="status-clock">09:00</div>
+          <div class="status-notch-spacer"></div>
+          <div class="status-icons">
+            <svg class="icon-status" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.07 19.58 10.48 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
+            <svg class="icon-status" viewBox="0 0 24 24"><path fill="currentColor" d="M17 5H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3zm1 11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8z"/></svg>
+            <div class="battery-container">
+              <span class="battery-percent">80</span>
+              <div class="battery-icon">
+                <div class="battery-level" style="width: 80%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CONTAINER DE TELAS (Single Page App) -->
+        <div class="app-container">
+
+          <!-- 0. TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO) -->
+          <section id="screen-auth" class="screen">
+            <div class="auth-container">
+              <div class="auth-logo">
+                <div class="logo-circle small">
+                  <svg class="logo-svg" viewBox="0 0 24 24">
+                    <path fill="url(#logo-grad)" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
+                  </svg>
+                </div>
+                <h2>Vibe<span>Live</span></h2>
+              </div>
+
+              <div class="auth-card">
+                <div class="auth-tabs">
+                  <button class="auth-tab-btn active" id="btn-tab-login" onclick="toggleAuthTab('login')">Entrar</button>
+                  <button class="auth-tab-btn" id="btn-tab-register" onclick="toggleAuthTab('register')">Criar Conta</button>
+                </div>
+
+                <div class="auth-form-body">
+                  <div class="auth-form-group">
+                    <input type="text" id="auth-username" placeholder="E-mail ou Celular">
+                  </div>
+                  <div class="auth-form-group">
+                    <input type="password" id="auth-password" placeholder="Senha">
+                  </div>
+                  <button class="btn-auth-submit" id="btn-auth-submit" onclick="handleAuthSubmit()">Entrar</button>
+                </div>
+              </div>
+
+              <div class="auth-social-divider">
+                <span>ou conecte com</span>
+              </div>
+
+              <div class="auth-social-row">
+                <button class="social-btn whatsapp" onclick="openSocialAuthModal('whatsapp')">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.012 2c-5.506 0-9.97 4.463-9.97 9.969 0 1.937.554 3.743 1.517 5.275L2 22l4.912-1.286c1.468.802 3.149 1.258 4.937 1.258 5.506 0 9.969-4.462 9.969-9.968 0-5.506-4.463-9.969-9.969-9.969zm4.838 13.916c-.214.607-1.031 1.096-1.524 1.16-.363.047-.83.08-2.42-.572-2.032-.835-3.328-2.883-3.429-3.017-.1-.134-.8-1.055-.8-2.017s.5-1.428.679-1.61c.179-.18.39-.228.52-.228.13 0 .26 0 .373.007.117.007.274-.047.43.328.162.39.554 1.348.602 1.448.049.1.08.214.015.342-.065.13-.098.214-.196.328-.098.114-.205.255-.293.35-.098.1-.202.21-.087.41.114.195.507.834.996 1.272.63.565 1.16.74 1.323.824.162.085.257.07.35-.04.095-.11.41-.482.52-.647.11-.164.22-.138.373-.08.153.058.97.458 1.137.542.167.085.277.127.318.197.042.07.042.408-.172 1.015z"/></svg>
+                  <span>WhatsApp</span>
+                </button>
+                 <button class="social-btn instagram" onclick="openSocialAuthModal('instagram')">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.096 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+                  <span>Instagram</span>
+                </button>
+              </div>
+
+              <!-- 3 Perfis de Teste para Escolher -->
+              <div class="auth-presets-section" style="margin-top: 24px; text-align: center; width: 100%;">
+                <span style="font-size: 0.65rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 12px;">Selecione um Perfil de Teste</span>
+                <div class="presets-row" style="display: flex; justify-content: space-around; gap: 8px;">
+                  <button class="preset-profile-btn" onclick="selectPresetProfile(0)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Alexandre">
+                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Alexandre S.</span>
+                    <span style="font-size: 0.5rem; color: var(--primary);">@zcitando</span>
+                  </button>
+                  <button class="preset-profile-btn" onclick="selectPresetProfile(1)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Luana">
+                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Luana Becker</span>
+                    <span style="font-size: 0.5rem; color: var(--primary);">@luana.becker</span>
+                  </button>
+                  <button class="preset-profile-btn" onclick="selectPresetProfile(2)" style="flex: 1; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;">
+                    <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;" alt="Gabi">
+                    <span style="font-size: 0.58rem; color: #fff; font-weight: 700; white-space: nowrap; max-width: 55px; overflow: hidden; text-overflow: ellipsis;">Gabi Silva</span>
+                    <span style="font-size: 0.5rem; color: var(--primary);">@gabi.silva</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal Social Auth Simulado -->
+            <div class="social-auth-modal" id="social-auth-modal">
+              <div class="social-auth-overlay" onclick="closeSocialAuthModal()"></div>
+              <div class="social-auth-content" id="social-auth-content">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+          </section>
+
+          <!-- 1. TELA SPLASH -->
+          <section id="screen-splash" class="screen active">
+            <div class="splash-logo">
+              <div class="logo-circle">
+                <svg class="logo-svg" viewBox="0 0 24 24">
+                  <path fill="url(#logo-grad)" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
+                  <defs>
+                    <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#ff4d6d" />
+                      <stop offset="100%" stop-color="#f0b23d" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <h1 class="logo-text">Vibe<span>Live</span></h1>
+              <p class="logo-tagline">Conexões instantâneas ao vivo</p>
+            </div>
+            <div class="splash-loader">
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+            </div>
+          </section>
+
+          <!-- 2. TELA DISCOVER (HOME) -->
+          <section id="screen-discover" class="screen">
+            <!-- Header -->
+            <header class="app-header">
+              <div class="header-left">
+                <div class="header-avatar" onclick="navigateTo('profile')">
+                  <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" alt="Meu Perfil">
+                  <div class="online-indicator"></div>
+                </div>
+                <div class="wallet-badge" onclick="navigateTo('profile')">
+                  <svg class="icon-coin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+                  <span id="user-coins">99</span>
+                  <div class="wallet-add">+</div>
+                </div>
+              </div>
+              
+              <h1 class="header-title">VibeLive</h1>
+              
+              <div class="header-right">
+                <button class="header-btn" onclick="openSearchOverlay()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                </button>
+                <button class="header-btn" onclick="showNotificationPanel()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 4.36 6 6.92 6 10v5l-2 2v1h16v-1l-2-2z"/></svg>
+                  <span class="notification-badge"></span>
+                </button>
+              </div>
+            </header>
+
+            <!-- Stories / Momentos (Horizontal Bar) -->
+            <div class="stories-scroll-bar">
+              <div class="stories-container" id="stories-container">
+                <!-- Gerado dinamicamente via JS -->
+              </div>
+            </div>
+
+            <!-- Categorias Deslizantes (Populares, Novatas, Próximas) -->
+            <div class="transmission-types-card">
+              <span class="card-section-title">Navegar por Categoria</span>
+              <div class="types-row">
+                <div class="type-capsule active" onclick="scrollToSection('popular')">
+                  <span class="type-icon">🔥</span>
+                  <div class="type-text">
+                    <h4>Populares</h4>
+                    <p>Mais assistidas</p>
+                  </div>
+                </div>
+                <div class="type-capsule" onclick="scrollToSection('novata')">
+                  <span class="type-icon">✨</span>
+                  <div class="type-text">
+                    <h4>Novatas</h4>
+                    <p>Recém chegadas</p>
+                  </div>
+                </div>
+                <div class="type-capsule" onclick="scrollToSection('proxima')">
+                  <span class="type-icon">📍</span>
+                  <div class="type-text">
+                    <h4>Próximas</h4>
+                    <p>Perto de você</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Seções de Transmissões (Populares, Novatas e Próximas) -->
+            <main class="discover-scroll-area">
+              
+              <!-- Seção Populares -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>🔥 Populares</h2>
+                  <span class="view-all" onclick="showToast('Ver todas populares')">Ver tudo</span>
+                </div>
+                <div class="lives-grid" id="popular-lives-grid">
+                  <!-- Inserido via JS -->
+                </div>
+              </section>
+
+              <!-- Seção Novatas -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>✨ Novatas</h2>
+                  <span class="view-all" onclick="showToast('Ver todas novatas')">Ver tudo</span>
+                </div>
+                <div class="lives-grid" id="new-lives-list">
+                  <!-- Inserido via JS -->
+                </div>
+              </section>
+
+              <!-- Seção Próximas -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>📍 Próximas de Você</h2>
+                  <span class="view-all" onclick="showToast('Ver todas próximas')">Ver tudo</span>
+                </div>
+                <div class="lives-grid" id="nearby-lives-list">
+                  <!-- Inserido via JS -->
+                </div>
+              </section>
+
+            </main>
+          </section>
+
+          <!-- 3. TELA DE LIVE PLAYER (ASSISTINDO) -->
+          <section id="screen-live-room" class="screen">
+            <!-- Vídeo em loop simulando a live -->
+            <div class="live-video-wrapper">
+              <video id="live-player-video" loop playsinline muted></video>
+              <div class="video-loading-placeholder">
+                <div class="loader-spinner"></div>
+                <p>Conectando ao stream...</p>
+              </div>
+            </div>
+
+            <!-- Overlays da Live -->
+            <div class="live-overlay-container">
+              
+              <!-- 1. Cabeçalho Superior conforme a Foto (Streamer + Seguir + Visualizadores) -->
+              <div class="live-header-tiktok">
+                <div class="streamer-card-left">
+                  <img id="streamer-avatar" src="" alt="Streamer" class="streamer-avatar-img">
+                  <div class="streamer-text-details">
+                    <span id="streamer-name" class="streamer-name-tag">Carregando...</span>
+                    <span id="streamer-stats" class="streamer-promo-subtitle">Conteúdo promo</span>
+                  </div>
+                  <button id="btn-follow-streamer" class="btn-follow-primary" onclick="toggleFollowStreamer()">+ Seguir</button>
+                </div>
+
+                <div class="live-header-right-panel">
+                  <!-- Avatares de telespectadores secundários em miniatura -->
+                  <div class="header-viewers-list">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50" class="viewer-mini-avatar" alt="Viewer">
+                    <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=50" class="viewer-mini-avatar" alt="Viewer">
+                  </div>
+                  <span id="live-viewer-count" class="viewers-count-number">115</span>
+                  <button class="btn-header-chevron">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                  </button>
+                  <button class="btn-close-live-x" onclick="closeLiveRoom()">×</button>
+                </div>
+              </div>
+
+              <!-- 2. Linha de Pills / Badges (Abaixo do Header) -->
+              <div class="live-badges-pills-row">
+                <div class="live-pill-badge daily-ranking">
+                  <span class="pill-emoji">🔥</span>
+                  <span>Classificação diária</span>
+                </div>
+                <div class="live-pill-badge custom-goal">
+                  <span class="pill-emoji">🎯</span>
+                  <span>0/10</span>
+                </div>
+                <div class="live-pill-badge custom-room">
+                  <span>Estádio</span>
+                </div>
+              </div>
+
+              <!-- Meio: Caixa de aviso flutuante promocional -->
+              <div class="floating-promo-box" style="display: none;">
+                <span class="promo-badge">PROMOÇÃO LOUCA</span>
+                <span class="promo-timer">00:25:27</span>
+                <button class="promo-close" onclick="this.parentElement.remove()">×</button>
+              </div>
+
+              <!-- 3. Rodapé da Live: Comentários e Ações -->
+              <div class="live-footer">
+                
+                <!-- Área de Chat Flutuante -->
+                <div class="live-chat-area-tiktok" id="live-chat-messages">
+                  <!-- Comentários simulados e do Host formatados -->
+                </div>
+
+                <!-- Banner azul de aviso promocional acima da barra inferior -->
+                <div class="live-tooltip-banner">
+                  <span>Músicas da LIVE: deixe que um Presente cante o que você sente</span>
+                  <div class="tooltip-banner-pointer"></div>
+                </div>
+
+                <!-- Barra de Ações Inferior conforme a Foto -->
+                <div class="live-action-bar-tiktok">
+                  
+                  <!-- Caixa de digitação com ícone de mensagem dourado -->
+                  <div class="chat-input-wrapper-tiktok">
+                    <div class="gold-msg-icon">
+                      <svg viewBox="0 0 24 24"><path fill="#f0b23d" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+                    </div>
+                    <input type="text" id="live-chat-input" placeholder="Tipo..." onkeydown="handleChatInputKey(event)">
+                  </div>
+
+                  <!-- Botões de Ações rápidos do lado direito -->
+                  <div class="action-buttons-tiktok">
+                    <button class="btn-action-tk emoji" onclick="showToast('Emojis em breve! 😄')">
+                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                    </button>
+                    <button class="btn-action-tk connection" onclick="showToast('Conectando chamada 1v1...')">
+                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </button>
+                    <button class="btn-action-tk roulette" onclick="openRouletteModal()" style="font-size: 1.1rem;">
+                      🎡
+                    </button>
+                    <button class="btn-action-tk rose" onclick="sendQuickRose(event)">
+                      🌹
+                    </button>
+                    <button class="btn-action-tk gift" onclick="openGiftDrawer()">
+                      🎁
+                    </button>
+                    <button class="btn-action-tk share" onclick="showToast('Link de compartilhamento copiado!')">
+                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Área de Corações Flutuantes (Invisível/Virtual) -->
+            <div class="hearts-container" id="hearts-container"></div>
+            
+            <!-- Painel/Gaveta Inferior de Presentes (Gift Bottom Drawer) -->
+            <div class="gift-drawer" id="gift-drawer">
+              <div class="gift-drawer-overlay" onclick="closeGiftDrawer()"></div>
+              <div class="gift-drawer-content">
+                <div class="gift-drawer-header">
+                  <h3>Enviar Presente</h3>
+                  <div class="drawer-wallet">
+                    <svg class="icon-coin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+                    <span id="drawer-coins-count">99</span> Moedas
+                  </div>
+                </div>
+                <div class="gifts-grid">
+                  <div class="gift-item" onclick="selectGift(this, 'Rosa', 1, '🌹')">
+                    <div class="gift-icon">🌹</div>
+                    <span class="gift-name">Rosa</span>
+                    <span class="gift-price">1 Moeda</span>
+                  </div>
+                  <div class="gift-item" onclick="selectGift(this, 'Chocolate', 5, '🍫')">
+                    <div class="gift-icon">🍫</div>
+                    <span class="gift-name">Chocolate</span>
+                    <span class="gift-price">5 Moedas</span>
+                  </div>
+                  <div class="gift-item" onclick="selectGift(this, 'Diamante', 25, '💎')">
+                    <div class="gift-icon">💎</div>
+                    <span class="gift-name">Diamante</span>
+                    <span class="gift-price">25 Moedas</span>
+                  </div>
+                  <div class="gift-item" onclick="selectGift(this, 'Coroa VIP', 100, '👑')">
+                    <div class="gift-icon">👑</div>
+                    <span class="gift-name">Coroa VIP</span>
+                    <span class="gift-price">100 Moedas</span>
+                  </div>
+                  <div class="gift-item" onclick="selectGift(this, 'Super Carro', 500, '🏎️')">
+                    <div class="gift-icon">🏎️</div>
+                    <span class="gift-name">Carro</span>
+                    <span class="gift-price">500 Moedas</span>
+                  </div>
+                  <div class="gift-item" onclick="selectGift(this, 'Castelo', 1000, '🏰')">
+                    <div class="gift-icon">🏰</div>
+                    <span class="gift-name">Castelo</span>
+                    <span class="gift-price">1k Moedas</span>
+                  </div>
+                </div>
+                <div class="gift-drawer-footer">
+                  <button class="btn-recharge" onclick="navigateTo('profile'); closeGiftDrawer();">Recarregar</button>
+                  <button id="btn-send-selected-gift" class="btn-send-gift-disabled" onclick="sendSelectedGift()" disabled>Selecione um presente</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Efeito de Animação de Presente Centralizado -->
+            <div class="gift-announcement" id="gift-announcement">
+              <div class="announcement-content">
+                <span class="announcement-emoji" id="announcement-emoji">👑</span>
+                <p id="announcement-text">Você enviou um Presente!</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. TELA DE MENSAGENS DIRETAS (DMs) -->
+          <section id="screen-messages" class="screen">
+            <header class="chat-header">
+              <h1 class="chat-header-title">alejr.sn</h1>
+              <button class="chat-new-btn" onclick="showToast('Nova conversa não implementada')">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+              </button>
+            </header>
+
+
+
+            <!-- Lista de Conversas Recentes -->
+            <div class="inbox-section">
+              <h3 class="inbox-title">Mensagens</h3>
+              <div class="inbox-list" id="inbox-list-container">
+                <!-- Inserido via JS -->
+              </div>
+            </div>
+          </section>
+
+          <!-- 5. TELA DE CHAT PRIVADO (DENTRO DE UMA CONVERSA) -->
+          <section id="screen-private-chat" class="screen">
+            <header class="private-chat-header">
+              <button class="btn-back-chat" onclick="navigateTo('messages')">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+              </button>
+              <div class="chat-partner-info">
+                <img id="chat-partner-avatar" src="" alt="Avatar">
+                <div class="chat-partner-text">
+                  <span id="chat-partner-name">Nome</span>
+                  <span id="chat-partner-status" class="online">Online agora</span>
+                </div>
+              </div>
+              <div class="chat-header-actions">
+                <button class="chat-action-btn" onclick="showToast('Ligando...')">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.2c.28-.28.36-.67.25-1.02C8.79 6.34 8.59 5.15 8.59 3.92A1 1 0 0 0 7.59 3H4a1 1 0 0 0-1 1c0 9.39 7.61 17 17 17a1 1 0 0 0 1-1v-3.62a1 1 0 0 0-1-1z"/></svg>
+                </button>
+                <button class="chat-action-btn" onclick="simulatePrivateVideoCall()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                </button>
+              </div>
+            </header>
+
+            <!-- Histórico de Mensagens Privadas -->
+            <div class="private-chat-history" id="private-chat-history">
+              <!-- Mensagens geradas via JS -->
+            </div>
+
+            <!-- Barra de Input de Mensagem -->
+            <div class="private-chat-input-bar">
+              <button class="chat-media-btn" onclick="showToast('Envio de fotos desativado')">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+              </button>
+              <input type="text" id="private-chat-input" placeholder="Mensagem..." onkeydown="handlePrivateChatKey(event)">
+              <button class="chat-send-btn" onclick="sendPrivateChatMessage()">
+                Enviar
+              </button>
+            </div>
+          </section>
+
+          <!-- 6. TELA DE PERFIL E RECARGA DE MOEDAS -->
+          <section id="screen-profile" class="screen">
+
+            <div class="profile-scroll-area">
+              
+              <!-- Cabeçalho do Perfil Premium -->
+              <div class="profile-card-premium">
+                <div class="profile-header-top">
+                  <div class="profile-avatar-container">
+                    <img class="profile-main-avatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" alt="Avatar">
+                    <div class="premium-ring-glow"></div>
+                  </div>
+                  <div class="profile-quick-stats">
+                    <div class="quick-stat-box">
+                      <span class="stat-number">12</span>
+                      <span class="stat-label">Seguindo</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number">145</span>
+                      <span class="stat-label">Seguidores</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number">3,2k</span>
+                      <span class="stat-label">Curtidas</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="profile-bio-info">
+                  <h3>Alexandre Silva <span class="premium-verified">✓</span></h3>
+                  <p class="profile-handle">@zcitando</p>
+                  <p class="profile-bio-text">Criador digital • Focado em lives interativas 🎬🍿</p>
+                  
+                  <!-- Nível e Progresso de XP -->
+                  <div class="profile-xp-section">
+                    <div class="xp-top-row">
+                      <span class="xp-title-label">Nível do canal</span>
+                      <span id="profile-level-badge" class="xp-level-badge">Nível 1</span>
+                    </div>
+                    <div class="xp-progress-bg">
+                      <div id="xp-progress-fill" class="xp-progress-fill" style="width: 30%;"></div>
+                    </div>
+                    <div class="xp-meta-row">
+                      <span id="xp-progress-text">150 / 500 XP</span>
+                      <span id="xp-progress-next-label">Próximo nível: +350 XP</span>
+                    </div>
+                  </div>
+
+                  <!-- Check-in de Recompensa Diária (7 Dias) -->
+                  <div class="profile-checkin-card">
+                    <div class="checkin-header">
+                      <span class="checkin-title">🗓️ Check-in diário</span>
+                      <button id="btn-claim-daily" class="btn-follow-primary" onclick="claimDailyCheckIn()">Resgatar</button>
+                    </div>
+                    <div class="checkin-row">
+                      <div class="checkin-day-box" id="chk-day-1">
+                        <span>D1</span>
+                        <strong class="checkin-reward">🪙5</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-2">
+                        <span>D2</span>
+                        <strong class="checkin-reward">🪙10</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-3">
+                        <span>D3</span>
+                        <strong class="checkin-reward">🪙15</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-4">
+                        <span>D4</span>
+                        <strong class="checkin-reward">🪙20</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-5">
+                        <span>D5</span>
+                        <strong class="checkin-reward">🪙25</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-6">
+                        <span>D6</span>
+                        <strong class="checkin-reward">🪙30</strong>
+                      </div>
+                      <div class="checkin-day-box" id="chk-day-7">
+                        <span>D7</span>
+                        <strong class="checkin-reward">👑 VIP</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Visualizações do Perfil (Últimas 24 horas) -->
+                <div class="profile-visitors-preview-card" onclick="openProfileVisitorsModal()">
+                  <div class="visitors-left-info">
+                    <span class="visitors-icon">👁️</span>
+                    <div class="visitors-text-stack">
+                      <span class="visitors-title">Visualizações de Perfil</span>
+                      <span class="visitors-subtitle">84 pessoas visitaram seu canal hoje</span>
+                    </div>
+                  </div>
+                  <div class="visitors-avatars-pile">
+                    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50" alt="Visitor">
+                    <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=50" alt="Visitor">
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50" alt="Visitor">
+                  </div>
+                </div>
+
+                <!-- Botões de Ação do Perfil -->
+                <div class="profile-actions-row">
+                  <button class="profile-action-btn primary" onclick="openNewPostModal()">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    <span>Publicar</span>
+                  </button>
+                  <button class="profile-action-btn secondary" onclick="toggleCoinShop()">
+                    <span class="coin-badge">🪙</span>
+                    <span>Minha Carteira</span>
+                  </button>
+                  <button class="profile-action-btn icon-only" onclick="openProfileSettingsModal()">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Loja de Moedas Retrátil (Coin Shop) -->
+              <div class="coin-shop-container collapsible" id="profile-coin-shop" style="display: none;">
+                <div class="shop-drawer-header">
+                  <h3 class="shop-title">Recarga de Moedas</h3>
+                  <div class="balance-display">
+                    <span>Saldo: 🪙</span>
+                    <strong id="profile-coins-display">99</strong>
+                  </div>
+                </div>
+                <p class="shop-subtitle">⚠️ Compre com PIX e receba na hora!</p>
+                
+                <div class="coin-packages-grid">
+                  <div class="package-card" onclick="openPixModal(50, 4.99)">
+                    <div class="package-coins">🪙 50</div>
+                    <div class="package-bonus">+5 bônus</div>
+                    <button class="btn-buy-package">R$ 4,99</button>
+                  </div>
+                  <div class="package-card featured" onclick="openPixModal(150, 12.99)">
+                    <div class="popular-ribbon">Popular</div>
+                    <div class="package-coins">🪙 150</div>
+                    <div class="package-bonus">+25 bônus</div>
+                    <button class="btn-buy-package">R$ 12,99</button>
+                  </div>
+                  <div class="package-card" onclick="openPixModal(500, 39.99)">
+                    <div class="package-coins">🪙 500</div>
+                    <div class="package-bonus">+100 bônus</div>
+                    <button class="btn-buy-package">R$ 39,99</button>
+                  </div>
+                  <div class="package-card" onclick="openPixModal(1200, 79.99)">
+                    <div class="package-coins">🪙 1200</div>
+                    <div class="package-bonus">+300 bônus</div>
+                    <button class="btn-buy-package">R$ 79,99</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tabs de Navegação do Perfil -->
+              <div class="profile-tabs">
+                <button class="profile-tab-header-btn active" id="profile-tab-posts-btn" onclick="switchProfileTab('posts')">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7v7H4zm0 9h7v7H4zm9-9h7v7h-7zm0 9h7v7h-7z"/></svg>
+                  <span>Publicações</span>
+                </button>
+                <button class="profile-tab-header-btn" id="profile-tab-stats-btn" onclick="switchProfileTab('stats')">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                  <span>Métricas</span>
+                </button>
+              </div>
+
+              <!-- Conteúdo das Tabs -->
+              <div class="profile-tabs-content">
+                <!-- Tab Publicações (Grid de Posts) -->
+                <div class="tab-pane active" id="profile-tab-posts">
+                  <div class="profile-posts-grid" id="profile-posts-grid-container">
+                    <!-- Gerado via JS -->
+                  </div>
+                </div>
+
+                <!-- Tab Métricas -->
+                <div class="tab-pane" id="profile-tab-stats" style="display: none;">
+                  <div class="profile-metrics-panel">
+                    <div class="metric-row">
+                      <span>Tempo transmitido:</span>
+                      <strong>14h 35min</strong>
+                    </div>
+                    <div class="metric-row">
+                      <span>Total de espectadores:</span>
+                      <strong>4,8 mil</strong>
+                    </div>
+                    <div class="metric-row">
+                      <span>Pontuação no PK:</span>
+                      <strong>24,5 mil pts</strong>
+                    </div>
+                    <div class="metric-row">
+                      <span>Diamantes coletados:</span>
+                      <strong>💎 1.250</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Modal do Pix Simulado (Slide-in) -->
+            <div class="pix-modal" id="pix-modal">
+              <div class="pix-modal-overlay" onclick="closePixModal()"></div>
+              <div class="pix-modal-content">
+                <div class="pix-header">
+                  <h3>Pagamento via PIX</h3>
+                  <button class="btn-close-pix" onclick="closePixModal()">×</button>
+                </div>
+                <div class="pix-body">
+                  <p>Escaneie o QR Code ou copie o código abaixo para finalizar a compra de <strong id="pix-package-name">50 Moedas</strong>.</p>
+                  
+                  <!-- QR Code Simulado com SVG -->
+                  <div class="pix-qr-container">
+                    <svg class="qr-svg" viewBox="0 0 100 100">
+                      <rect width="100" height="100" fill="white"/>
+                      <!-- Padrão Pix Mockado -->
+                      <rect x="10" y="10" width="20" height="20" fill="black"/>
+                      <rect x="15" y="15" width="10" height="10" fill="white"/>
+                      <rect x="70" y="10" width="20" height="20" fill="black"/>
+                      <rect x="75" y="15" width="10" height="10" fill="white"/>
+                      <rect x="10" y="70" width="20" height="20" fill="black"/>
+                      <rect x="15" y="75" width="10" height="10" fill="white"/>
+                      <rect x="40" y="40" width="20" height="20" fill="black"/>
+                      <!-- Pontos aleatórios para simular QR Code -->
+                      <rect x="45" y="10" width="5" height="10" fill="black"/>
+                      <rect x="55" y="20" width="10" height="5" fill="black"/>
+                      <rect x="35" y="70" width="15" height="5" fill="black"/>
+                      <rect x="55" y="60" width="5" height="15" fill="black"/>
+                      <rect x="70" y="45" width="10" height="10" fill="black"/>
+                      <rect x="80" y="75" width="10" height="5" fill="black"/>
+                      <rect x="15" y="45" width="5" height="10" fill="black"/>
+                      <!-- Logo do Pix Centralizado -->
+                      <rect x="43" y="43" width="14" height="14" fill="#32b3a6" rx="2"/>
+                      <path d="M50 46l3 3-3 3-3-3z" fill="white"/>
+                    </svg>
+                    <div class="qr-timer">Expira em <span id="pix-timer">05:00</span></div>
+                  </div>
+
+                  <div class="pix-copy-paste-container">
+                    <label>Código Pix Copia e Cola:</label>
+                    <div class="pix-copy-input-row">
+                      <input type="text" id="pix-copy-code" readonly value="00020101021226870014br.gov.bcb.pix2565pix.vibelive.app/recharge/token8792hjd892h8dhuw892">
+                      <button class="btn-copy-pix" onclick="copyPixCode()">Copiar</button>
+                    </div>
+                  </div>
+
+                  <div class="pix-price-row">
+                    <span>Total a pagar:</span>
+                    <strong id="pix-total-price">R$ 4,99</strong>
+                  </div>
+
+                  <div class="pix-status-box" id="pix-status-box">
+                    <div class="spinner-small"></div>
+                    <span>Aguardando confirmação do pagamento...</span>
+                  </div>
+
+                  <button class="btn-pix-confirm-demo" onclick="simulatePixSuccess()">
+                    Simular Aprovação (Demo)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 7. TELA DE WEBCAM (TRANSMITIR AO VIVO - GO LIVE) -->
+          <section id="screen-go-live" class="screen">
+            <!-- Feed de Câmera Local -->
+            <div class="go-live-feed-container">
+              <video id="go-live-video" autoplay playsinline muted></video>
+              <div class="camera-fallback-msg">
+                <svg class="icon-camera" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <p>Por favor, permita o acesso à câmera para transmitir</p>
+                <button class="btn-request-camera" onclick="initiateCameraStream()">Permitir Câmera</button>
+              </div>
+              
+             <!-- Overlay de Configuração (Antes de Iniciar a Live - Redesenhado estilo TikTok) -->
+             <div class="go-live-setup-overlay" id="go-live-setup">
+               <button class="btn-close-setup-x" onclick="navigateTo('discover')">×</button>
+
+               <!-- Caixa superior de título e hashtags -->
+               <div class="setup-settings-card">
+                 <div class="setup-thumbnail-wrapper">
+                   <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" class="setup-thumb-img" alt="Thumbnail">
+                   <div class="setup-edit-badge">Edit</div>
+                 </div>
+                 <div class="setup-title-input-wrapper">
+                   <input type="text" id="live-title-input" placeholder="Adicionar um title ao chat" value="Adicionar um title ao chat">
+                 </div>
+                 <div class="setup-divider-line"></div>
+                 <div class="setup-tags-row">
+                   <div class="setup-tag"># QueensWithoutBorders +</div>
+                   <div class="setup-tag"># MissBrasil +</div>
+                   <button class="btn-setup-tag-dropdown">
+                     <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                   </button>
+                 </div>
+               </div>
+
+               <!-- Mascote Dino piscando no Centro com ondas sonoras -->
+               <div class="setup-mascot-visualizer-container">
+                 <div class="setup-soundwaves-pulse"></div>
+                 <div class="setup-mascot-circle">
+                   <svg viewBox="0 0 100 100" class="setup-dino-svg">
+                     <circle cx="50" cy="50" r="48" fill="#e0fcf9" stroke="#4e9eff" stroke-width="2"/>
+                     <path d="M30 65c10 8 30 8 40 0 5-10 2-25-8-30s-22-2-27 10-10 15-5 20z" fill="#8bf2e6"/>
+                     <path d="M28 40c-3-5-2-12 2-12s5 7 2 12m10-14c0-6 4-10 7-6s-1 10-7 6m12-2c2-6 7-8 9-4s-3 10-9 8" fill="#32b3a6"/>
+                     <path d="M42 42c2-3 5-3 7 0" stroke="#12131a" stroke-width="3" fill="none" stroke-linecap="round"/>
+                     <circle cx="58" cy="43" r="3" fill="#12131a"/>
+                     <circle cx="62" cy="49" r="4" fill="#ff5c93" opacity="0.6"/>
+                     <path d="M48 54c3 3 8 3 11 0" stroke="#12131a" stroke-width="3" fill="none" stroke-linecap="round"/>
+                     <path d="M28 50c-2-2-4-2-4 0s2 3 4 3m0-4c-2-2-4-1-3 1s2 2 3 1" stroke="#12131a" stroke-width="2" fill="#8bf2e6"/>
+                     <path d="M72 38l2 2-2 2-2-2zM76 42l1 1-1 1-1-1z" fill="#f0b23d"/>
+                   </svg>
+                 </div>
+               </div>
+
+               <!-- Linha de Botões de Ações do Rodapé -->
+               <div class="setup-actions-row">
+                 <div class="setup-action-item" onclick="initiateCameraStream()">
+                   <div class="setup-action-icon">📷</div>
+                   <span>Câmera</span>
+                 </div>
+                 <div class="setup-action-item" onclick="openAtmosferaSelector()">
+                   <div class="setup-action-icon">🖼️</div>
+                   <span>Atmosfera</span>
+                 </div>
+                 <div class="setup-action-item" onclick="showToast('Mixer de áudio otimizado 🎛️')">
+                   <div class="setup-action-icon">🎛️</div>
+                   <span>Mixer</span>
+                 </div>
+                 <div class="setup-action-item" onclick="showToast('Painel do Criador: VibeLive Analytics 📈')">
+                   <div class="setup-action-icon">📈</div>
+                   <span>Centro de Criadores</span>
+                 </div>
+                 <div class="setup-action-item" onclick="showToast('Mais recursos em breve!')">
+                   <div class="setup-action-icon">▲</div>
+                   <span>Expandir</span>
+                 </div>
+               </div>
+
+               <!-- Botão Cyan de Transmissão -->
+               <div class="setup-go-live-btn-wrapper">
+                 <button class="btn-start-broadcasting-tiktok" onclick="startOwnLiveStream()">Ao vivo</button>
+               </div>
+
+               <!-- Barra de Modos de Transmissão Deslizantes -->
+               <div class="setup-modes-swipe-bar">
+                 <div class="setup-mode-tab">Live de Vários-convidados</div>
+                 <div class="setup-mode-tab active">LIVE</div>
+                 <div class="setup-mode-tab">Live de Áudio</div>
+                 <div class="setup-mode-tab">Jogo Ao V.</div>
+               </div>
+             </div>
+            </div>
+
+            <!-- Overlay da Transmissão Própria Ativa -->
+            <div class="my-live-overlay-container" id="my-live-active-overlay" style="display: none;">
+              <!-- Topo -->
+              <div class="live-header">
+                <div class="streamer-info my-stream">
+                  <div class="live-indicator-badge">AO VIVO</div>
+                  <div class="streamer-text">
+                    <span class="my-username">Você está ao vivo</span>
+                    <span id="my-live-diamonds">💎 0 acumulados</span>
+                  </div>
+                </div>
+
+                <div class="live-header-right">
+                  <div class="viewers-count">
+                    <svg class="icon-eye" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                    <span id="my-live-viewer-count">0</span>
+                  </div>
+                  <button class="btn-stop-my-live" onclick="stopOwnLiveStream()">ENCERRAR</button>
+                </div>
+              </div>
+
+              <!-- Rodapé (Mensagens que chegam e estatísticas) -->
+              <div class="live-footer">
+                <div class="live-chat-area" id="my-live-chat-messages">
+                  <!-- Comentários simulados de espectadores da nossa live -->
+                </div>
+                  <div class="my-live-bottom-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                    <!-- Efeitos Sonoros / Reações do Streamer -->
+                    <div class="my-live-sfx-bar">
+                      <button class="btn-live-sfx" onclick="triggerMyLiveSfx('🎰', 'Roleta!')">🎰 Roleta</button>
+                      <button class="btn-live-sfx" onclick="triggerMyLiveSfx('👏', 'Aplausos!')">👏 Palmas</button>
+                      <button class="btn-live-sfx" onclick="triggerMyLiveSfx('😂', 'Gargalhada!')">😂 Risos</button>
+                      <button class="btn-live-sfx" onclick="triggerMyLiveSfx('🎺', 'Fanfarra!')">🎺 Fanfarra</button>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <div class="system-status-msg">Transmissão estável • 1080p</div>
+                      <div class="my-hearts-emitter" id="my-hearts-emitter"></div>
+                    </div>
+                  </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 8. TELA DE SIMULADOR DE BATALHA PK -->
+          <section id="screen-pk-simulator" class="screen">
+            <!-- Header do PK -->
+            <header class="pk-header">
+              <div class="pk-header-left">
+                <span class="pk-live-badge">Batalha PK</span>
+                <span class="pk-viewers">👁️ 840</span>
+              </div>
+              <h3 class="pk-title">Simulador de Batalha</h3>
+              <button class="btn-close-pk" onclick="closePkSimulator()">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </header>
+
+            <!-- Barra de Pontos PK (Barra de Progresso Vermelho vs Azul) -->
+            <div class="pk-progress-container">
+              <div class="pk-score red" id="pk-score-a">12.500</div>
+              <div class="pk-bar-wrapper">
+                <div class="pk-bar-red" id="pk-bar-red" style="width: 55%"></div>
+                <div class="pk-bar-blue" id="pk-bar-blue" style="width: 45%"></div>
+              </div>
+              <div class="pk-score blue" id="pk-score-b">10.200</div>
+            </div>
+
+            <!-- Vídeos Divididos Side-by-Side -->
+            <div class="pk-video-split-container">
+              <div class="pk-video-panel red">
+                <video id="pk-video-a" loop playsinline muted poster="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500"></video>
+                <div class="pk-streamer-label">MORANGUINHO 🍓</div>
+                <div class="pk-win-badge-a" id="pk-win-a" style="display: none;">VENCEDOR 👑</div>
+              </div>
+              <div class="pk-video-panel blue">
+                <video id="pk-video-b" loop playsinline muted poster="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500"></video>
+                <div class="pk-streamer-label">Luana Becker 👑</div>
+                <div class="pk-win-badge-b" id="pk-win-b" style="display: none;">VENCEDOR 👑</div>
+              </div>
+            </div>
+
+            <!-- Chat Flutuante e Barra de Ações -->
+            <div class="pk-overlay-bottom">
+              <!-- Chat do PK -->
+              <div class="live-chat-area pk-chat" id="pk-chat-messages">
+                <!-- Comentários gerados via JS -->
+              </div>
+
+              <!-- Controles de Suporte de Audiência -->
+              <div class="pk-controls-row">
+                <button class="pk-support-btn red" onclick="supportStreamer('A', event)">
+                  <span>🌹 Apoiar Streamer A</span>
+                  <strong>+100 pts</strong>
+                </button>
+                <button class="pk-support-btn blue" onclick="supportStreamer('B', event)">
+                  <span>💎 Apoiar Streamer B</span>
+                  <strong>+250 pts</strong>
+                </button>
+              </div>
+            </div>
+
+            <!-- Área de corações flutuantes virtual -->
+            <div class="hearts-container" id="pk-hearts-container"></div>
+          </section>
+
+        </div> <!-- Fim de app-container -->
+
+        <!-- BARRA DE NAVEGAÇÃO INFERIOR GLOBAL FLUTUANTE (4 BOTÕES) -->
+        <nav class="bottom-nav" id="global-bottom-nav" style="display: none;">
+          <div class="nav-item active" data-screen="discover" onclick="navigateTo('discover')">
+            <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          </div>
+          <div class="nav-item" data-screen="go-live" onclick="navigateTo('go-live')">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
+            </svg>
+          </div>
+          <div class="nav-item" data-screen="messages" onclick="navigateTo('messages')">
+            <div class="nav-icon-wrapper">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              <span class="nav-badge" id="nav-chat-badge">3</span>
+            </div>
+          </div>
+          <div class="nav-item" data-screen="profile" onclick="navigateTo('profile')">
+            <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+          </div>
+        </nav>
+
+        <!-- Toasts Globais de Notificação do App -->
+        <div id="toast-message" class="toast-hidden">Mensagem de Toast</div>
+
+        <!-- Modal Criar Nova Publicação (Perfil) -->
+        <div class="new-post-modal" id="modal-new-post" style="display: none;">
+          <div class="new-post-overlay" onclick="closeNewPostModal()"></div>
+          <div class="new-post-content">
+            <header class="new-post-header">
+              <h3>Nova Publicação</h3>
+              <button class="btn-close-new-post" onclick="closeNewPostModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div class="form-group-post">
+                <label>Tipo de Postagem:</label>
+                <div class="post-type-toggle">
+                  <button class="type-toggle-btn active" id="post-type-photo" onclick="setPostType('image')">Foto 📷</button>
+                  <button class="type-toggle-btn" id="post-type-video" onclick="setPostType('video')">Vídeo 🎥</button>
+                </div>
+              </div>
+              <div class="form-group-post">
+                <label>Selecione uma Mídia Demo:</label>
+                <select id="post-media-preset" onchange="previewSelectedMedia()">
+                  <!-- Fotos -->
+                  <option value="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500">Pôr do Sol na Praia 🌅</option>
+                  <option value="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500">Balada / Show 💃</option>
+                  <option value="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500">Viagens ✈️</option>
+                  <option value="https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500">Selfie Estilo 🤳</option>
+                </select>
+              </div>
+              <div class="post-media-preview-container">
+                <img id="post-preview-img" src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500" alt="Preview">
+                <video id="post-preview-video" style="display: none;" loop muted></video>
+              </div>
+              <div class="form-group-post">
+                <label for="post-caption-input">Legenda:</label>
+                <textarea id="post-caption-input" placeholder="Escreva uma legenda..."></textarea>
+              </div>
+              <button class="btn-publish-post" onclick="publishNewPost()">Publicar no Perfil</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lightbox Visualizador de Postagem (Perfil) -->
+        <div class="lightbox-modal" id="modal-post-lightbox" style="display: none;">
+          <div class="lightbox-overlay" onclick="closePostLightbox()"></div>
+          <div class="lightbox-content">
+            <button class="btn-close-lightbox" onclick="closePostLightbox()">×</button>
+            <div class="lightbox-media-wrapper">
+              <img id="lightbox-img" src="" style="display: none;" alt="Media">
+              <video id="lightbox-video" src="" style="display: none;" controls autoplay loop></video>
+            </div>
+            <div class="lightbox-details">
+              <div class="lightbox-author-row">
+                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" class="lightbox-avatar" alt="Avatar">
+                <div class="lightbox-author-text">
+                  <strong>Alexandre Silva</strong>
+                  <span>@zcitando</span>
+                </div>
+              </div>
+              <p class="lightbox-caption" id="lightbox-caption">Legenda do post</p>
+              <div class="lightbox-actions">
+                <button class="btn-lightbox-like" onclick="likeLightboxPost()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  <span id="lightbox-likes-count">42 curtidas</span>
+                </button>
+              </div>
+              <div class="lightbox-comments-list" id="lightbox-comments-list">
+                <!-- Comentários gerados via JS -->
+              </div>
+              <div class="lightbox-comment-input-row">
+                <input type="text" id="lightbox-new-comment" placeholder="Adicione um comentário...">
+                <button onclick="addLightboxComment()">Publicar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Configurações do Perfil / Editar Perfil (Perfil) -->
+        <div class="new-post-modal" id="modal-profile-settings" style="display: none;">
+          <div class="new-post-overlay" onclick="closeProfileSettingsModal()"></div>
+          <div class="new-post-content">
+            <header class="new-post-header">
+              <h3>Configurações do Perfil</h3>
+              <button class="btn-close-new-post" onclick="closeProfileSettingsModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div class="form-group-post">
+                <label for="edit-profile-name">Nome:</label>
+                <input type="text" id="edit-profile-name" value="Alexandre Silva">
+              </div>
+              <div class="form-group-post">
+                <label for="edit-profile-handle">Username (Handle):</label>
+                <input type="text" id="edit-profile-handle" value="@zcitando">
+              </div>
+              <div class="form-group-post">
+                <label for="edit-profile-bio">Biografia:</label>
+                <textarea id="edit-profile-bio">Criador digital • Focado em lives interativas 🎬🍿</textarea>
+              </div>
+              
+              <button class="btn-publish-post" style="margin-top: 10px;" onclick="saveProfileChanges()">
+                Salvar Alterações
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="handleLogout(); closeProfileSettingsModal();">
+                Sair da Conta 🚪
+              </button>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
+              
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <div style="display: flex; flex-direction: column; text-align: left;">
+                  <span style="font-size: 0.72rem; font-weight: 700; color: #fff;">Passe VIP Ouro 👑</span>
+                  <span style="font-size: 0.58rem; color: var(--light-gray);">Tags douradas exclusivas no chat</span>
+                </div>
+                <button class="btn-follow-primary" id="btn-buy-vip" style="height: 24px; padding: 0 10px; font-size: 0.6rem; margin-top: 0;" onclick="purchaseVIPBadge()">Comprar (🪙 100)</button>
+              </div>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 10px 0; padding-top: 10px;"></div>
+              
+              <button class="btn-logout-profile" style="margin: 0; width: 100%; border-color: rgba(241, 85, 76, 0.4); color: var(--danger); background: rgba(241, 85, 76, 0.06);" onclick="deleteAccount()">
+                Excluir Minha Conta ⚠️
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Busca de Perfis (Discover) -->
+        <div class="new-post-modal" id="modal-search-overlay" style="display: none;">
+          <div class="new-post-overlay" onclick="closeSearchOverlay()"></div>
+          <div class="new-post-content" style="height: 85%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>Buscar Perfis</h3>
+              <button class="btn-close-new-post" onclick="closeSearchOverlay()">×</button>
+            </header>
+            
+            <div class="messages-search-bar" style="width: 100%; margin-bottom: 16px;">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <input type="text" id="search-profile-input" placeholder="Pesquisar pelo nome..." oninput="performProfileSearch()">
+            </div>
+
+            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
+              <div id="search-results-container" class="inbox-list">
+                <!-- Perfis correspondentes mostrados aqui -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Visualização de Stories (Discover) -->
+        <div class="stories-viewer-modal" id="modal-stories-viewer">
+          <div class="stories-viewer-overlay" onclick="closeStoryViewer()"></div>
+          <div class="stories-viewer-content">
+            <div class="stories-progress-bar-wrapper">
+              <div class="stories-progress-bar-fill" id="story-progress-fill"></div>
+            </div>
+            
+            <header class="story-viewer-header">
+              <div class="story-author-info">
+                <img id="story-viewer-avatar" src="" alt="Avatar">
+                <span id="story-viewer-name">username</span>
+              </div>
+              <button class="btn-close-story" onclick="closeStoryViewer()">×</button>
+            </header>
+
+            <div class="story-viewer-media-container">
+              <img id="story-viewer-img" src="" alt="Story Media">
+              <p id="story-viewer-caption">Legenda do Story</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal da Roleta da Fortuna (Discover / Live Room) -->
+        <div class="new-post-modal" id="modal-live-wheel" style="display: none;">
+          <div class="new-post-overlay" onclick="closeRouletteModal()"></div>
+          <div class="new-post-content" style="align-items: center; justify-content: center; padding: 20px;">
+            <header class="new-post-header" style="width: 100%; margin-bottom: 16px;">
+              <h3>Roda da Fortuna 🎡</h3>
+              <button class="btn-close-new-post" onclick="closeRouletteModal()">×</button>
+            </header>
+            
+            <div class="roulette-game-body" style="display: flex; flex-direction: column; align-items: center; gap: 18px;">
+              <p style="font-size: 0.72rem; color: var(--light-gray); text-align: center;">
+                Gaste <strong>10 moedas</strong> por giro e ganhe prêmios ou interações exclusivas!
+              </p>
+
+              <!-- A Roleta Visual -->
+              <div class="roulette-wheel-container">
+                <div class="roulette-pointer"></div>
+                <div class="roulette-wheel-inner" id="roulette-wheel-inner"></div>
+              </div>
+
+              <!-- Lista de Prêmios Fictícios para Identificação Visual -->
+              <div class="roulette-prizes-list">
+                <span class="roulette-prize-chip primary">💖 Super Beijo</span>
+                <span class="roulette-prize-chip info">🤗 Abraço V.</span>
+                <span class="roulette-prize-chip gold">👑 Dueto VIP</span>
+                <span class="roulette-prize-chip primary-dark">🎉 Parabéns</span>
+                <span class="roulette-prize-chip success">⭐ Mentoria</span>
+                <span class="roulette-prize-chip neutral">🥱 Tente de Novo</span>
+              </div>
+
+              <button class="btn-publish-post" id="btn-spin-roulette" style="margin: 0; display: flex; justify-content: center; align-items: center; gap: 8px;" onclick="spinRoulette()">
+                <span>Girar (🪙 10)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Visitantes do Perfil (Perfil) -->
+        <div class="new-post-modal" id="modal-profile-visitors" style="display: none;">
+          <div class="new-post-overlay" onclick="closeProfileVisitorsModal()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>Visitantes Recentes</h3>
+              <button class="btn-close-new-post" onclick="closeProfileVisitorsModal()">×</button>
+            </header>
+            <p style="font-size: 0.72rem; color: var(--light-gray); margin-bottom: 16px;">
+              Estas pessoas visitaram o seu perfil nas últimas 24 horas. Somente você pode ver isso.
+            </p>
+            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
+              <div class="inbox-list" id="visitors-list-container">
+                <!-- Preenchido via JS com visitantes e botões de atalho -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Perfil de Visitante Simulado (Poder Entrar no Perfil) -->
+        <div class="new-post-modal" id="modal-visitor-profile" style="display: none;">
+          <div class="new-post-overlay" onclick="closeVisitorProfile()"></div>
+          <div class="new-post-content" style="height: 85%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>Perfil do Visitante</h3>
+              <button class="btn-close-new-post" onclick="closeVisitorProfile()">×</button>
+            </header>
+            
+            <div class="profile-scroll-area" style="overflow-y: auto; flex: 1; padding: 10px 0;">
+              <div class="profile-card-premium" style="padding: 10px; border-bottom: none; background: none;">
+                <div class="profile-header-top">
+                  <div class="profile-avatar-container">
+                    <img id="visitor-p-avatar" class="profile-main-avatar" src="" alt="Avatar">
+                    <div class="premium-ring-glow"></div>
+                  </div>
+                  <div class="profile-quick-stats">
+                    <div class="quick-stat-box">
+                      <span class="stat-number">482</span>
+                      <span class="stat-label">Seguindo</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number">12,5k</span>
+                      <span class="stat-label">Seguidores</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number">84k</span>
+                      <span class="stat-label">Curtidas</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="profile-bio-info" style="margin-top: 14px; margin-bottom: 14px;">
+                  <h3 id="visitor-p-name">Nome</h3>
+                  <p id="visitor-p-handle" class="profile-handle">@username</p>
+                  <p id="visitor-p-bio" class="profile-bio-text">Membro apaixonado por música e lives ao vivo no VibeLive! 🎤🌟</p>
+                </div>
+
+                <!-- Botões de ação com o visitante -->
+                <div class="profile-actions-row" style="margin-bottom: 18px;">
+                  <button class="profile-action-btn primary" id="btn-visitor-message">
+                    <span>Enviar Mensagem</span>
+                  </button>
+                  <button class="profile-action-btn secondary" onclick="showToast('Seguindo com sucesso!')">
+                    <span>Seguir</span>
+                  </button>
+                </div>
+
+                <!-- Grid de fotos mockadas do visitante -->
+                <div class="profile-tabs">
+                  <button class="profile-tab-header-btn active" style="width: 100%;">Galeria de Mídias</button>
+                </div>
+                
+                <div class="profile-posts-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding-top: 8px;">
+                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
+                    <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
+                  </div>
+                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
+                    <img src="https://images.unsplash.com/photo-1516280440614-37939bbacd6a?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
+                  </div>
+                  <div class="post-grid-item" style="aspect-ratio: 1; border-radius: 8px; overflow: hidden;">
+                    <img src="https://images.unsplash.com/photo-1506157786151-b8491531f063?w=200" style="width: 100%; height: 100%; object-fit: cover;" alt="Post">
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div> <!-- Fim de phone-screen -->
+    </div> <!-- Fim de phone-shell -->
+  </div> <!-- Fim de phone-wrapper -->
+
+  <!-- Script Principal -->
+  <script src="app.js"></script>
+</body>
+</html>
