@@ -634,12 +634,11 @@ function enterLiveRoom(broadcasterId) {
 function closeLiveRoom() {
   DOM.liveVideo.pause();
   DOM.liveVideo.src = "";
-  
+
   if (STATE.liveChatInterval) clearInterval(STATE.liveChatInterval);
   if (STATE.liveViewerInterval) clearInterval(STATE.liveViewerInterval);
-  
+
   STATE.currentLiveBroadcaster = null;
-  navigateTo("discover");
 }
 
 function toggleFollowStreamer() {
@@ -1276,7 +1275,6 @@ function stopOwnLiveStream() {
   fallback.style.display = "flex";
   
   showToast("Transmissão encerrada com sucesso!");
-  navigateTo("discover");
 }
 
 function addMyLiveComment(author, content, isSystem = false, isGift = false) {
@@ -1841,14 +1839,12 @@ function closePkSimulator() {
   if (videoB) videoB.pause();
 
   // Limpar intervalos
-  STATE.pkIntervals.forEach(clearInterval);
+  if (STATE.pkIntervals) STATE.pkIntervals.forEach(clearInterval);
   STATE.pkIntervals = [];
 
   // Resetar Badges de Vencedor
   document.getElementById("pk-win-a").style.display = "none";
   document.getElementById("pk-win-b").style.display = "none";
-
-  navigateTo("discover");
 }
 
 function updatePkBars() {

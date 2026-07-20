@@ -1540,65 +1540,8 @@ body {
 }
 
 /* 11. TELA DE CHAT PRIVADO (ver seção completa mais abaixo) */
-#screen-private-chat {
-  background: var(--bg-deep);
-}
-
-.chat-bubble-time {
-  font-size: 0.6rem;
-  color: rgba(255,255,255,0.45);
-  margin-top: 4px;
-  text-align: right;
-  display: block;
-}
-
-/* Input Bar do Chat Privado */
-.private-chat-input-bar {
-  height: 60px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid var(--glass-border);
-  background: rgba(8, 9, 13, 0.6);
-}
-
-.chat-media-btn {
-  background: none;
-  border: none;
-  color: var(--light-gray);
-  cursor: pointer;
-}
-
-.chat-media-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.private-chat-input-bar input {
-  flex: 1;
-  height: 38px;
-  background: var(--bg-input);
-  border: 1px solid var(--glass-border);
-  border-radius: 19px;
-  padding: 0 16px;
-  color: #fff;
-  font-size: 0.85rem;
-  outline: none;
-}
-
 .private-chat-input-bar input::placeholder {
   color: rgba(255,255,255,0.4);
-}
-
-.chat-send-btn {
-  background: none;
-  border: none;
-  color: var(--primary);
-  font-weight: 700;
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 4px;
 }
 
 /* 12. TELA DE PERFIL E MOEDAS (WALLET) */
