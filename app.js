@@ -143,6 +143,15 @@ const DOM = {
 };
 
 
+// O Supabase detecta sozinho o token de recuperação de senha na URL (quem
+// clicou no link do e-mail) e dispara esse evento — mostra o modal de nova
+// senha por cima de qualquer tela, sem precisar de nenhuma rota especial.
+sb.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") {
+    showNewPasswordModal();
+  }
+});
+
 // 4. INICIALIZAÇÃO DO APP
 document.addEventListener("DOMContentLoaded", () => {
   renderCoins();
@@ -1797,14 +1806,29 @@ async function saveProfileChanges() {
 }
 
 async function deleteAccount() {
-  // Excluir a conta de verdade exige privilégio de administrador (não disponível no
-  // cliente com a chave pública) — por ora, essa ação encerra a sessão com segurança.
-  const confirmDelete = confirm("Deseja encerrar a sessão desta conta? A exclusão definitiva de conta ainda não está disponível nesta versão.");
+  const confirmDelete = confirm(
+    "Tem certeza que deseja excluir sua conta? Essa ação é PERMANENTE: seu saldo, posts, seguidores, mensagens e todo o histórico serão apagados para sempre e não podem ser recuperados."
+  );
+  if (!confirmDelete) return;
 
-  if (confirmDelete) {
-    closeProfileSettingsModal();
-    await handleLogout();
+  try {
+    await DB.deleteAccountForever();
+  } catch (err) {
+    showToast(err.message || "Não foi possível excluir a conta.");
+    return;
   }
+
+  // A conta já foi apagada no servidor — isso só limpa a sessão local.
+  try {
+    await Auth.signOut();
+  } catch (err) {
+    console.error(err);
+  }
+
+  closeProfileSettingsModal();
+  STATE.isLoggedIn = false;
+  navigateTo("auth");
+  showToast("Conta excluída permanentemente.");
 }
 
 // ==========================================================================
@@ -1904,17 +1928,73 @@ function toggleAuthTab(mode) {
   const tabLogin = document.getElementById("btn-tab-login");
   const tabRegister = document.getElementById("btn-tab-register");
   const submitBtn = document.getElementById("btn-auth-submit");
+  const forgotBtn = document.getElementById("btn-forgot-password");
 
   if (mode === "login") {
     tabLogin.classList.add("active");
     tabRegister.classList.remove("active");
     submitBtn.textContent = "Entrar";
     document.getElementById("auth-username").placeholder = "E-mail";
+    if (forgotBtn) forgotBtn.style.display = "block";
   } else {
     tabLogin.classList.remove("active");
     tabRegister.classList.add("active");
     submitBtn.textContent = "Criar Conta";
     document.getElementById("auth-username").placeholder = "E-mail";
+    if (forgotBtn) forgotBtn.style.display = "none";
+  }
+}
+
+function openForgotPasswordModal() {
+  document.getElementById("forgot-password-email").value = document.getElementById("auth-username").value.trim();
+  document.getElementById("modal-forgot-password").style.display = "flex";
+}
+
+function closeForgotPasswordModal() {
+  document.getElementById("modal-forgot-password").style.display = "none";
+}
+
+async function submitForgotPassword() {
+  const email = document.getElementById("forgot-password-email").value.trim();
+  if (!email) {
+    showToast("Digite seu e-mail.");
+    return;
+  }
+  try {
+    await Auth.resetPasswordForEmail(email);
+    showToast("Link enviado! Verifique seu e-mail (inclusive spam).");
+    closeForgotPasswordModal();
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar o link de recuperação.");
+  }
+}
+
+// Chamado quando a pessoa volta pro app pelo link de recuperação do e-mail
+// (Supabase dispara o evento PASSWORD_RECOVERY automaticamente ao detectar o
+// token na URL) — sem fechar/cancelar: precisa definir a nova senha pra continuar.
+function showNewPasswordModal() {
+  document.getElementById("modal-new-password").style.display = "flex";
+}
+
+async function submitNewPassword() {
+  const newPassword = document.getElementById("new-password-input").value;
+  if (!newPassword || newPassword.length < 6) {
+    showToast("A senha precisa ter pelo menos 6 caracteres.");
+    return;
+  }
+  try {
+    await Auth.updatePassword(newPassword);
+    document.getElementById("modal-new-password").style.display = "none";
+    document.getElementById("new-password-input").value = "";
+    showToast("Senha atualizada! Você já está conectado.");
+
+    STATE.isLoggedIn = true;
+    const user = await Auth.getUser();
+    const profile = await DB.getProfile(user.id);
+    await applyProfileToUI(profile);
+    navigateTo("discover");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar a senha.");
   }
 }
 

@@ -48,6 +48,19 @@ const Auth = {
   async signOut() {
     const { error } = await sb.auth.signOut();
     if (error) throw error;
+  },
+
+  async resetPasswordForEmail(email) {
+    // redirectTo precisa estar na allow-list configurada em supabase/config.toml
+    // (additional_redirect_urls) — senão o Supabase rejeita o link.
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+  },
+
+  async updatePassword(newPassword) {
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) throw error;
   }
 };
 
@@ -295,6 +308,19 @@ const DB = {
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || "Não foi possível conectar ao vídeo");
     return body.token;
+  },
+
+  // Exclusão real de conta (Auth Admin API, via Edge Function). Sempre exclui
+  // quem está autenticado no momento da chamada — nunca aceita um id à parte.
+  async deleteAccountForever() {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${session.access_token}` }
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Não foi possível excluir a conta");
+    return body;
   },
 
   // Quem está transmitindo de verdade agora (separado dos streamers mockados).
