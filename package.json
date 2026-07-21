@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "VibeLive — app de live streaming social (HTML/CSS/JS puro, sem build)",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test tests/smoke.spec.js",
+    "test:authenticated": "playwright test tests/authenticated.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0"

@@ -2296,6 +2296,78 @@ function copyPixCode() {
   showToast("Código Copia e Cola copiado!");
 }
 
+// Pagamento com cartão (Checkout Pro) — mesmo princípio de confiança do PIX
+// (o servidor decide o valor e só o webhook confirma), mas em vez de QR code
+// abre a página hospedada do Mercado Pago numa aba nova e acompanha o status
+// por Realtime na aba original, igual ao handlePixPaymentUpdate.
+async function openCardCheckoutModal(packageCode) {
+  if (!requireAuth()) return;
+  const display = PIX_PACKAGES_DISPLAY[packageCode];
+  if (!display) return;
+
+  document.getElementById("card-package-name").textContent = `${display.coins} Moedas`;
+  document.getElementById("card-total-price").textContent = `R$ ${display.price.toFixed(2).replace('.', ',')}`;
+  document.getElementById("card-checkout-open-btn").style.display = "none";
+  const statusBox = document.getElementById("card-status-box");
+  statusBox.style.background = "";
+  statusBox.innerHTML = `<div class="spinner-small"></div><span>Gerando pagamento...</span>`;
+  document.getElementById("card-checkout-modal").classList.add("active");
+
+  try {
+    const payment = await DB.createCardCheckout(packageCode);
+    STATE.activeCardPayment = payment;
+
+    window.open(payment.init_point, "_blank");
+    document.getElementById("card-checkout-open-btn").style.display = "block";
+    statusBox.innerHTML = `<div class="spinner-small"></div><span>Aguardando confirmação do pagamento...</span>`;
+
+    if (STATE.cardPaymentChannel) sb.removeChannel(STATE.cardPaymentChannel);
+    STATE.cardPaymentChannel = DB.subscribeToCardPayment(payment.id, handleCardPaymentUpdate);
+  } catch (err) {
+    statusBox.innerHTML = `<span>⚠️ ${err.message || "Não foi possível iniciar o pagamento com cartão."}</span>`;
+  }
+}
+
+function reopenCardCheckout() {
+  if (STATE.activeCardPayment) window.open(STATE.activeCardPayment.init_point, "_blank");
+}
+
+// Chamado pelo Realtime quando o webhook do Mercado Pago (via mp-webhook)
+// confirma o pagamento — a aba do checkout roda inteiramente fora do app.
+async function handleCardPaymentUpdate(row) {
+  STATE.activeCardPayment = row;
+  const statusBox = document.getElementById("card-status-box");
+
+  if (row.status === "approved") {
+    document.getElementById("card-checkout-open-btn").style.display = "none";
+    statusBox.style.background = "rgba(52, 211, 153, 0.15)";
+    statusBox.innerHTML = `<span style="font-size: 1.1rem;">✅</span><strong>Pagamento Recebido com Sucesso!</strong>`;
+    try {
+      const user = await Auth.getUser();
+      const profile = await DB.getProfile(user.id);
+      await applyProfileToUI(profile);
+    } catch (err) {
+      console.error("Falha ao atualizar saldo após pagamento com cartão:", err);
+    }
+    setTimeout(() => {
+      closeCardCheckoutModal();
+      showToast(`Moedas creditadas! +${row.coins_amount} Moedas adicionadas.`);
+    }, 1500);
+  } else if (row.status === "rejected" || row.status === "expired") {
+    statusBox.style.background = "rgba(241, 85, 76, 0.15)";
+    statusBox.innerHTML = `<strong>Pagamento não concluído. Tente novamente.</strong>`;
+  }
+}
+
+function closeCardCheckoutModal() {
+  document.getElementById("card-checkout-modal").classList.remove("active");
+  if (STATE.cardPaymentChannel) {
+    sb.removeChannel(STATE.cardPaymentChannel);
+    STATE.cardPaymentChannel = null;
+  }
+  STATE.activeCardPayment = null;
+}
+
 
 // 14. TRANSMITIR AO VIVO (GO LIVE)
 function initiateCameraStream() {

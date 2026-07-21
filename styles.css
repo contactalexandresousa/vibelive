@@ -1624,6 +1624,22 @@ body {
   color: #000;
 }
 
+.btn-pay-card {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 600;
+  margin-top: 6px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-pay-card:hover {
+  color: var(--text-primary);
+}
+
 /* Stats */
 .user-stats-grid {
   display: grid;

@@ -568,22 +568,26 @@
                     <div class="package-coins">🪙 50</div>
                     <div class="package-bonus">+5 bônus</div>
                     <button class="btn-buy-package">R$ 4,99</button>
+                    <button class="btn-pay-card" onclick="event.stopPropagation(); openCardCheckoutModal('p50')">💳 ou cartão</button>
                   </div>
                   <div class="package-card featured" onclick="openPixModal('p150')">
                     <div class="popular-ribbon">Popular</div>
                     <div class="package-coins">🪙 150</div>
                     <div class="package-bonus">+25 bônus</div>
                     <button class="btn-buy-package">R$ 12,99</button>
+                    <button class="btn-pay-card" onclick="event.stopPropagation(); openCardCheckoutModal('p150')">💳 ou cartão</button>
                   </div>
                   <div class="package-card" onclick="openPixModal('p500')">
                     <div class="package-coins">🪙 500</div>
                     <div class="package-bonus">+100 bônus</div>
                     <button class="btn-buy-package">R$ 39,99</button>
+                    <button class="btn-pay-card" onclick="event.stopPropagation(); openCardCheckoutModal('p500')">💳 ou cartão</button>
                   </div>
                   <div class="package-card" onclick="openPixModal('p1200')">
                     <div class="package-coins">🪙 1200</div>
                     <div class="package-bonus">+300 bônus</div>
                     <button class="btn-buy-package">R$ 79,99</button>
+                    <button class="btn-pay-card" onclick="event.stopPropagation(); openCardCheckoutModal('p1200')">💳 ou cartão</button>
                   </div>
                 </div>
               </div>
@@ -665,6 +669,32 @@
                   <div class="pix-status-box" id="pix-status-box">
                     <div class="spinner-small"></div>
                     <span>Aguardando confirmação do pagamento...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal de Pagamento com Cartão (Checkout Pro do Mercado Pago, aba nova) -->
+            <div class="pix-modal" id="card-checkout-modal">
+              <div class="pix-modal-overlay" onclick="closeCardCheckoutModal()"></div>
+              <div class="pix-modal-content">
+                <div class="pix-header">
+                  <h3>Pagamento com Cartão</h3>
+                  <button class="btn-close-pix" onclick="closeCardCheckoutModal()">×</button>
+                </div>
+                <div class="pix-body">
+                  <p>Finalize a compra de <strong id="card-package-name">50 Moedas</strong> numa aba segura do Mercado Pago.</p>
+
+                  <div class="pix-price-row">
+                    <span>Total a pagar:</span>
+                    <strong id="card-total-price">R$ 4,99</strong>
+                  </div>
+
+                  <button class="btn-follow-primary" style="width: 100%; margin-top: 4px;" id="card-checkout-open-btn" onclick="reopenCardCheckout()">Abrir pagamento em nova aba</button>
+
+                  <div class="pix-status-box" id="card-status-box">
+                    <div class="spinner-small"></div>
+                    <span>Gerando pagamento...</span>
                   </div>
                 </div>
               </div>

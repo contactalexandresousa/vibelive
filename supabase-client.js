@@ -4,8 +4,13 @@
    Level Security no banco, não do sigilo desta chave.
    ========================================================================== */
 
-const SUPABASE_URL = "https://mydudottsuvizwurrddz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_vgVCQ6DxZV9D6NYL0Gz0SQ_3BM8BsDe";
+// Override só existe pros testes autenticados em CI (tests/authenticated.spec.js),
+// que injetam window.__TEST_SUPABASE_URL__/__TEST_SUPABASE_KEY__ via
+// page.addInitScript ANTES deste arquivo carregar, pra rodar contra o projeto
+// Supabase de staging em vez de produção. Em qualquer outro contexto (app real,
+// suíte pública de fumaça) esses globais nunca existem e cai no valor de sempre.
+const SUPABASE_URL = (typeof window !== "undefined" && window.__TEST_SUPABASE_URL__) || "https://mydudottsuvizwurrddz.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = (typeof window !== "undefined" && window.__TEST_SUPABASE_KEY__) || "sb_publishable_vgVCQ6DxZV9D6NYL0Gz0SQ_3BM8BsDe";
 
 // URL pública do projeto LiveKit Cloud (vídeo ao vivo real via WebRTC).
 // Assim como a Supabase URL, é segura para ficar no cliente — a segurança
@@ -562,6 +567,33 @@ const DB = {
     const channel = sb.channel(`pix_payment:${paymentRowId}`)
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "pix_payments",
+        filter: `id=eq.${paymentRowId}`
+      }, (payload) => onUpdate(payload.new))
+      .subscribe();
+    return channel;
+  },
+
+  // Cartão de crédito (Checkout Pro) — mesma lógica de confiança do PIX:
+  // o cliente só escolhe o pacote, o valor e a confirmação vêm do servidor.
+  async createCardCheckout(packageCode) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/create-card-checkout`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ package_code: packageCode })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Não foi possível iniciar o pagamento com cartão");
+    return body.payment;
+  },
+
+  subscribeToCardPayment(paymentRowId, onUpdate) {
+    const channel = sb.channel(`card_payment:${paymentRowId}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "card_payments",
         filter: `id=eq.${paymentRowId}`
       }, (payload) => onUpdate(payload.new))
       .subscribe();

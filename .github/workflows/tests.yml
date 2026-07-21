@@ -32,3 +32,52 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+  check-staging-secret:
+    runs-on: ubuntu-latest
+    outputs:
+      has_secret: ${{ steps.check.outputs.has_secret }}
+    steps:
+      # `secrets` não pode ser referenciado direto num `if` de job (o
+      # GitHub Actions não permite) — por isso esse job intermediário só
+      # existe pra transformar a presença do secret num output normal, que
+      # o job seguinte já pode usar no próprio `if`.
+      - id: check
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+        run: echo "has_secret=${{ env.STAGING_SUPABASE_URL != '' }}" >> "$GITHUB_OUTPUT"
+
+  authenticated-tests:
+    needs: check-staging-secret
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Só roda quando os secrets de staging existem — sem eles o job pula
+    # inteiro em vez de falhar, então um fork ou um checkout sem esses
+    # secrets configurados não quebra o CI.
+    if: needs.check-staging-secret.outputs.has_secret == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar navegadores do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Rodar testes de fluxo autenticado (login, gasto, saque) contra o Supabase de staging
+        run: npm run test:authenticated
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-authenticated
+          path: playwright-report/
+          retention-days: 14

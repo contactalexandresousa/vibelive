@@ -1,10 +1,10 @@
-// Testes de fumaça: rodam contra o Supabase de PRODUÇÃO de verdade (não há
-// projeto de staging), então de propósito só fazem operações de leitura
-// pública e checagens de UI — nada que crie conta, gaste moeda ou grave
-// dado nenhum. Cobrem a classe de regressão mais comum (erro de JS que
-// quebra o carregamento, elemento com id errado, modal que não abre), não
-// os fluxos autenticados completos — esses continuam sendo testados
-// manualmente antes de cada lote de mudanças, como já vinha sendo feito.
+// Testes de fumaça: rodam contra o Supabase de PRODUÇÃO de verdade, então de
+// propósito só fazem operações de leitura pública e checagens de UI — nada
+// que crie conta, gaste moeda ou grave dado nenhum. Cobrem a classe de
+// regressão mais comum (erro de JS que quebra o carregamento, elemento com
+// id errado, modal que não abre). Fluxos autenticados completos (login,
+// gasto, saque) têm sua própria suíte em authenticated.spec.js, rodando
+// contra um projeto Supabase de staging separado — ver aquele arquivo.
 const { test, expect } = require("@playwright/test");
 
 test.describe("Carregamento inicial", () => {
