@@ -235,6 +235,31 @@ const DB = {
     return data;
   },
 
+  async getMyTransactions(limit = 50) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("wallet_transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data;
+  },
+
+  async getEarningsSummary() {
+    const { data, error } = await sb.rpc("get_earnings_summary");
+    if (error) throw error;
+    return data;
+  },
+
+  async getEarningsByDay(days = 14) {
+    const { data, error } = await sb.rpc("get_earnings_by_day", { p_days: days });
+    if (error) throw error;
+    return data;
+  },
+
   async getMyCpfStatus() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return null;

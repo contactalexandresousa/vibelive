@@ -1361,7 +1361,7 @@ const WITHDRAWAL_RATE_BRL = 0.03;
 const WITHDRAWAL_MIN_COINS = 500;
 
 const WITHDRAWAL_STATUS_LABELS = {
-  pending: { text: "Em análise", color: "var(--gold)" },
+  pending: { text: "Em análise", color: "var(--secondary)" },
   approved: { text: "Aprovado", color: "var(--primary)" },
   paid: { text: "Pago ✓", color: "#4CAF50" },
   rejected: { text: "Rejeitado", color: "var(--danger)" },
@@ -1615,6 +1615,152 @@ async function handleReviewWithdrawal(index, newStatus) {
   }
 }
 
+// 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
+const TRANSACTION_TYPE_INFO = {
+  gift: { label: "Presente enviado", icon: "🎁" },
+  gift_received: { label: "Presente recebido", icon: "🎁" },
+  quick_rose: { label: "Rosa enviada", icon: "🌹" },
+  quick_rose_received: { label: "Rosa recebida", icon: "🌹" },
+  pk_support: { label: "Apoio no PK", icon: "⚔️" },
+  vip_purchase: { label: "Passe VIP", icon: "👑" },
+  roulette_spin: { label: "Roleta", icon: "🎰" },
+  daily_checkin: { label: "Check-in diário", icon: "🗓️" },
+  pix_recharge: { label: "Recarga PIX", icon: "💳" },
+  private_content_unlock: { label: "Desbloqueio de conteúdo", icon: "🔓" },
+  private_content_sale: { label: "Venda de conteúdo", icon: "🔓" },
+  withdrawal_request: { label: "Pedido de saque", icon: "💸" },
+  withdrawal_refund: { label: "Saque rejeitado (estorno)", icon: "💸" },
+  subscription_charge: { label: "Assinatura", icon: "⭐" },
+  subscription_income: { label: "Assinatura recebida", icon: "⭐" },
+};
+
+async function openTransactionsModal() {
+  if (!requireAuth()) return;
+  const container = document.getElementById("transactions-list-container");
+  document.getElementById("modal-transactions").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const rows = await DB.getMyTransactions(50);
+    renderTransactionsList(rows);
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--light-gray);font-size:0.8rem;">Não foi possível carregar o extrato agora.</div>`;
+  }
+}
+
+function closeTransactionsModal() {
+  document.getElementById("modal-transactions").style.display = "none";
+}
+
+function renderTransactionsList(rows) {
+  const container = document.getElementById("transactions-list-container");
+  container.innerHTML = "";
+
+  if (rows.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">🧾</div>
+        <h3>Nenhuma movimentação ainda</h3>
+        <p>Assim que você comprar, gastar ou receber moedas, aparece aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  rows.forEach(tx => {
+    const info = TRANSACTION_TYPE_INFO[tx.type] || { label: tx.type, icon: "🪙" };
+    const positive = tx.amount > 0;
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.innerHTML = `
+      <div class="inbox-details">
+        <span class="inbox-name">${info.icon} ${escapeHtml(info.label)}</span>
+        <span class="inbox-message">${formatMessageTime(tx.created_at)}</span>
+      </div>
+      <div class="inbox-right">
+        <span style="font-size: 0.75rem; font-weight: 700; color: ${positive ? "#4CAF50" : "var(--danger)"};">${positive ? "+" : ""}${tx.amount} 🪙</span>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function openEarningsModal() {
+  if (!requireAuth()) return;
+  const cardsContainer = document.getElementById("earnings-summary-cards");
+  const chartContainer = document.getElementById("earnings-chart");
+  document.getElementById("modal-earnings").style.display = "flex";
+  cardsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  chartContainer.innerHTML = "";
+
+  try {
+    const [summary, byDay] = await Promise.all([
+      DB.getEarningsSummary(),
+      DB.getEarningsByDay(14),
+    ]);
+    renderEarningsSummary(summary);
+    renderEarningsChart(byDay);
+  } catch (err) {
+    cardsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Não foi possível carregar seus ganhos agora.</div>`;
+  }
+}
+
+function closeEarningsModal() {
+  document.getElementById("modal-earnings").style.display = "none";
+}
+
+function renderEarningsSummary(summary) {
+  const byType = {};
+  summary.forEach(row => { byType[row.type] = row.total; });
+
+  const gifts = (byType.gift_received || 0) + (byType.quick_rose_received || 0);
+  const privateContent = byType.private_content_sale || 0;
+  const subscriptions = byType.subscription_income || 0;
+  const total = gifts + privateContent + subscriptions;
+
+  const cards = [
+    { label: "Total ganho", value: total, icon: "🪙", highlight: true },
+    { label: "Presentes", value: gifts, icon: "🎁" },
+    { label: "Conteúdo privado", value: privateContent, icon: "🔓" },
+    { label: "Assinaturas", value: subscriptions, icon: "⭐" },
+  ];
+
+  const container = document.getElementById("earnings-summary-cards");
+  container.innerHTML = "";
+  cards.forEach(c => {
+    const card = document.createElement("div");
+    card.style.cssText = `display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-radius:12px; background:${c.highlight ? "rgba(255,77,109,0.1)" : "rgba(255,255,255,0.04)"}; border:1px solid var(--glass-border);`;
+    card.innerHTML = `
+      <span style="font-size:0.75rem; font-weight:${c.highlight ? "800" : "600"}; color:#fff;">${c.icon} ${c.label}</span>
+      <span style="font-size:0.85rem; font-weight:800; color:${c.highlight ? "var(--primary)" : "#fff"};">🪙 ${c.value}</span>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderEarningsChart(byDay) {
+  const container = document.getElementById("earnings-chart");
+  container.innerHTML = "";
+
+  // Preenche os 14 dias mesmo sem movimento, pra barra não "pular" dia.
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const found = byDay.find(r => r.day === key);
+    days.push({ key, total: found ? found.total : 0 });
+  }
+
+  const max = Math.max(1, ...days.map(d => d.total));
+  days.forEach(d => {
+    const bar = document.createElement("div");
+    const heightPct = Math.max(2, Math.round((d.total / max) * 100));
+    bar.style.cssText = `flex:1; height:${heightPct}%; background:${d.total > 0 ? "linear-gradient(180deg, var(--primary), var(--secondary))" : "rgba(255,255,255,0.08)"}; border-radius:4px 4px 0 0;`;
+    bar.title = `${d.key}: 🪙 ${d.total}`;
+    container.appendChild(bar);
+  });
+}
 
 // 13. LOJA DE MOEDAS E PAGAMENTO PIX REAL (MERCADO PAGO)
 // Catálogo só para exibição (nome/preço na tela) — o valor que realmente

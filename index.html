@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721g">
+  <link rel="stylesheet" href="styles.css?v=20260721h">
 </head>
 <body>
 
@@ -547,7 +547,12 @@
                   </div>
                 </div>
                 <p class="shop-subtitle">⚠️ Compre com PIX e receba na hora!</p>
-                
+
+                <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                  <button class="btn-follow-primary" style="flex: 1; height: 30px; font-size: 0.62rem; margin-top: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="openTransactionsModal()">🧾 Extrato</button>
+                  <button class="btn-follow-primary" style="flex: 1; height: 30px; font-size: 0.62rem; margin-top: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="openEarningsModal()">📊 Meus Ganhos</button>
+                </div>
+
                 <div class="coin-packages-grid">
                   <div class="package-card" onclick="openPixModal('p50')">
                     <div class="package-coins">🪙 50</div>
@@ -1147,6 +1152,42 @@
           </div>
         </div>
 
+        <!-- Modal: Extrato de Moedas (histórico real de créditos/débitos) -->
+        <div class="new-post-modal" id="modal-transactions" style="display: none;">
+          <div class="new-post-overlay" onclick="closeTransactionsModal()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>🧾 Extrato de Moedas</h3>
+              <button class="btn-close-new-post" onclick="closeTransactionsModal()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="transactions-list-container">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Painel de Ganhos do Criador -->
+        <div class="new-post-modal" id="modal-earnings" style="display: none;">
+          <div class="new-post-overlay" onclick="closeEarningsModal()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>📊 Meus Ganhos</h3>
+              <button class="btn-close-new-post" onclick="closeEarningsModal()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div id="earnings-summary-cards" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                <!-- Preenchido via JS -->
+              </div>
+              <p style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 10px;">Últimos 14 dias</p>
+              <div id="earnings-chart" style="display: flex; align-items: flex-end; gap: 4px; height: 110px; padding: 0 4px;">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal: Esqueci Minha Senha -->
         <div class="new-post-modal" id="modal-forgot-password" style="display: none;">
           <div class="new-post-overlay" onclick="closeForgotPasswordModal()"></div>
@@ -1469,9 +1510,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721g"></script>
+  <script src="supabase-client.js?v=20260721h"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721g"></script>
+  <script src="app.js?v=20260721h"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
