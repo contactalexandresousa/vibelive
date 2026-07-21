@@ -340,7 +340,7 @@ function renderNotificationsList() {
       <div class="discover-empty-state" style="display: flex;">
         <div class="discover-empty-icon">🔔</div>
         <h3>Nenhuma notificação ainda</h3>
-        <p>Quando alguém te seguir ou uma pessoa que você segue for ao vivo, aparece aqui.</p>
+        <p>Quando alguém te seguir, for ao vivo, ou te convidar pra uma live restrita, aparece aqui.</p>
       </div>
     `;
     return;
@@ -351,8 +351,10 @@ function renderNotificationsList() {
     const avatar = n.actor ? n.actor.avatar_url : "";
     const text = n.type === "new_follower"
       ? `${actorName} começou a seguir você`
-      : `${actorName} está ao vivo agora!`;
-    const icon = n.type === "new_follower" ? "👤" : "🔴";
+      : n.type === "live_invite"
+        ? `${actorName} te convidou pra uma live restrita`
+        : `${actorName} está ao vivo agora!`;
+    const icon = n.type === "new_follower" ? "👤" : n.type === "live_invite" ? "🔒" : "🔴";
 
     const item = document.createElement("div");
     item.className = n.read_at ? "inbox-item" : "inbox-item unread";
@@ -374,7 +376,7 @@ function handleNotificationClick(index) {
   const n = STATE.notifications[index];
   if (!n || !n.actor) return;
   closeNotificationPanel();
-  if (n.type === "went_live") {
+  if (n.type === "went_live" || n.type === "live_invite") {
     enterRealLiveRoom(n.actor_id);
   } else if (n.type === "new_follower") {
     openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
