@@ -21,6 +21,7 @@ const STATE = {
   liveChatChannel: null, // canal Supabase Realtime da sala de live atual
   liveKitRoom: null, // conexão LiveKit como espectador (assistindo vídeo real)
   myLiveKitRoom: null, // conexão LiveKit como transmissor (própria live)
+  myLiveGiftsChannel: null, // canal Realtime que avisa quem transmite quando chega um presente de verdade
   realLiveSessions: [], // quem está transmitindo de verdade agora
   realLiveSessionsChannel: null,
   currentLiveIsReal: false,
@@ -1357,6 +1358,28 @@ async function launchBroadcastingSession() {
     const titleInput = document.getElementById("live-title-input");
     const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
     await DB.startLiveSession(roomName, title);
+
+    // Avisa em tempo real quando um presente de verdade chega — o servidor já
+    // creditou a carteira (RPC send_gift/send_quick_rose); aqui só reflete
+    // isso na tela de quem está transmitindo.
+    if (STATE.myLiveGiftsChannel) sb.removeChannel(STATE.myLiveGiftsChannel);
+    if (STATE.myUsername) {
+      STATE.myLiveGiftsChannel = DB.subscribeToOwnGifts(STATE.myUsername, async (msg) => {
+        addMyLiveComment(msg.username, msg.text.replace(/^enviou /, ""), false, true);
+        try {
+          const profile = await DB.getProfile(user.id);
+          const delta = profile.coins - STATE.myCoins;
+          if (delta > 0) {
+            STATE.myLiveDiamonds += delta;
+            DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
+          }
+          STATE.myCoins = profile.coins;
+          renderCoins();
+        } catch (err) {
+          console.error("Falha ao atualizar saldo após presente recebido:", err);
+        }
+      });
+    }
   } catch (err) {
     console.error("Falha ao publicar transmissão real:", err);
     showToast("Sua câmera está ativa, mas outras pessoas podem não conseguir assistir agora.");
@@ -1375,6 +1398,10 @@ async function stopOwnLiveStream() {
   if (STATE.myLiveKitRoom) {
     STATE.myLiveKitRoom.disconnect();
     STATE.myLiveKitRoom = null;
+  }
+  if (STATE.myLiveGiftsChannel) {
+    sb.removeChannel(STATE.myLiveGiftsChannel);
+    STATE.myLiveGiftsChannel = null;
   }
   try {
     await DB.endLiveSession();

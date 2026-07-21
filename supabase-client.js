@@ -444,6 +444,21 @@ const DB = {
     return channel;
   },
 
+  // Avisa quem está transmitindo quando um presente chega de verdade na
+  // própria sala — sem presence (isso já é feito do lado de quem assiste),
+  // só a mensagem, pra atualizar o "diamantes acumulados" e o saldo na hora.
+  subscribeToOwnGifts(broadcasterHandle, onGift) {
+    const channel = sb.channel(`own_gifts:${broadcasterHandle}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "live_chat_messages",
+        filter: `broadcaster_handle=eq.${broadcasterHandle}`
+      }, (payload) => {
+        if (payload.new.type === "gift") onGift(payload.new);
+      })
+      .subscribe();
+    return channel;
+  },
+
   // Mensagens diretas (DM) reais — persistidas e sincronizadas via Realtime.
   async getConversations() {
     const { data: { user } } = await sb.auth.getUser();
