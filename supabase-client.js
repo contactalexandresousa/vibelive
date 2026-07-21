@@ -45,6 +45,14 @@ const Auth = {
     return data;
   },
 
+  async signInWithOAuth(provider) {
+    // redirectTo precisa estar na allow-list configurada em supabase/config.toml
+    // (additional_redirect_urls) — mesma regra do resetPasswordForEmail.
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo } });
+    if (error) throw error;
+  },
+
   async signOut() {
     const { error } = await sb.auth.signOut();
     if (error) throw error;

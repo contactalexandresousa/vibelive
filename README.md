@@ -8,7 +8,7 @@ App de lives ao vivo (estilo TikTok Live / Bigo) com backend real: contas, carte
 
 ## O que é real
 
-- **Contas de verdade** — cadastro por e-mail/senha ou acesso como visitante (conta anônima real, própria e privada). Recuperação de senha por e-mail e exclusão de conta permanente (apaga tudo: saldo, posts, seguidores, mensagens).
+- **Contas de verdade** — cadastro por e-mail/senha, login com Google (OAuth real via Supabase Auth) ou acesso como visitante (conta anônima real, própria e privada). Recuperação de senha por e-mail e exclusão de conta permanente (apaga tudo: saldo, posts, seguidores, mensagens).
 - **Carteira com proteção real** — moedas, XP e nível só mudam através de funções no servidor que decidem o valor internamente; o cliente nunca envia uma quantia. Reforçado por um trigger no banco que reverte qualquer tentativa de alterar essas colunas direto pela API.
 - **Vídeo ao vivo real** — quem clica em "Transmitir" publica a própria câmera via WebRTC (LiveKit); qualquer pessoa pode entrar e assistir o vídeo de verdade, sem gravação nem replay.
 - **Chat e presentes sincronizados** — mensagens da sala de live, presentes e contagem de espectadores (via Presence) chegam em tempo real pra todo mundo assistindo, via Supabase Realtime.

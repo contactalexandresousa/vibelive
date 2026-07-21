@@ -2104,79 +2104,16 @@ async function handleAuthSubmit() {
   }
 }
 
-function openSocialAuthModal(platform) {
-  const modal = document.getElementById("social-auth-modal");
-  const content = document.getElementById("social-auth-content");
-  
-  modal.classList.add("active");
-
-  if (platform === "whatsapp") {
-    content.innerHTML = `
-      <div class="social-auth-header">
-        <div class="social-logo-wrapper whatsapp">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.012 2c-5.506 0-9.97 4.463-9.97 9.969 0 1.937.554 3.743 1.517 5.275L2 22l4.912-1.286c1.468.802 3.149 1.258 4.937 1.258 5.506 0 9.969-4.462 9.969-9.968 0-5.506-4.463-9.969-9.969-9.969zm4.838 13.916c-.214.607-1.031 1.096-1.524 1.16-.363.047-.83.08-2.42-.572-2.032-.835-3.328-2.883-3.429-3.017-.1-.134-.8-1.055-.8-2.017s.5-1.428.679-1.61c.179-.18.39-.228.52-.228.13 0 .26 0 .373.007.117.007.274-.047.43.328.162.39.554 1.348.602 1.448.049.1.08.214.015.342-.065.13-.098.214-.196.328-.098.114-.205.255-.293.35-.098.1-.202.21-.087.41.114.195.507.834.996 1.272.63.565 1.16.74 1.323.824.162.085.257.07.35-.04.095-.11.41-.482.52-.647.11-.164.22-.138.373-.08.153.058.97.458 1.137.542.167.085.277.127.318.197.042.07.042.408-.172 1.015z"/></svg>
-        </div>
-        <h3>Conectar WhatsApp</h3>
-        <p>Insira abaixo o código de 4 dígitos enviado por mensagem para o seu celular.</p>
-      </div>
-
-      <div class="otp-container">
-        <input type="text" class="otp-input" maxlength="1" oninput="moveOtpFocus(this, 1)" placeholder="•">
-        <input type="text" class="otp-input" maxlength="1" oninput="moveOtpFocus(this, 2)" placeholder="•">
-        <input type="text" class="otp-input" maxlength="1" oninput="moveOtpFocus(this, 3)" placeholder="•">
-        <input type="text" class="otp-input" maxlength="1" oninput="moveOtpFocus(this, 4)" placeholder="•">
-      </div>
-
-      <button class="btn-social-auth-action whatsapp" onclick="handleSocialVerification('whatsapp')">
-        Confirmar Código
-      </button>
-    `;
-  } else if (platform === "instagram") {
-    content.innerHTML = `
-      <div class="social-auth-header">
-        <div class="social-logo-wrapper instagram">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-        </div>
-        <h3>Conectar Instagram</h3>
-        <p>VibeLive solicita permissão para acessar suas informações de perfil público do Instagram.</p>
-      </div>
-
-      <div class="instagram-profile-preview">
-        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" class="insta-avatar" alt="User Profile">
-        <div class="insta-details">
-          <span class="insta-name">Alexandre Silva</span>
-          <span class="insta-username">@zcitando</span>
-        </div>
-      </div>
-
-      <button class="btn-social-auth-action instagram" onclick="handleSocialVerification('instagram')">
-        Autorizar e Conectar
-      </button>
-    `;
+// Redireciona pro consentimento real do Google via Supabase Auth (OAuth).
+// O Supabase detecta sozinho o token na URL quando o Google manda de volta
+// pro app (igual já acontece com o link de recuperação de senha) e dispara
+// SIGNED_IN — o próprio fluxo de checagem de sessão do DOMContentLoaded pega isso.
+async function loginWithGoogle() {
+  try {
+    await Auth.signInWithOAuth("google");
+  } catch (err) {
+    showToast(err.message || "Não foi possível conectar com o Google.");
   }
-}
-
-function closeSocialAuthModal() {
-  const modal = document.getElementById("social-auth-modal");
-  modal.classList.remove("active");
-}
-
-function moveOtpFocus(input, index) {
-  if (input.value.length === 1 && index < 4) {
-    const inputs = document.querySelectorAll(".otp-input");
-    inputs[index].focus();
-  }
-}
-
-function handleSocialVerification(platform) {
-  closeSocialAuthModal();
-  showToast(`Autenticando via ${platform === "whatsapp" ? "WhatsApp" : "Instagram"}...`);
-
-  setTimeout(() => {
-    STATE.isLoggedIn = true;
-    showToast("Conexão social realizada com sucesso!");
-    navigateTo("discover");
-  }, 1200);
 }
 
 async function handleLogout() {
