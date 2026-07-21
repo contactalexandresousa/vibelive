@@ -114,6 +114,33 @@ const DB = {
     return `${data.publicUrl}?t=${Date.now()}`;
   },
 
+  // Painel de moderação — só retorna dados se a conta logada tiver
+  // is_admin=true (RLS bloqueia qualquer outra pessoa antes de chegar aqui).
+  async getAllReports() {
+    const { data, error } = await sb
+      .from("user_reports")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    const userIds = [...new Set(data.flatMap(r => [r.reporter_id, r.reported_id]).filter(Boolean))];
+    let profileMap = new Map();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profErr } = await sb
+        .from("profiles")
+        .select("id, username, display_name")
+        .in("id", userIds);
+      if (profErr) throw profErr;
+      profileMap = new Map(profiles.map(p => [p.id, p]));
+    }
+    return data.map(r => ({ ...r, reporter: profileMap.get(r.reporter_id), reported: profileMap.get(r.reported_id) }));
+  },
+
+  async markReportReviewed(reportId) {
+    const { error } = await sb.from("user_reports").update({ reviewed_at: new Date().toISOString() }).eq("id", reportId);
+    if (error) throw error;
+  },
+
   async updateProfile(userId, fields) {
     const { data, error } = await sb.from("profiles").update(fields).eq("id", userId).select().single();
     if (error) throw error;

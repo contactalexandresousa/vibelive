@@ -10,6 +10,8 @@ const STATE = {
   authMode: "login",
   myCoins: 99,
   myAvatarUrl: null,
+  isAdmin: false,
+  adminReports: [],
   activeScreen: "splash",
   followedStreamers: [], // IDs dos streamers seguidos
   blockedUsers: [], // ids (uuid) de quem eu bloqueei
@@ -1020,6 +1022,85 @@ async function submitReport() {
   }
 }
 
+// Painel de moderação — só quem tem is_admin=true no banco vê algo aqui;
+// pra qualquer outra conta o RLS simplesmente devolve zero denúncias.
+async function openAdminReportsPanel() {
+  if (!STATE.isAdmin) return;
+  const modal = document.getElementById("modal-admin-reports");
+  const container = document.getElementById("admin-reports-list-container");
+  if (!modal || !container) return;
+
+  container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  modal.style.display = "flex";
+
+  try {
+    STATE.adminReports = await DB.getAllReports();
+  } catch (err) {
+    console.error("Falha ao carregar denúncias:", err);
+    STATE.adminReports = [];
+  }
+  renderAdminReportsList();
+}
+
+function closeAdminReportsPanel() {
+  document.getElementById("modal-admin-reports").style.display = "none";
+}
+
+function renderAdminReportsList() {
+  const container = document.getElementById("admin-reports-list-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (STATE.adminReports.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">🛡️</div>
+        <h3>Nenhuma denúncia recebida</h3>
+        <p>Quando alguém denunciar um usuário, aparece aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  STATE.adminReports.forEach((r, index) => {
+    const reporterName = r.reporter ? (r.reporter.display_name || r.reporter.username) : "Usuário removido";
+    const reportedName = r.reported ? (r.reported.display_name || r.reported.username) : "Usuário removido";
+
+    const item = document.createElement("div");
+    item.className = r.reviewed_at ? "inbox-item" : "inbox-item unread";
+    item.style.flexDirection = "column";
+    item.style.alignItems = "stretch";
+    item.style.padding = "12px 0";
+
+    item.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <span class="inbox-name" style="display:block;">${reporterName} denunciou ${reportedName}</span>
+          <span class="inbox-message" style="display:block; margin-top:4px; white-space:normal;">${r.reason}</span>
+          <span class="inbox-time" style="display:block; margin-top:4px;">${formatMessageTime(r.created_at)}</span>
+        </div>
+        ${r.reviewed_at
+          ? '<span style="font-size:0.6rem; color:var(--light-gray); white-space:nowrap; margin-left:8px;">✓ revisada</span>'
+          : `<button class="btn-follow-primary" style="height:22px; font-size:0.6rem; padding:0 8px; white-space:nowrap; margin-left:8px;" onclick="handleMarkReportReviewed(${index})">Marcar revisada</button>`
+        }
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function handleMarkReportReviewed(index) {
+  const report = STATE.adminReports[index];
+  if (!report) return;
+  try {
+    await DB.markReportReviewed(report.id);
+    report.reviewed_at = new Date().toISOString();
+    renderAdminReportsList();
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar a denúncia.");
+  }
+}
+
 
 // 13. LOJA DE MOEDAS E PAGAMENTO PIX REAL (MERCADO PAGO)
 // Catálogo só para exibição (nome/preço na tela) — o valor que realmente
@@ -1859,12 +1940,16 @@ async function applyProfileToUI(profile) {
   STATE.isVIP = profile.is_vip;
   STATE.profileName = profile.display_name || profile.username;
   STATE.myAvatarUrl = profile.avatar_url;
+  STATE.isAdmin = !!profile.is_admin;
 
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");
   if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
   if (handleEl) handleEl.textContent = `@${profile.username}`;
   syncMyAvatarEverywhere(profile.avatar_url);
+
+  const adminBtn = document.getElementById("btn-admin-reports");
+  if (adminBtn) adminBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();
