@@ -361,15 +361,31 @@ function renderNotificationsList() {
     return;
   }
 
+  const WITHDRAWAL_NOTIF_TEXT = {
+    paid: coins => `Seu saque de 🪙${coins} foi pago!`,
+    approved: coins => `Seu saque de 🪙${coins} foi aprovado.`,
+    rejected: coins => `Seu saque de 🪙${coins} foi rejeitado — as moedas voltaram pra sua carteira.`,
+  };
+
   STATE.notifications.forEach((n, index) => {
     const actorName = escapeHtml(n.actor ? (n.actor.display_name || n.actor.username) : "Alguém");
-    const avatar = n.actor ? n.actor.avatar_url : "";
-    const text = n.type === "new_follower"
-      ? `${actorName} começou a seguir você`
-      : n.type === "live_invite"
-        ? `${actorName} te convidou pra uma live restrita`
-        : `${actorName} está ao vivo agora!`;
-    const icon = n.type === "new_follower" ? "👤" : n.type === "live_invite" ? "🔒" : "🔴";
+    const avatar = n.actor ? n.actor.avatar_url : DEFAULT_AVATAR_DATA_URI;
+
+    let text, icon;
+    if (n.type === "withdrawal_reviewed") {
+      const buildText = WITHDRAWAL_NOTIF_TEXT[n.metadata && n.metadata.status];
+      text = buildText ? buildText(n.metadata.coins_amount) : "Seu pedido de saque foi atualizado.";
+      icon = "💰";
+    } else if (n.type === "new_follower") {
+      text = `${actorName} começou a seguir você`;
+      icon = "👤";
+    } else if (n.type === "live_invite") {
+      text = `${actorName} te convidou pra uma live restrita`;
+      icon = "🔒";
+    } else {
+      text = `${actorName} está ao vivo agora!`;
+      icon = "🔴";
+    }
 
     const item = document.createElement("div");
     item.className = n.read_at ? "inbox-item" : "inbox-item unread";
@@ -1949,6 +1965,7 @@ async function openPrivateContentModal(creatorId) {
   STATE.viewingPrivateContentCreatorId = creatorId;
   document.getElementById("modal-private-content").style.display = "flex";
   document.getElementById("private-content-locked-view").style.display = "none";
+  document.getElementById("private-content-subscription-banner").style.display = "none";
   document.getElementById("private-content-grid").style.display = "none";
   document.getElementById("private-content-empty").style.display = "none";
 
@@ -1957,10 +1974,41 @@ async function openPrivateContentModal(creatorId) {
     const name = info.profile.display_name || info.profile.username;
     document.getElementById("private-content-title").textContent = `Conteúdo de ${name}`;
 
+    if (info.subscriptionActive) {
+      const endDate = new Date(info.subscription.current_period_end).toLocaleDateString("pt-BR");
+      const banner = document.getElementById("private-content-subscription-banner");
+      const statusText = document.getElementById("private-content-subscription-status-text");
+      const cancelBtn = document.getElementById("btn-cancel-subscription");
+      banner.style.display = "block";
+      if (info.subscription.cancel_at_period_end) {
+        statusText.textContent = `Assinatura cancelada — acesso até ${endDate}.`;
+        cancelBtn.style.display = "none";
+      } else {
+        statusText.textContent = `Assinante · renova em ${endDate}`;
+        cancelBtn.style.display = "inline-block";
+      }
+    }
+
     if (!info.unlocked) {
       document.getElementById("private-content-avatar").src = info.profile.avatar_url || "";
       document.getElementById("private-content-creator-name").textContent = name;
-      document.getElementById("private-content-price-label").textContent = info.profile.private_content_price;
+
+      const unlockBtn = document.getElementById("btn-unlock-private-content");
+      if (info.profile.private_content_price) {
+        document.getElementById("private-content-price-label").textContent = info.profile.private_content_price;
+        unlockBtn.style.display = "block";
+      } else {
+        unlockBtn.style.display = "none";
+      }
+
+      const subBtn = document.getElementById("btn-subscribe-creator");
+      if (info.profile.subscription_price_coins) {
+        document.getElementById("private-content-subscription-price-label").textContent = info.profile.subscription_price_coins;
+        subBtn.style.display = "block";
+      } else {
+        subBtn.style.display = "none";
+      }
+
       document.getElementById("private-content-locked-view").style.display = "block";
       return;
     }
@@ -1996,6 +2044,7 @@ async function unlockPrivateContentNow() {
   const creatorId = STATE.viewingPrivateContentCreatorId;
   if (!creatorId) return;
   const btn = document.getElementById("btn-unlock-private-content");
+  const priceLabel = document.getElementById("private-content-price-label").textContent;
   if (btn) { btn.disabled = true; btn.textContent = "Desbloqueando..."; }
   try {
     const profile = await DB.unlockPrivateContent(creatorId);
@@ -2006,7 +2055,40 @@ async function unlockPrivateContentNow() {
   } catch (err) {
     showToast(err.message || "Não foi possível desbloquear agora. Confira seu saldo de moedas.");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = `Desbloquear por 🪙 ${document.getElementById("private-content-price-label").textContent}`; }
+    if (btn) { btn.disabled = false; btn.textContent = `Desbloquear tudo por 🪙 ${priceLabel} (pagamento único)`; }
+  }
+}
+
+async function subscribeToCreatorNow() {
+  const creatorId = STATE.viewingPrivateContentCreatorId;
+  if (!creatorId) return;
+  const btn = document.getElementById("btn-subscribe-creator");
+  const priceLabel = document.getElementById("private-content-subscription-price-label").textContent;
+  if (btn) { btn.disabled = true; btn.textContent = "Assinando..."; }
+  try {
+    await DB.subscribeToCreator(creatorId);
+    const profile = await DB.getProfile((await Auth.getUser()).id);
+    STATE.myCoins = profile.coins;
+    renderCoins();
+    showToast("Assinatura ativada! Acesso liberado por 30 dias.");
+    await openPrivateContentModal(creatorId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível assinar agora. Confira seu saldo de moedas.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = `Assinar por 🪙 ${priceLabel}/mês`; }
+  }
+}
+
+async function cancelSubscriptionNow() {
+  const creatorId = STATE.viewingPrivateContentCreatorId;
+  if (!creatorId) return;
+  if (!confirm("Cancelar a assinatura? Você mantém o acesso até o fim do período já pago, mas ela não renova de novo.")) return;
+  try {
+    await DB.cancelSubscription(creatorId);
+    showToast("Assinatura cancelada — acesso mantido até o fim do período atual.");
+    await openPrivateContentModal(creatorId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível cancelar agora.");
   }
 }
 
@@ -2598,6 +2680,55 @@ function openProfileSettingsModal() {
   document.getElementById("edit-profile-bio").value = bioEl ? bioEl.textContent : "Criador digital • Focado em lives interativas 🎬🍿";
   document.getElementById("edit-profile-avatar-preview").src = STATE.myAvatarUrl || "";
   document.getElementById("edit-profile-private-price").value = STATE.myPrivateContentPrice || "";
+  document.getElementById("edit-profile-subscription-price").value = STATE.mySubscriptionPrice || "";
+
+  loadMyCpfStatus();
+}
+
+function maskCpf(digits) {
+  return `***.***.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+}
+
+async function loadMyCpfStatus() {
+  const input = document.getElementById("edit-profile-cpf");
+  const label = document.getElementById("cpf-status-label");
+  if (!input || !label) return;
+  label.textContent = "";
+  try {
+    const cpf = await DB.getMyCpfStatus();
+    if (cpf) {
+      input.value = maskCpf(cpf);
+      input.disabled = true;
+      label.textContent = "CPF confirmado ✓";
+      label.style.color = "#4CAF50";
+    } else {
+      input.value = "";
+      input.disabled = false;
+      label.textContent = "Obrigatório antes de solicitar saque.";
+      label.style.color = "var(--light-gray)";
+    }
+  } catch (err) {
+    console.error("Falha ao carregar status do CPF:", err);
+  }
+}
+
+async function saveMyCpf() {
+  const input = document.getElementById("edit-profile-cpf");
+  const label = document.getElementById("cpf-status-label");
+  const cpf = input.value.trim();
+  if (!cpf) {
+    label.textContent = "Digite seu CPF.";
+    label.style.color = "var(--danger)";
+    return;
+  }
+  try {
+    await DB.setMyCpf(cpf);
+    showToast("CPF confirmado!");
+    await loadMyCpfStatus();
+  } catch (err) {
+    label.textContent = err.message || "Não foi possível confirmar o CPF agora.";
+    label.style.color = "var(--danger)";
+  }
 }
 
 async function handleAvatarFileSelected(event) {
@@ -2654,6 +2785,8 @@ async function saveProfileChanges() {
   const newBio = document.getElementById("edit-profile-bio").value.trim();
   const priceRaw = document.getElementById("edit-profile-private-price").value.trim();
   const newPrice = priceRaw ? Math.max(1, Math.round(Number(priceRaw))) : null;
+  const subPriceRaw = document.getElementById("edit-profile-subscription-price").value.trim();
+  const newSubPrice = subPriceRaw ? Math.max(1, Math.round(Number(subPriceRaw))) : null;
 
   if (!newName || !newHandle) {
     showToast("Nome e Username não podem ser vazios!");
@@ -2663,12 +2796,16 @@ async function saveProfileChanges() {
 
   try {
     const user = await Auth.getUser();
-    const profile = await DB.updateProfile(user.id, { display_name: newName, username: newHandle, bio: newBio, private_content_price: newPrice });
+    const profile = await DB.updateProfile(user.id, {
+      display_name: newName, username: newHandle, bio: newBio,
+      private_content_price: newPrice, subscription_price_coins: newSubPrice
+    });
 
     // Refletir exatamente o que foi salvo no servidor (não o que foi digitado) —
     // o nome usado no chat ao vivo (STATE.profileName) também é atualizado aqui.
     STATE.profileName = profile.display_name || profile.username;
     STATE.myPrivateContentPrice = profile.private_content_price;
+    STATE.mySubscriptionPrice = profile.subscription_price_coins;
     const nameEl = document.querySelector(".profile-bio-info h3");
     const handleEl = document.querySelector(".profile-handle");
     const bioEl = document.querySelector(".profile-bio-text");
@@ -2879,6 +3016,14 @@ function toggleAuthTab(mode) {
   }
 }
 
+function openHelpModal() {
+  document.getElementById("modal-help").style.display = "flex";
+}
+
+function closeHelpModal() {
+  document.getElementById("modal-help").style.display = "none";
+}
+
 function openTermsModal() {
   document.getElementById("modal-terms").style.display = "flex";
 }
@@ -3026,6 +3171,7 @@ async function applyProfileToUI(profile) {
   STATE.myUsername = profile.username;
   STATE.myAvatarUrl = profile.avatar_url;
   STATE.myPrivateContentPrice = profile.private_content_price;
+  STATE.mySubscriptionPrice = profile.subscription_price_coins;
   STATE.isAdmin = !!profile.is_admin;
 
   const nameEl = document.querySelector(".profile-bio-info h3");

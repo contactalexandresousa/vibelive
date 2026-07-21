@@ -235,6 +235,20 @@ const DB = {
     return data;
   },
 
+  async getMyCpfStatus() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await sb.from("user_identity").select("cpf").eq("user_id", user.id).maybeSingle();
+    if (error) throw error;
+    return data ? data.cpf : null;
+  },
+
+  async setMyCpf(cpf) {
+    const { data, error } = await sb.rpc("set_my_cpf", { p_cpf: cpf });
+    if (error) throw error;
+    return data;
+  },
+
   async requestWithdrawal(coins, pixKey, pixKeyType) {
     const { data, error } = await sb.rpc("request_withdrawal", {
       p_coins: coins, p_pix_key: pixKey, p_pix_key_type: pixKeyType
@@ -338,15 +352,23 @@ const DB = {
     const { data: { user } } = await sb.auth.getUser();
     const isOwner = user && user.id === creatorId;
 
-    const profileRes = await sb.from("profiles").select("id, username, display_name, avatar_url, private_content_price").eq("id", creatorId).single();
+    const profileRes = await sb.from("profiles").select("id, username, display_name, avatar_url, private_content_price, subscription_price_coins").eq("id", creatorId).single();
     if (profileRes.error) throw profileRes.error;
 
-    let unlocked = isOwner;
+    let unlockedOneTime = isOwner;
+    let subscription = null;
     if (!isOwner && user) {
       const unlockRes = await sb.from("private_content_unlocks").select("creator_id").eq("creator_id", creatorId).eq("unlocker_id", user.id).maybeSingle();
       if (unlockRes.error) throw unlockRes.error;
-      unlocked = !!unlockRes.data;
+      unlockedOneTime = !!unlockRes.data;
+
+      const subRes = await sb.from("creator_subscriptions").select("*").eq("creator_id", creatorId).eq("subscriber_id", user.id).maybeSingle();
+      if (subRes.error) throw subRes.error;
+      subscription = subRes.data;
     }
+
+    const subscriptionActive = !!subscription && subscription.status === "active" && new Date(subscription.current_period_end) > new Date();
+    const unlocked = isOwner || unlockedOneTime || subscriptionActive;
 
     let posts = [];
     if (unlocked) {
@@ -355,7 +377,19 @@ const DB = {
       posts = postsRes.data;
     }
 
-    return { profile: profileRes.data, isOwner, unlocked, posts };
+    return { profile: profileRes.data, isOwner, unlocked, unlockedOneTime, subscription, subscriptionActive, posts };
+  },
+
+  async subscribeToCreator(creatorId) {
+    const { data, error } = await sb.rpc("subscribe_to_creator", { p_creator_id: creatorId });
+    if (error) throw error;
+    return data;
+  },
+
+  async cancelSubscription(creatorId) {
+    const { data, error } = await sb.rpc("cancel_subscription", { p_creator_id: creatorId });
+    if (error) throw error;
+    return data;
   },
 
   async getMyPosts() {

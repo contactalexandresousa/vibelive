@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721f">
+  <link rel="stylesheet" href="styles.css?v=20260721g">
 </head>
 <body>
 
@@ -893,8 +893,13 @@
                 <textarea id="edit-profile-bio">Criador digital • Focado em lives interativas 🎬🍿</textarea>
               </div>
               <div class="form-group-post">
-                <label for="edit-profile-private-price">Preço do conteúdo privado (moedas, vazio = não vender):</label>
+                <label for="edit-profile-private-price">Preço do conteúdo privado — desbloqueio único (moedas, vazio = não vender):</label>
                 <input type="number" id="edit-profile-private-price" min="1" step="1" placeholder="Ex: 50">
+              </div>
+
+              <div class="form-group-post">
+                <label for="edit-profile-subscription-price">Preço da assinatura mensal (moedas/mês, vazio = sem assinatura):</label>
+                <input type="number" id="edit-profile-subscription-price" min="1" step="1" placeholder="Ex: 30">
               </div>
 
               <button class="btn-publish-post" style="margin-top: 10px;" onclick="saveProfileChanges()">
@@ -903,6 +908,10 @@
 
               <button class="btn-publish-post" id="btn-toggle-push" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="togglePushNotifications()">
                 🔔 Ativar Notificações
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openHelpModal()">
+                ❓ Central de Ajuda
               </button>
 
               <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openTermsModal()">
@@ -922,6 +931,15 @@
               </button>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
+
+              <div class="form-group-post">
+                <label for="edit-profile-cpf">CPF (necessário pra sacar moedas):</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="edit-profile-cpf" placeholder="000.000.000-00" style="flex: 1;">
+                  <button class="btn-follow-primary" style="height: 40px; padding: 0 14px; font-size: 0.68rem; margin-top: 0; white-space: nowrap;" onclick="saveMyCpf()">Salvar</button>
+                </div>
+                <span id="cpf-status-label" style="font-size: 0.62rem; color: var(--light-gray);"></span>
+              </div>
 
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
                 <div style="display: flex; flex-direction: column; text-align: left;">
@@ -1077,7 +1095,8 @@
               <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
                 Saldo atual: <strong id="withdraw-current-balance" style="color: #fff;">🪙 0</strong><br>
                 Taxa de conversão: R$ 0,03 por moeda · saque mínimo de 500 moedas.<br>
-                O pagamento é enviado manualmente via PIX depois de revisado — pode levar até 2 dias úteis.
+                O pagamento é enviado manualmente via PIX depois de revisado — pode levar até 2 dias úteis.<br>
+                É preciso ter o CPF confirmado nas configurações de perfil antes de sacar.
               </p>
 
               <div class="form-group-post">
@@ -1184,8 +1203,13 @@
               <div id="private-content-locked-view" style="text-align: center; padding: 10px 0 20px;">
                 <img id="private-content-avatar" src="" alt="" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
                 <h3 id="private-content-creator-name" style="margin-bottom: 6px; font-family: var(--font-display);"></h3>
-                <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 18px;">Desbloqueie o conteúdo exclusivo desta pessoa — pagamento único, acesso pra sempre.</p>
-                <button class="btn-follow-primary" id="btn-unlock-private-content" style="width: 100%; margin-top: 0;" onclick="unlockPrivateContentNow()">Desbloquear por 🪙 <span id="private-content-price-label"></span></button>
+                <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 18px;">Desbloqueie o conteúdo exclusivo desta pessoa.</p>
+                <button class="btn-follow-primary" id="btn-unlock-private-content" style="width: 100%; margin-top: 0;" onclick="unlockPrivateContentNow()">Desbloquear tudo por 🪙 <span id="private-content-price-label"></span> (pagamento único)</button>
+                <button class="btn-follow-primary" id="btn-subscribe-creator" style="width: 100%; margin-top: 10px; display: none; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="subscribeToCreatorNow()">Assinar por 🪙 <span id="private-content-subscription-price-label"></span>/mês</button>
+              </div>
+              <div id="private-content-subscription-banner" style="display: none; text-align: center; padding: 10px; margin-bottom: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px;">
+                <p style="font-size: 0.7rem; color: var(--text-secondary);" id="private-content-subscription-status-text"></p>
+                <button class="btn-follow-primary" id="btn-cancel-subscription" style="height: 26px; padding: 0 12px; font-size: 0.62rem; margin-top: 8px; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="cancelSubscriptionNow()">Cancelar assinatura</button>
               </div>
               <div id="private-content-grid" class="profile-posts-grid" style="display: none;"></div>
               <div id="private-content-empty" class="discover-empty-state" style="display: none;">
@@ -1307,6 +1331,49 @@
           </div>
         </div>
 
+        <!-- Modal: Central de Ajuda / FAQ (estático, sem depender do backend) -->
+        <div class="new-post-modal" id="modal-help" style="display: none;">
+          <div class="new-post-overlay" onclick="closeHelpModal()"></div>
+          <div class="new-post-content" style="align-items: stretch; height: 82%;">
+            <header class="new-post-header">
+              <h3>❓ Central de Ajuda</h3>
+              <button class="btn-close-new-post" onclick="closeHelpModal()">×</button>
+            </header>
+            <div class="new-post-body legal-text">
+              <h4>Conta</h4>
+              <p><strong>Preciso confirmar meu e-mail?</strong><br>Sim — depois de criar a conta, enviamos um link de confirmação. Sem clicar nele, o login não funciona.</p>
+              <p><strong>Esqueci minha senha, e agora?</strong><br>Na tela de login, toque em "Esqueci minha senha" e siga o link que chega no seu e-mail.</p>
+              <p><strong>Por que preciso confirmar minha idade?</strong><br>O VibeLive é só pra maiores de 18 anos — é uma verificação real, feita no servidor, não só uma caixinha decorativa.</p>
+              <p><strong>Como excluo minha conta?</strong><br>Em Configurações de Perfil, no final da tela, tem o botão "Excluir Minha Conta". A ação é permanente.</p>
+
+              <h4>Moedas e PIX</h4>
+              <p><strong>Como compro moedas?</strong><br>No seu perfil, toque em "Minha Carteira" e escolha um pacote. O pagamento é via PIX real e as moedas caem na hora que o pagamento é aprovado.</p>
+              <p><strong>O PIX tem prazo pra pagar?</strong><br>Sim, 5 minutos a partir da geração do QR Code. Depois disso, gere um novo.</p>
+              <p><strong>Comprei e as moedas não caíram, o que faço?</strong><br>Confirme se o pagamento foi realmente aprovado no seu banco. Se sim e as moedas não apareceram em alguns minutos, entre em contato pelo suporte (veja mais abaixo).</p>
+
+              <h4>Saque de moedas (criadores)</h4>
+              <p><strong>Como saco as moedas que recebi?</strong><br>Em Configurações de Perfil, toque em "Sacar", informe quantas moedas (mínimo 500) e sua chave PIX.</p>
+              <p><strong>Quanto vale cada moeda no saque?</strong><br>R$ 0,03 por moeda. É uma taxa diferente da compra porque a plataforma retém uma parte pra se manter.</p>
+              <p><strong>Quanto tempo demora?</strong><br>O pedido passa por uma revisão manual antes do pagamento — pode levar até 2 dias úteis. Você recebe uma notificação assim que for revisado.</p>
+              <p><strong>Meu saque foi rejeitado, perdi as moedas?</strong><br>Não — se um saque é rejeitado, as moedas voltam automaticamente pra sua carteira.</p>
+
+              <h4>Conteúdo privado</h4>
+              <p><strong>Como vejo o conteúdo pago de quem eu sigo?</strong><br>Toque no ícone de diamante 💎 na barra inferior.</p>
+              <p><strong>Desbloqueei um conteúdo, preciso pagar de novo pra ver depois?</strong><br>Não — o desbloqueio é permanente pra aquele conteúdo específico.</p>
+
+              <h4>Lives</h4>
+              <p><strong>Posso proteger minha live com senha?</strong><br>Sim — ao configurar sua transmissão, escolha "Com senha" na privacidade da live.</p>
+              <p><strong>Como faço uma live só pra quem eu convidar?</strong><br>Escolha "Só convidados" — só aparecem na lista pessoas que já seguem você E que você também segue de volta.</p>
+
+              <h4>Segurança e denúncias</h4>
+              <p><strong>Como bloqueio ou denuncio alguém?</strong><br>No perfil da pessoa, use o menu de opções (⋮) pra bloquear ou denunciar. Denúncias vão direto pra revisão da nossa moderação.</p>
+
+              <h4>Ainda com dúvida?</h4>
+              <p>Fale com a gente pelo e-mail cadastrado como administrador da plataforma, ou use o botão de denúncia dentro do app se for sobre outro usuário.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal: Termos de Uso e Política de Privacidade (texto completo, aberto de vários lugares) -->
         <div class="new-post-modal" id="modal-terms" style="display: none;">
           <div class="new-post-overlay" onclick="closeTermsModal()"></div>
@@ -1402,9 +1469,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721f"></script>
+  <script src="supabase-client.js?v=20260721g"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721f"></script>
+  <script src="app.js?v=20260721g"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
