@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260721c">
 </head>
 <body>
 
@@ -1231,9 +1231,13 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <!-- Cliente LiveKit (vídeo ao vivo real via WebRTC) -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-  <script src="supabase-client.js"></script>
+  <!-- ?v= muda a cada deploy que toca supabase-client.js/app.js — o GitHub Pages
+       cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
+       isso um F5 normal podia continuar rodando código antigo por até 10 minutos
+       depois de um fix já estar publicado. -->
+  <script src="supabase-client.js?v=20260721c"></script>
   <!-- Script Principal -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20260721c"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
