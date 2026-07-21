@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721d">
+  <link rel="stylesheet" href="styles.css?v=20260721e">
 </head>
 <body>
 
@@ -84,6 +84,13 @@
                   <div class="auth-form-group" id="auth-confirm-password-group" style="display: none;">
                     <input type="password" id="auth-confirm-password" placeholder="Confirme a senha">
                   </div>
+                  <div class="auth-form-group" id="auth-birthdate-group" style="display: none;">
+                    <input type="date" id="auth-birthdate" placeholder="Data de nascimento">
+                  </div>
+                  <label class="privacy-option" id="auth-terms-group" style="display: none; margin-bottom: 14px;">
+                    <input type="checkbox" id="auth-terms-checkbox">
+                    <div><span style="font-size: 0.68rem;">Tenho 18 anos ou mais e li e aceito os <a href="#" onclick="event.preventDefault(); openTermsModal();" style="color: var(--primary);">Termos de Uso e Política de Privacidade</a></span></div>
+                  </label>
                   <button class="btn-auth-submit" id="btn-auth-submit" onclick="handleAuthSubmit()">Entrar</button>
                   <button type="button" id="btn-forgot-password" onclick="openForgotPasswordModal()" style="display: block; margin: 10px auto 0; background: none; border: none; color: var(--light-gray); font-size: 0.68rem; text-decoration: underline; cursor: pointer;">Esqueci minha senha</button>
                 </div>
@@ -894,6 +901,14 @@
                 Salvar Alterações
               </button>
 
+              <button class="btn-publish-post" id="btn-toggle-push" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="togglePushNotifications()">
+                🔔 Ativar Notificações
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openTermsModal()">
+                📄 Termos de Uso e Privacidade
+              </button>
+
               <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="handleLogout(); closeProfileSettingsModal();">
                 Sair da Conta 🚪
               </button>
@@ -902,8 +917,20 @@
                 🛡️ Painel de Denúncias (Admin)
               </button>
 
+              <button class="btn-publish-post" id="btn-admin-withdrawals" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminWithdrawalsPanel()">
+                💰 Painel de Saques (Admin)
+              </button>
+
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
-              
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <div style="display: flex; flex-direction: column; text-align: left;">
+                  <span style="font-size: 0.72rem; font-weight: 700; color: #fff;">Sacar moedas 💰</span>
+                  <span style="font-size: 0.58rem; color: var(--light-gray);">Converta suas moedas em PIX de verdade</span>
+                </div>
+                <button class="btn-follow-primary" style="height: 24px; padding: 0 10px; font-size: 0.58rem; margin-top: 0;" onclick="openWithdrawModal()">Sacar</button>
+              </div>
+
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
                 <div style="display: flex; flex-direction: column; text-align: left;">
                   <span style="font-size: 0.72rem; font-weight: 700; color: #fff;">Passe VIP Ouro 👑</span>
@@ -913,7 +940,7 @@
               </div>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 10px 0; padding-top: 10px;"></div>
-              
+
               <button class="btn-logout-profile" style="margin: 0; width: 100%; border-color: rgba(241, 85, 76, 0.4); color: var(--danger); background: rgba(241, 85, 76, 0.06);" onclick="deleteAccount()">
                 Excluir Minha Conta ⚠️
               </button>
@@ -1032,6 +1059,69 @@
             </header>
             <div class="search-results-scroll">
               <div class="inbox-list" id="admin-reports-list-container">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Sacar Moedas (criador pede saque real via PIX) -->
+        <div class="new-post-modal" id="modal-withdraw" style="display: none;">
+          <div class="new-post-overlay" onclick="closeWithdrawModal()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>💰 Sacar Moedas</h3>
+              <button class="btn-close-new-post" onclick="closeWithdrawModal()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+                Saldo atual: <strong id="withdraw-current-balance" style="color: #fff;">🪙 0</strong><br>
+                Taxa de conversão: R$ 0,03 por moeda · saque mínimo de 500 moedas.<br>
+                O pagamento é enviado manualmente via PIX depois de revisado — pode levar até 2 dias úteis.
+              </p>
+
+              <div class="form-group-post">
+                <label for="withdraw-coins-input">Quantas moedas quer sacar:</label>
+                <input type="number" id="withdraw-coins-input" min="500" step="1" placeholder="Mín. 500" oninput="updateWithdrawEstimate()">
+                <span style="font-size: 0.68rem; color: var(--light-gray);" id="withdraw-estimate-label"></span>
+              </div>
+
+              <div class="form-group-post">
+                <label for="withdraw-pix-key-type">Tipo de chave PIX:</label>
+                <select id="withdraw-pix-key-type" style="width: 100%; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
+                  <option value="cpf">CPF</option>
+                  <option value="email">E-mail</option>
+                  <option value="phone">Celular</option>
+                  <option value="random">Chave aleatória</option>
+                </select>
+              </div>
+
+              <div class="form-group-post">
+                <label for="withdraw-pix-key-input">Sua chave PIX:</label>
+                <input type="text" id="withdraw-pix-key-input" placeholder="Digite sua chave PIX">
+              </div>
+
+              <span class="onboarding-error" id="withdraw-error"></span>
+              <button class="btn-publish-post" style="margin-top: 6px;" onclick="submitWithdrawRequest()">Solicitar Saque</button>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 12px; padding-top: 12px;">
+                <p style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Seus pedidos</p>
+                <div class="inbox-list" id="withdraw-history-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: revisar solicitações de saque -->
+        <div class="new-post-modal" id="modal-admin-withdrawals" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminWithdrawalsPanel()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>💰 Solicitações de Saque</h3>
+              <button class="btn-close-new-post" onclick="closeAdminWithdrawalsPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="admin-withdrawals-list-container">
                 <!-- Preenchido via JS -->
               </div>
             </div>
@@ -1217,6 +1307,91 @@
           </div>
         </div>
 
+        <!-- Modal: Termos de Uso e Política de Privacidade (texto completo, aberto de vários lugares) -->
+        <div class="new-post-modal" id="modal-terms" style="display: none;">
+          <div class="new-post-overlay" onclick="closeTermsModal()"></div>
+          <div class="new-post-content" style="align-items: stretch; height: 82%;">
+            <header class="new-post-header">
+              <h3>Termos e Privacidade</h3>
+              <button class="btn-close-new-post" onclick="closeTermsModal()">×</button>
+            </header>
+            <div class="auth-tabs" style="margin-bottom: 12px;">
+              <button class="auth-tab-btn active" id="btn-terms-tab-uso" onclick="toggleTermsTab('uso')">Termos de Uso</button>
+              <button class="auth-tab-btn" id="btn-terms-tab-privacidade" onclick="toggleTermsTab('privacidade')">Privacidade</button>
+            </div>
+            <div class="new-post-body legal-text" id="terms-tab-uso">
+              <h4>1. Sobre o VibeLive</h4>
+              <p>O VibeLive é uma plataforma de transmissão ao vivo e conteúdo entre criadores e usuários. Ao criar uma conta, você concorda com estes Termos de Uso e com a nossa Política de Privacidade.</p>
+
+              <h4>2. Idade mínima</h4>
+              <p>É preciso ter <strong>18 anos ou mais</strong> para criar uma conta. Contas com idade informada abaixo disso são recusadas automaticamente no cadastro.</p>
+
+              <h4>3. Sua conta</h4>
+              <p>Você é responsável por manter sua senha em sigilo e por tudo o que acontece na sua conta. Não é permitido criar múltiplas contas para burlar limites, bônus ou banimentos.</p>
+
+              <h4>4. Conteúdo e conduta</h4>
+              <p>Você é responsável pelo conteúdo que publica, transmite ou envia. É proibido: assédio, discurso de ódio, exploração ou sexualização de menores (tolerância zero, com denúncia às autoridades quando aplicável), violência real, fraude e spam. Contas denunciadas passam por revisão da nossa moderação, que pode remover conteúdo, suspender ou encerrar contas.</p>
+
+              <h4>5. Moedas, pagamentos e saques</h4>
+              <p>Moedas são compradas via PIX e usadas para presentes, conteúdo privado e recursos VIP dentro da plataforma — não são moeda de curso legal e não podem ser transferidas entre contas fora dos mecanismos do app. Compras de moedas não são reembolsáveis, exceto quando exigido por lei.</p>
+              <p>Criadores podem solicitar o saque de moedas recebidas, convertidas em reais a uma taxa informada no momento do pedido. Saques passam por análise manual antes do pagamento via PIX e podem ser recusados em caso de suspeita de fraude, sendo as moedas devolvidas à carteira do solicitante nesse caso.</p>
+
+              <h4>6. Conteúdo privado com assinatura/desbloqueio</h4>
+              <p>Cada criador define livremente o preço do próprio conteúdo privado. O desbloqueio dá acesso permanente àquele conteúdo específico; não constitui uma assinatura recorrente nem garante acesso a conteúdo publicado depois.</p>
+
+              <h4>7. Suspensão e encerramento</h4>
+              <p>Podemos suspender ou encerrar contas que violem estes termos. Você pode excluir sua conta a qualquer momento pelas configurações de perfil.</p>
+
+              <h4>8. Alterações</h4>
+              <p>Podemos atualizar estes termos. Mudanças relevantes serão comunicadas dentro do app.</p>
+
+              <h4>9. Contato</h4>
+              <p>Dúvidas ou denúncias: use o botão de denúncia dentro do app, disponível no perfil de cada usuário.</p>
+            </div>
+            <div class="new-post-body legal-text" id="terms-tab-privacidade" style="display: none;">
+              <h4>1. Quais dados coletamos</h4>
+              <p>E-mail e senha (autenticação), data de nascimento (verificação de idade), nome de exibição, @usuário, foto de perfil e biografia (opcionais, que você mesmo define), conteúdo que você publica ou envia (posts, mensagens, comentários), transações de moedas (histórico de compras, presentes e saques) e dados técnicos básicos de uso do app.</p>
+
+              <h4>2. Para que usamos</h4>
+              <p>Operar sua conta e o app (login, exibir seu perfil, processar pagamentos e saques), moderar conteúdo e investigar denúncias, e cumprir obrigações legais (como registros de transação financeira).</p>
+
+              <h4>3. Com quem compartilhamos</h4>
+              <p>Processadores de pagamento (Mercado Pago, para processar PIX) e provedores de infraestrutura (banco de dados, hospedagem, vídeo ao vivo) — estritamente para operar o serviço. Não vendemos seus dados a terceiros.</p>
+
+              <h4>4. Seus direitos (LGPD)</h4>
+              <p>Você pode a qualquer momento: acessar os dados da sua conta, corrigir informações do perfil diretamente pelo app, e excluir sua conta e dados associados pelo botão "Excluir Minha Conta" nas configurações de perfil. Registros de transações financeiras podem ser retidos por obrigação legal mesmo após a exclusão da conta.</p>
+
+              <h4>5. Segurança</h4>
+              <p>Senhas nunca são armazenadas em texto puro. Saldo de moedas e permissões administrativas só podem ser alterados por rotinas internas do servidor, nunca diretamente pelo cliente.</p>
+
+              <h4>6. Cookies e armazenamento local</h4>
+              <p>Usamos armazenamento local do navegador apenas para manter sua sessão logada — não usamos cookies de rastreamento publicitário.</p>
+
+              <h4>7. Contato</h4>
+              <p>Para exercer seus direitos sobre dados pessoais, entre em contato pelo e-mail cadastrado como administrador da plataforma.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Verificação de idade pós-login (contas Google/legadas sem data de nascimento) — sem overlay clicável, é bloqueante mesmo -->
+        <div class="new-post-modal" id="modal-age-verification" style="display: none;">
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>Confirme sua idade</h3>
+            </header>
+            <div class="new-post-body">
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">O VibeLive é só para maiores de 18 anos. Confirme sua data de nascimento pra continuar.</p>
+              <input type="date" id="age-verification-birthdate" class="onboarding-input">
+              <span class="onboarding-error" id="age-verification-error"></span>
+              <label class="privacy-option" style="margin-top: 12px; padding: 10px;">
+                <input type="checkbox" id="age-verification-terms-checkbox">
+                <div><span style="font-size: 0.7rem;">Li e aceito os <a href="#" onclick="event.preventDefault(); openTermsModal();" style="color: var(--primary);">Termos de Uso e Política de Privacidade</a></span></div>
+              </label>
+              <button class="btn-follow-primary" style="margin-top: 16px; width: 100%;" onclick="submitAgeVerification()">Confirmar e continuar</button>
+            </div>
+          </div>
+        </div>
+
   </div> <!-- Fim de phone-screen -->
 
   <!-- Cliente Supabase (auth + banco de dados) -->
@@ -1227,9 +1402,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721d"></script>
+  <script src="supabase-client.js?v=20260721e"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721d"></script>
+  <script src="app.js?v=20260721e"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

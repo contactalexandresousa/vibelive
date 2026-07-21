@@ -27,8 +27,12 @@ const Auth = {
     return data.user;
   },
 
-  async signUp(email, password) {
-    const { data, error } = await sb.auth.signUp({ email, password });
+  async signUp(email, password, birthDate) {
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { data: { birth_date: birthDate, terms_accepted: true } }
+    });
     if (error) throw error;
     return data;
   },
@@ -221,6 +225,46 @@ const DB = {
 
   async sendQuickRose(broadcasterHandle) {
     const { data, error } = await sb.rpc("send_quick_rose", { p_broadcaster_handle: broadcasterHandle || null });
+    if (error) throw error;
+    return data;
+  },
+
+  async verifyAgeAndAcceptTerms(birthDate) {
+    const { data, error } = await sb.rpc("verify_age_and_accept_terms", { p_birth_date: birthDate });
+    if (error) throw error;
+    return data;
+  },
+
+  async requestWithdrawal(coins, pixKey, pixKeyType) {
+    const { data, error } = await sb.rpc("request_withdrawal", {
+      p_coins: coins, p_pix_key: pixKey, p_pix_key_type: pixKeyType
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyWithdrawalRequests() {
+    const { data, error } = await sb
+      .from("withdrawal_requests")
+      .select("*")
+      .order("requested_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllWithdrawalRequests() {
+    const { data, error } = await sb
+      .from("withdrawal_requests")
+      .select("*, profiles!withdrawal_requests_user_id_fkey(username, display_name, avatar_url)")
+      .order("requested_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async reviewWithdrawalRequest(requestId, newStatus, adminNotes) {
+    const { data, error } = await sb.rpc("review_withdrawal_request", {
+      p_request_id: requestId, p_new_status: newStatus, p_admin_notes: adminNotes || null
+    });
     if (error) throw error;
     return data;
   },
@@ -686,6 +730,25 @@ const DB = {
   async reportUser(reportedId, reason) {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("user_reports").insert({ reporter_id: user.id, reported_id: reportedId, reason });
+    if (error) throw error;
+  },
+
+  // Notificação push real (Web Push/VAPID) — guarda a inscrição do navegador
+  // atual pra o servidor conseguir mandar notificação mesmo com o app fechado.
+  async savePushSubscription(subscription) {
+    const { data: { user } } = await sb.auth.getUser();
+    const json = subscription.toJSON();
+    const { error } = await sb.from("push_subscriptions").upsert({
+      user_id: user.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }, { onConflict: "endpoint" });
+    if (error) throw error;
+  },
+
+  async removePushSubscription(endpoint) {
+    const { error } = await sb.from("push_subscriptions").delete().eq("endpoint", endpoint);
     if (error) throw error;
   },
 

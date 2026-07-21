@@ -10,6 +10,11 @@
 // toda conta nova.
 const DEFAULT_AVATAR_DATA_URI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjRkNmQiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmMGIyM2QiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgZmlsbD0idXJsKCNnKSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTgiIHI9IjI4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuOTIpIi8+PHBhdGggZD0iTTIwIDE0NWMwLTMzIDI0LjYtNTYgNTUtNTZzNTUgMjMgNTUgNTYiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC45MikiLz48L3N2Zz4=";
 
+// Chave pública VAPID (par gerado uma vez, a privada só existe como segredo
+// da Edge Function send-push) — é pública por natureza do protocolo Web Push,
+// mesmo status da anon key do Supabase: segura pra ficar exposta no cliente.
+const VAPID_PUBLIC_KEY = "BL7LCvzIBq5cXHJu8uIrTO-qDCVIqlXjiv_OVSJZFJ9vq747gfw7193H4RTe9YUoTovodIyyJEHVzBDs4TVwo2o";
+
 const STATE = {
   isLoggedIn: false,
   authMode: "login",
@@ -17,6 +22,7 @@ const STATE = {
   myAvatarUrl: null,
   isAdmin: false,
   adminReports: [],
+  adminWithdrawals: [],
   activeScreen: "splash",
   followedStreamers: [], // IDs dos streamers seguidos
   blockedUsers: [], // ids (uuid) de quem eu bloqueei
@@ -1329,6 +1335,267 @@ async function handleMarkReportReviewed(index) {
   }
 }
 
+// 12.5. SAQUE DE MOEDAS (CRIADOR) — taxa fixa de R$0,03/moeda decidida no
+// servidor (mesmo padrão de toda RPC de carteira: cliente só escolhe
+// quantidade, nunca valor em reais).
+const WITHDRAWAL_RATE_BRL = 0.03;
+const WITHDRAWAL_MIN_COINS = 500;
+
+const WITHDRAWAL_STATUS_LABELS = {
+  pending: { text: "Em análise", color: "var(--gold)" },
+  approved: { text: "Aprovado", color: "var(--primary)" },
+  paid: { text: "Pago ✓", color: "#4CAF50" },
+  rejected: { text: "Rejeitado", color: "var(--danger)" },
+};
+
+function updateWithdrawEstimate() {
+  const coins = parseInt(document.getElementById("withdraw-coins-input").value, 10) || 0;
+  const label = document.getElementById("withdraw-estimate-label");
+  if (coins <= 0) {
+    label.textContent = "";
+    return;
+  }
+  const brl = (coins * WITHDRAWAL_RATE_BRL).toFixed(2).replace(".", ",");
+  label.textContent = `≈ R$ ${brl}`;
+}
+
+async function openWithdrawModal() {
+  if (!requireAuth()) return;
+  document.getElementById("withdraw-current-balance").textContent = `🪙 ${STATE.myCoins}`;
+  document.getElementById("withdraw-coins-input").value = "";
+  document.getElementById("withdraw-pix-key-input").value = "";
+  document.getElementById("withdraw-estimate-label").textContent = "";
+  document.getElementById("withdraw-error").textContent = "";
+  document.getElementById("modal-withdraw").style.display = "flex";
+  renderWithdrawHistory([]);
+
+  try {
+    const history = await DB.getMyWithdrawalRequests();
+    renderWithdrawHistory(history);
+  } catch (err) {
+    console.error("Falha ao carregar histórico de saques:", err);
+  }
+}
+
+function closeWithdrawModal() {
+  document.getElementById("modal-withdraw").style.display = "none";
+}
+
+function renderWithdrawHistory(history) {
+  const container = document.getElementById("withdraw-history-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (history.length === 0) {
+    container.innerHTML = `<p style="font-size: 0.7rem; color: var(--light-gray); text-align: center; padding: 10px 0;">Nenhum pedido de saque ainda.</p>`;
+    return;
+  }
+
+  history.forEach(r => {
+    const status = WITHDRAWAL_STATUS_LABELS[r.status] || { text: r.status, color: "var(--light-gray)" };
+    const brl = (r.amount_brl_cents / 100).toFixed(2).replace(".", ",");
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.innerHTML = `
+      <div class="inbox-details">
+        <span class="inbox-name">🪙 ${r.coins_amount} → R$ ${brl}</span>
+        <span class="inbox-message">${formatMessageTime(r.requested_at)}</span>
+      </div>
+      <div class="inbox-right">
+        <span style="font-size: 0.62rem; font-weight: 700; color: ${status.color};">${status.text}</span>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function submitWithdrawRequest() {
+  const coins = parseInt(document.getElementById("withdraw-coins-input").value, 10) || 0;
+  const pixKeyType = document.getElementById("withdraw-pix-key-type").value;
+  const pixKey = document.getElementById("withdraw-pix-key-input").value.trim();
+  const errorEl = document.getElementById("withdraw-error");
+  errorEl.textContent = "";
+
+  if (coins < WITHDRAWAL_MIN_COINS) {
+    errorEl.textContent = `O saque mínimo é de ${WITHDRAWAL_MIN_COINS} moedas.`;
+    return;
+  }
+  if (coins > STATE.myCoins) {
+    errorEl.textContent = "Você não tem moedas suficientes.";
+    return;
+  }
+  if (!pixKey) {
+    errorEl.textContent = "Informe sua chave PIX.";
+    return;
+  }
+
+  try {
+    const request = await DB.requestWithdrawal(coins, pixKey, pixKeyType);
+    STATE.myCoins -= request.coins_amount;
+    renderCoins();
+    document.getElementById("withdraw-current-balance").textContent = `🪙 ${STATE.myCoins}`;
+    document.getElementById("withdraw-coins-input").value = "";
+    document.getElementById("withdraw-pix-key-input").value = "";
+    document.getElementById("withdraw-estimate-label").textContent = "";
+    showToast("Pedido de saque enviado! Você será avisado quando for revisado.");
+    const history = await DB.getMyWithdrawalRequests();
+    renderWithdrawHistory(history);
+  } catch (err) {
+    errorEl.textContent = err.message || "Não foi possível solicitar o saque agora.";
+  }
+}
+
+// Painel admin — mesma trava de is_admin já usada no painel de denúncias.
+async function openAdminWithdrawalsPanel() {
+  if (!STATE.isAdmin) return;
+  const modal = document.getElementById("modal-admin-withdrawals");
+  const container = document.getElementById("admin-withdrawals-list-container");
+  if (!modal || !container) return;
+
+  container.innerHTML = `<div style="text-align:center;padding:30px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  modal.style.display = "flex";
+
+  try {
+    STATE.adminWithdrawals = await DB.getAllWithdrawalRequests();
+  } catch (err) {
+    console.error("Falha ao carregar saques:", err);
+    STATE.adminWithdrawals = [];
+  }
+  renderAdminWithdrawalsList();
+}
+
+function closeAdminWithdrawalsPanel() {
+  document.getElementById("modal-admin-withdrawals").style.display = "none";
+}
+
+function renderAdminWithdrawalsList() {
+  const container = document.getElementById("admin-withdrawals-list-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (STATE.adminWithdrawals.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">💰</div>
+        <h3>Nenhum pedido de saque</h3>
+        <p>Quando alguém pedir saque de moedas, aparece aqui.</p>
+      </div>
+    `;
+    return;
+  }
+
+  STATE.adminWithdrawals.forEach((r, index) => {
+    const requester = r.profiles ? escapeHtml(r.profiles.display_name || r.profiles.username) : "Usuário removido";
+    const status = WITHDRAWAL_STATUS_LABELS[r.status] || { text: r.status, color: "var(--light-gray)" };
+    const brl = (r.amount_brl_cents / 100).toFixed(2).replace(".", ",");
+    const pixKeyTypeLabel = { cpf: "CPF", email: "E-mail", phone: "Celular", random: "Aleatória" }[r.pix_key_type] || r.pix_key_type;
+
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.style.flexDirection = "column";
+    item.style.alignItems = "stretch";
+    item.style.padding = "12px 0";
+
+    const actionsHtml = r.status === "pending"
+      ? `
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button class="btn-follow-primary" style="flex:1; height:26px; font-size:0.62rem;" onclick="handleReviewWithdrawal(${index}, 'paid')">Marcar Pago</button>
+          <button class="btn-follow-primary" style="flex:1; height:26px; font-size:0.62rem; background: rgba(241,85,76,0.15); color: var(--danger);" onclick="handleReviewWithdrawal(${index}, 'rejected')">Rejeitar</button>
+        </div>
+      `
+      : "";
+
+    item.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <span class="inbox-name" style="display:block;">${requester} · 🪙 ${r.coins_amount} → R$ ${brl}</span>
+          <span class="inbox-message" style="display:block; margin-top:4px;">Chave PIX (${pixKeyTypeLabel}): ${escapeHtml(r.pix_key)}</span>
+          <span class="inbox-time" style="display:block; margin-top:4px;">${formatMessageTime(r.requested_at)}</span>
+        </div>
+        <span style="font-size:0.62rem; font-weight:700; color:${status.color}; white-space:nowrap; margin-left:8px;">${status.text}</span>
+      </div>
+      ${actionsHtml}
+    `;
+    container.appendChild(item);
+  });
+}
+
+// 12.6. NOTIFICAÇÕES PUSH (WEB PUSH REAL, FORA DO APP)
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function updatePushButtonUI() {
+  const btn = document.getElementById("btn-toggle-push");
+  if (!btn) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    btn.style.display = "none";
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    btn.textContent = sub ? "🔕 Desativar Notificações" : "🔔 Ativar Notificações";
+  } catch (err) {
+    console.error("Falha ao checar inscrição de push:", err);
+  }
+}
+
+async function togglePushNotifications() {
+  if (!requireAuth()) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    showToast("Seu navegador não suporta notificações push.");
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+      await DB.removePushSubscription(existing.endpoint);
+      await existing.unsubscribe();
+      showToast("Notificações desativadas neste navegador.");
+      await updatePushButtonUI();
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      showToast("Permissão de notificação negada.");
+      return;
+    }
+
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    await DB.savePushSubscription(subscription);
+    showToast("Notificações ativadas! Você vai ser avisado mesmo com o app fechado.");
+    await updatePushButtonUI();
+  } catch (err) {
+    console.error("Falha ao ativar notificações push:", err);
+    showToast("Não foi possível ativar as notificações agora.");
+  }
+}
+
+async function handleReviewWithdrawal(index, newStatus) {
+  const request = STATE.adminWithdrawals[index];
+  if (!request) return;
+  try {
+    const updated = await DB.reviewWithdrawalRequest(request.id, newStatus);
+    request.status = updated.status;
+    request.reviewed_at = updated.reviewed_at;
+    renderAdminWithdrawalsList();
+    showToast(newStatus === "paid" ? "Saque marcado como pago." : "Saque rejeitado — moedas devolvidas.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar o saque.");
+  }
+}
+
 
 // 13. LOJA DE MOEDAS E PAGAMENTO PIX REAL (MERCADO PAGO)
 // Catálogo só para exibição (nome/preço na tela) — o valor que realmente
@@ -2585,6 +2852,8 @@ function toggleAuthTab(mode) {
   const submitBtn = document.getElementById("btn-auth-submit");
   const forgotBtn = document.getElementById("btn-forgot-password");
   const confirmGroup = document.getElementById("auth-confirm-password-group");
+  const birthdateGroup = document.getElementById("auth-birthdate-group");
+  const termsGroup = document.getElementById("auth-terms-group");
 
   if (mode === "login") {
     tabLogin.classList.add("active");
@@ -2593,6 +2862,8 @@ function toggleAuthTab(mode) {
     document.getElementById("auth-username").placeholder = "E-mail";
     if (forgotBtn) forgotBtn.style.display = "block";
     if (confirmGroup) confirmGroup.style.display = "none";
+    if (birthdateGroup) birthdateGroup.style.display = "none";
+    if (termsGroup) termsGroup.style.display = "none";
   } else {
     tabLogin.classList.remove("active");
     tabRegister.classList.add("active");
@@ -2600,6 +2871,63 @@ function toggleAuthTab(mode) {
     document.getElementById("auth-username").placeholder = "E-mail";
     if (forgotBtn) forgotBtn.style.display = "none";
     if (confirmGroup) confirmGroup.style.display = "block";
+    if (birthdateGroup) birthdateGroup.style.display = "block";
+    if (termsGroup) termsGroup.style.display = "flex";
+  }
+}
+
+function openTermsModal() {
+  document.getElementById("modal-terms").style.display = "flex";
+}
+
+function closeTermsModal() {
+  document.getElementById("modal-terms").style.display = "none";
+}
+
+function toggleTermsTab(which) {
+  document.getElementById("btn-terms-tab-uso").classList.toggle("active", which === "uso");
+  document.getElementById("btn-terms-tab-privacidade").classList.toggle("active", which === "privacidade");
+  document.getElementById("terms-tab-uso").style.display = which === "uso" ? "block" : "none";
+  document.getElementById("terms-tab-privacidade").style.display = which === "privacidade" ? "block" : "none";
+}
+
+// Gatilho: conta sem birth_date/terms_accepted_at ainda (login social ou
+// conta criada antes dessa verificação existir). Modal sem botão de fechar —
+// só sai dali confirmando idade real via RPC (validação de 18+ no servidor).
+function requireAgeVerificationIfNeeded(profile) {
+  if (profile.birth_date && profile.terms_accepted_at) return false;
+  const modal = document.getElementById("modal-age-verification");
+  if (modal.style.display === "flex") return true; // já aberto — não reseta o que a pessoa está digitando
+  document.getElementById("age-verification-birthdate").value = "";
+  document.getElementById("age-verification-terms-checkbox").checked = false;
+  document.getElementById("age-verification-error").textContent = "";
+  modal.style.display = "flex";
+  return true;
+}
+
+async function submitAgeVerification() {
+  const birthDate = document.getElementById("age-verification-birthdate").value;
+  const accepted = document.getElementById("age-verification-terms-checkbox").checked;
+  const errorEl = document.getElementById("age-verification-error");
+  errorEl.textContent = "";
+
+  if (!birthDate) {
+    errorEl.textContent = "Informe sua data de nascimento.";
+    return;
+  }
+  if (!accepted) {
+    errorEl.textContent = "Você precisa aceitar os Termos de Uso pra continuar.";
+    return;
+  }
+
+  try {
+    const profile = await DB.verifyAgeAndAcceptTerms(birthDate);
+    document.getElementById("modal-age-verification").style.display = "none";
+    await applyProfileToUI(profile);
+  } catch (err) {
+    errorEl.textContent = err.message && err.message.includes("18 anos")
+      ? "É preciso ter 18 anos ou mais para usar o VibeLive."
+      : (err.message || "Não foi possível confirmar sua idade agora.");
   }
 }
 
@@ -2699,6 +3027,8 @@ async function applyProfileToUI(profile) {
 
   const adminBtn = document.getElementById("btn-admin-reports");
   if (adminBtn) adminBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminWithdrawalsBtn = document.getElementById("btn-admin-withdrawals");
+  if (adminWithdrawalsBtn) adminWithdrawalsBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();
@@ -2731,6 +3061,12 @@ async function applyProfileToUI(profile) {
   if (previousLevel && profile.level > previousLevel) {
     showToast(`Parabéns! Você subiu para o Nível ${profile.level}! 🎉`);
   }
+
+  // Conta sem data de nascimento confirmada ainda (login social ou conta
+  // anterior a essa verificação) — bloqueia com o modal de idade.
+  requireAgeVerificationIfNeeded(profile);
+
+  updatePushButtonUI();
 }
 
 async function handleAuthSubmit() {
@@ -2742,10 +3078,20 @@ async function handleAuthSubmit() {
     return;
   }
 
+  let birthDate = null;
   if (STATE.authMode === "register") {
     const confirmPassword = document.getElementById("auth-confirm-password").value.trim();
     if (password !== confirmPassword) {
       showToast("As senhas não coincidem.");
+      return;
+    }
+    birthDate = document.getElementById("auth-birthdate").value;
+    if (!birthDate) {
+      showToast("Informe sua data de nascimento.");
+      return;
+    }
+    if (!document.getElementById("auth-terms-checkbox").checked) {
+      showToast("É preciso aceitar os Termos de Uso pra criar a conta.");
       return;
     }
   }
@@ -2757,7 +3103,7 @@ async function handleAuthSubmit() {
   try {
     const data = STATE.authMode === "login"
       ? await Auth.signIn(email, password)
-      : await Auth.signUp(email, password);
+      : await Auth.signUp(email, password, birthDate);
 
     document.getElementById("auth-username").value = "";
     document.getElementById("auth-password").value = "";
