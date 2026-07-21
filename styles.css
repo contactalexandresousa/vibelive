@@ -1888,8 +1888,10 @@ body {
   width: 100%;
   height: 100%;
   z-index: 5;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(12px);
+  /* Escurece só o topo (atrás do título) e o rodapé (atrás dos controles) —
+     o meio fica sem blur nenhum, pra mostrar a câmera de verdade nítida
+     antes de ir ao vivo, não uma versão borrada e escondida atrás de mascote. */
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, transparent 22%, transparent 60%, rgba(0, 0, 0, 0.7) 100%);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -4475,48 +4477,13 @@ body {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* Área central do Mascote Dino com Ondas de Audio */
-.setup-mascot-visualizer-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex: 1;
-  position: relative;
-}
-
-.setup-mascot-circle {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  position: relative;
-  z-index: 106;
-}
-
-.setup-dino-svg {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 0 15px rgba(78, 158, 255, 0.3));
-}
-
-.setup-soundwaves-pulse {
-  position: absolute;
-  width: 170px;
-  height: 170px;
-  border-radius: 50%;
-  border: 1.5px dashed rgba(78, 158, 255, 0.4);
-  animation: setupPulseRotate 15s linear infinite;
-}
-
-@keyframes setupPulseRotate {
-  0% { transform: rotate(0deg) scale(0.96); opacity: 0.7; }
-  50% { transform: rotate(180deg) scale(1.04); opacity: 0.9; }
-  100% { transform: rotate(360deg) scale(0.96); opacity: 0.7; }
-}
-
-/* Painel de Ações do Rodapé */
+/* Painel de Ações do Rodapé — a câmera de verdade fica visível por trás,
+   sem mascote nem decoração cobrindo o preview. */
 .setup-actions-row {
   display: flex;
   justify-content: space-around;
+  flex: 1;
+  align-items: flex-end;
   margin-bottom: 24px;
   z-index: 105;
   width: 100%;
@@ -4527,12 +4494,33 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
 }
 
 .setup-action-icon {
   font-size: 1.3rem;
   filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.2));
+}
+
+.setup-action-icon-svg {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.setup-action-icon-svg svg {
+  width: 22px;
+  height: 22px;
+}
+
+#setup-btn-mute.muted .setup-action-icon-svg {
+  color: var(--primary);
 }
 
 .setup-action-item span {

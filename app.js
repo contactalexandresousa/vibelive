@@ -263,7 +263,7 @@ function navigateTo(screenId) {
   } else if (screenId === "go-live") {
     initiateCameraStream();
     const thumb = document.getElementById("setup-thumb-img");
-    if (thumb) thumb.src = STATE.myAvatarUrl || "";
+    if (thumb) thumb.src = STATE.myAvatarUrl || DEFAULT_AVATAR_DATA_URI;
     const titleInput = document.getElementById("live-title-input");
     if (titleInput) titleInput.value = "";
     STATE.livePrivacyMode = "public";
@@ -1482,13 +1482,28 @@ function toggleMute() {
   showToast(STATE.isMuted ? "Microfone mudo" : "Microfone ativado");
 }
 
+const MUTE_ICON_ON_SVG = `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>`;
+const MUTE_ICON_OFF_SVG = `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12h-2zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`;
+
+// Atualiza os dois botões de mudo que existem — o do preview (antes de ir ao
+// vivo) e o do overlay ativo (já transmitindo) — mantendo os dois em sincronia.
 function updateMuteButtonUI() {
-  const btn = document.getElementById("btn-toggle-mute");
-  if (!btn) return;
-  btn.classList.toggle("muted", STATE.isMuted);
-  btn.innerHTML = STATE.isMuted
-    ? `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12h-2zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-    : `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>`;
+  const icon = STATE.isMuted ? MUTE_ICON_OFF_SVG : MUTE_ICON_ON_SVG;
+
+  const liveBtn = document.getElementById("btn-toggle-mute");
+  if (liveBtn) {
+    liveBtn.classList.toggle("muted", STATE.isMuted);
+    liveBtn.innerHTML = icon;
+  }
+
+  const setupBtn = document.getElementById("setup-btn-mute");
+  if (setupBtn) {
+    setupBtn.classList.toggle("muted", STATE.isMuted);
+    const iconWrap = setupBtn.querySelector(".setup-action-icon-svg");
+    if (iconWrap) iconWrap.innerHTML = icon;
+    const label = setupBtn.querySelector("span");
+    if (label) label.textContent = STATE.isMuted ? "Ativar" : "Mudo";
+  }
 }
 
 // Troca entre câmera frontal e traseira. Se já estiver ao vivo, troca também

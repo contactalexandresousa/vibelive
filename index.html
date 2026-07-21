@@ -670,11 +670,12 @@
                 <button class="btn-request-camera" onclick="initiateCameraStream()">Permitir Câmera</button>
               </div>
               
-             <!-- Overlay de Configuração (Antes de Iniciar a Live - Redesenhado estilo TikTok) -->
+             <!-- Overlay de Configuração (Antes de Iniciar a Live) -->
              <div class="go-live-setup-overlay" id="go-live-setup">
                <button class="btn-close-setup-x" onclick="navigateTo('discover')">×</button>
 
-               <!-- Caixa superior de título da live -->
+               <!-- Barra superior compacta: foto + título — a câmera de verdade
+                    fica visível por trás, sem nenhum elemento decorativo cobrindo. -->
                <div class="setup-settings-card">
                  <div class="setup-thumbnail-wrapper">
                    <img src="" id="setup-thumb-img" class="setup-thumb-img" alt="Sua foto de perfil">
@@ -684,41 +685,29 @@
                  </div>
                </div>
 
-               <!-- Mascote Dino piscando no Centro com ondas sonoras -->
-               <div class="setup-mascot-visualizer-container">
-                 <div class="setup-soundwaves-pulse"></div>
-                 <div class="setup-mascot-circle">
-                   <svg viewBox="0 0 100 100" class="setup-dino-svg">
-                     <circle cx="50" cy="50" r="48" fill="#e0fcf9" stroke="#4e9eff" stroke-width="2"/>
-                     <path d="M30 65c10 8 30 8 40 0 5-10 2-25-8-30s-22-2-27 10-10 15-5 20z" fill="#8bf2e6"/>
-                     <path d="M28 40c-3-5-2-12 2-12s5 7 2 12m10-14c0-6 4-10 7-6s-1 10-7 6m12-2c2-6 7-8 9-4s-3 10-9 8" fill="#32b3a6"/>
-                     <path d="M42 42c2-3 5-3 7 0" stroke="#12131a" stroke-width="3" fill="none" stroke-linecap="round"/>
-                     <circle cx="58" cy="43" r="3" fill="#12131a"/>
-                     <circle cx="62" cy="49" r="4" fill="#ff5c93" opacity="0.6"/>
-                     <path d="M48 54c3 3 8 3 11 0" stroke="#12131a" stroke-width="3" fill="none" stroke-linecap="round"/>
-                     <path d="M28 50c-2-2-4-2-4 0s2 3 4 3m0-4c-2-2-4-1-3 1s2 2 3 1" stroke="#12131a" stroke-width="2" fill="#8bf2e6"/>
-                     <path d="M72 38l2 2-2 2-2-2zM76 42l1 1-1 1-1-1z" fill="#f0b23d"/>
-                   </svg>
-                 </div>
-               </div>
-
-               <!-- Linha de Botões de Ações do Rodapé -->
+               <!-- Dock de controles reais — tudo aqui já funciona antes de ir ao vivo -->
                <div class="setup-actions-row">
-                 <div class="setup-action-item" onclick="initiateCameraStream()">
-                   <div class="setup-action-icon">📷</div>
-                   <span>Câmera</span>
-                 </div>
-                 <div class="setup-action-item" onclick="openAtmosferaSelector()">
+                 <button class="setup-action-item" id="setup-btn-mute" onclick="toggleMute()">
+                   <div class="setup-action-icon setup-action-icon-svg">
+                     <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+                   </div>
+                   <span>Mudo</span>
+                 </button>
+                 <button class="setup-action-item" onclick="toggleCameraFacing()">
+                   <div class="setup-action-icon">🔄</div>
+                   <span>Girar</span>
+                 </button>
+                 <button class="setup-action-item" onclick="openAtmosferaSelector()">
                    <div class="setup-action-icon">🖼️</div>
                    <span>Atmosfera</span>
-                 </div>
-                 <div class="setup-action-item" onclick="openLivePrivacyModal()">
+                 </button>
+                 <button class="setup-action-item" onclick="openLivePrivacyModal()">
                    <div class="setup-action-icon" id="setup-privacy-icon">🌐</div>
                    <span>Privacidade</span>
-                 </div>
+                 </button>
                </div>
 
-               <!-- Botão Cyan de Transmissão -->
+               <!-- Botão de Transmissão -->
                <div class="setup-go-live-btn-wrapper">
                  <button class="btn-start-broadcasting-tiktok" onclick="startOwnLiveStream()">Ao vivo</button>
                </div>
