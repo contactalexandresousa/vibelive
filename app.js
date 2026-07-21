@@ -192,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error("Falha ao checar sessão:", err);
       STATE.isLoggedIn = false;
+      if (/suspensa/.test(err.message || "")) showToast(err.message);
     }
     // Navegação sem login continua permitida (dados mockados); ações que gravam
     // dado real checam STATE.isLoggedIn e pedem login na hora, via requireAuth().
@@ -1338,14 +1339,29 @@ function renderAdminReportsList() {
           <span class="inbox-message" style="display:block; margin-top:4px; white-space:normal;">${escapeHtml(r.reason)}</span>
           <span class="inbox-time" style="display:block; margin-top:4px;">${formatMessageTime(r.created_at)}</span>
         </div>
-        ${r.reviewed_at
-          ? '<span style="font-size:0.6rem; color:var(--light-gray); white-space:nowrap; margin-left:8px;">✓ revisada</span>'
-          : `<button class="btn-follow-primary" style="height:22px; font-size:0.6rem; padding:0 8px; white-space:nowrap; margin-left:8px;" onclick="handleMarkReportReviewed(${index})">Marcar revisada</button>`
-        }
+        <div style="display:flex; flex-direction:column; gap:4px; margin-left:8px;">
+          ${r.reviewed_at
+            ? '<span style="font-size:0.6rem; color:var(--light-gray); white-space:nowrap;">✓ revisada</span>'
+            : `<button class="btn-follow-primary" style="height:22px; font-size:0.6rem; padding:0 8px; white-space:nowrap;" onclick="handleMarkReportReviewed(${index})">Marcar revisada</button>`
+          }
+          <button class="btn-follow-primary" style="height:22px; font-size:0.6rem; padding:0 8px; white-space:nowrap; background:rgba(241,85,76,0.1); color:var(--danger);" onclick="handleSuspendFromReport('${r.reported_id}')">Suspender denunciado</button>
+        </div>
       </div>
     `;
     container.appendChild(item);
   });
+}
+
+async function handleSuspendFromReport(userId) {
+  if (!userId) return;
+  const reason = prompt("Motivo da suspensão (aparece pro usuário):");
+  if (reason === null) return; // cancelou o prompt
+  try {
+    await DB.adminSuspendUser(userId, reason || null);
+    showToast("Conta suspensa.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível suspender agora.");
+  }
 }
 
 async function handleMarkReportReviewed(index) {
@@ -1619,6 +1635,139 @@ async function handleReviewWithdrawal(index, newStatus) {
   } catch (err) {
     showToast(err.message || "Não foi possível atualizar o saque.");
   }
+}
+
+// 12.65. ADMIN: GERENCIAR USUÁRIOS (SUSPENDER/VERIFICAR) E ESTATÍSTICAS GERAIS
+function openAdminUsersPanel() {
+  if (!STATE.isAdmin) return;
+  document.getElementById("modal-admin-users").style.display = "flex";
+  document.getElementById("admin-users-search-input").value = "";
+  document.getElementById("admin-users-result-container").innerHTML = "";
+}
+
+function closeAdminUsersPanel() {
+  document.getElementById("modal-admin-users").style.display = "none";
+}
+
+async function searchAdminUser() {
+  const username = document.getElementById("admin-users-search-input").value.trim().replace(/^@/, "");
+  const container = document.getElementById("admin-users-result-container");
+  if (!username) return;
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Buscando...</div>`;
+
+  try {
+    const profile = await DB.adminFindProfileByUsername(username);
+    if (!profile) {
+      container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Nenhum usuário com esse @.</p>`;
+      return;
+    }
+    renderAdminUserResult(profile);
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível buscar agora.</p>`;
+  }
+}
+
+function renderAdminUserResult(profile) {
+  const container = document.getElementById("admin-users-result-container");
+  const name = escapeHtml(profile.display_name || profile.username);
+  const badges = [
+    profile.is_suspended ? `<span style="font-size:0.6rem; font-weight:700; color:var(--danger); background:rgba(241,85,76,0.1); padding:2px 8px; border-radius:8px;">Suspenso</span>` : "",
+    profile.is_verified ? `<span style="font-size:0.6rem; font-weight:700; color:var(--primary); background:rgba(255,77,109,0.1); padding:2px 8px; border-radius:8px;">Verificado</span>` : "",
+  ].filter(Boolean).join(" ");
+
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--glass-border); margin-bottom:14px;">
+      <img src="${profile.avatar_url}" alt="${name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <span style="font-size:0.8rem; font-weight:700; color:#fff;">${name}</span>
+        <span style="font-size:0.68rem; color:var(--light-gray);">@${escapeHtml(profile.username)}</span>
+        <div style="display:flex; gap:6px;">${badges}</div>
+      </div>
+    </div>
+    ${profile.is_suspended
+      ? `<p style="font-size:0.7rem; color:var(--text-secondary); margin-bottom:10px;">Motivo: ${escapeHtml(profile.suspended_reason || "não informado")}</p>
+         <button class="btn-follow-primary" style="width:100%; margin-bottom:10px;" onclick="handleUnsuspendUser('${profile.id}')">Reativar conta</button>`
+      : `<div class="form-group-post" style="margin-bottom:10px;">
+           <label for="admin-suspend-reason-input">Motivo da suspensão:</label>
+           <input type="text" id="admin-suspend-reason-input" placeholder="Ex: assédio, spam, fraude...">
+         </div>
+         <button class="btn-follow-primary" style="width:100%; margin-bottom:10px; background:rgba(241,85,76,0.1); color:var(--danger);" onclick="handleSuspendUser('${profile.id}')">Suspender conta</button>`
+    }
+    <button class="btn-follow-primary" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);" onclick="handleToggleVerified('${profile.id}', ${!profile.is_verified})">
+      ${profile.is_verified ? "Remover selo de verificado" : "Conceder selo de verificado"}
+    </button>
+  `;
+}
+
+async function handleSuspendUser(userId) {
+  const reason = document.getElementById("admin-suspend-reason-input").value.trim();
+  if (!confirm("Suspender essa conta? O login dela para de funcionar imediatamente.")) return;
+  try {
+    const profile = await DB.adminSuspendUser(userId, reason || null);
+    showToast("Conta suspensa.");
+    renderAdminUserResult(profile);
+  } catch (err) {
+    showToast(err.message || "Não foi possível suspender agora.");
+  }
+}
+
+async function handleUnsuspendUser(userId) {
+  try {
+    const profile = await DB.adminUnsuspendUser(userId);
+    showToast("Conta reativada.");
+    renderAdminUserResult(profile);
+  } catch (err) {
+    showToast(err.message || "Não foi possível reativar agora.");
+  }
+}
+
+async function handleToggleVerified(userId, newValue) {
+  try {
+    const profile = await DB.adminSetVerified(userId, newValue);
+    showToast(newValue ? "Selo de verificado concedido." : "Selo de verificado removido.");
+    renderAdminUserResult(profile);
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+async function openAdminStatsPanel() {
+  if (!STATE.isAdmin) return;
+  const container = document.getElementById("admin-stats-cards");
+  document.getElementById("modal-admin-stats").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const stats = await DB.getAdminStats();
+    const brl = (stats.total_revenue_brl_cents / 100).toFixed(2).replace(".", ",");
+    const rows = [
+      { label: "Usuários totais", value: stats.total_users, icon: "👥" },
+      { label: "Contas suspensas", value: stats.suspended_users, icon: "🚫" },
+      { label: "Contas verificadas", value: stats.verified_users, icon: "✅" },
+      { label: "Moedas em circulação", value: `🪙 ${stats.total_coins_in_circulation}`, icon: "💰" },
+      { label: "Lives ativas agora", value: stats.active_lives, icon: "🔴" },
+      { label: "Assinaturas ativas", value: stats.active_subscriptions, icon: "⭐" },
+      { label: "Saques pendentes", value: `${stats.pending_withdrawals} (🪙 ${stats.pending_withdrawals_coins})`, icon: "💸" },
+      { label: "Denúncias pendentes", value: stats.pending_reports, icon: "🛡️" },
+      { label: "Receita total (PIX aprovado)", value: `R$ ${brl}`, icon: "📈", highlight: true },
+    ];
+    container.innerHTML = "";
+    rows.forEach(r => {
+      const card = document.createElement("div");
+      card.style.cssText = `display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-radius:12px; background:${r.highlight ? "rgba(255,77,109,0.1)" : "rgba(255,255,255,0.04)"}; border:1px solid var(--glass-border);`;
+      card.innerHTML = `
+        <span style="font-size:0.75rem; font-weight:${r.highlight ? "800" : "600"}; color:#fff;">${r.icon} ${r.label}</span>
+        <span style="font-size:0.85rem; font-weight:800; color:${r.highlight ? "var(--primary)" : "#fff"};">${r.value}</span>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar as estatísticas agora.</p>`;
+  }
+}
+
+function closeAdminStatsPanel() {
+  document.getElementById("modal-admin-stats").style.display = "none";
 }
 
 // 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
@@ -3169,10 +3318,11 @@ async function saveProfileChanges() {
     STATE.profileName = profile.display_name || profile.username;
     STATE.myPrivateContentPrice = profile.private_content_price;
     STATE.mySubscriptionPrice = profile.subscription_price_coins;
+    STATE.isVerified = !!profile.is_verified;
     const nameEl = document.querySelector(".profile-bio-info h3");
     const handleEl = document.querySelector(".profile-handle");
     const bioEl = document.querySelector(".profile-bio-text");
-    if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} <span class="premium-verified">✓</span>`;
+    if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} ${STATE.isVerified ? '<span class="premium-verified">✓</span>' : ""}`;
     if (handleEl) handleEl.textContent = `@${profile.username}`;
     if (bioEl) bioEl.textContent = profile.bio;
 
@@ -3522,6 +3672,18 @@ async function submitNewPassword() {
 
 // Aplica um profile carregado do banco ao STATE e à UI (usado no login e na checagem de sessão).
 async function applyProfileToUI(profile) {
+  // Suspensão é aplicada aqui (não só no login) de propósito: se um admin
+  // suspender alguém no meio da sessão, a próxima ação que recarregar o
+  // profile (qualquer gasto/recarga de carteira) já derruba a conta, sem
+  // precisar de uma assinatura realtime dedicada só pra isso.
+  if (profile.is_suspended) {
+    await Auth.signOut();
+    STATE.isLoggedIn = false;
+    throw new Error(profile.suspended_reason
+      ? `Sua conta foi suspensa: ${profile.suspended_reason}`
+      : "Sua conta foi suspensa. Entre em contato com o suporte.");
+  }
+
   const previousLevel = STATE.level;
 
   try {
@@ -3546,10 +3708,11 @@ async function applyProfileToUI(profile) {
   STATE.myPrivateContentPrice = profile.private_content_price;
   STATE.mySubscriptionPrice = profile.subscription_price_coins;
   STATE.isAdmin = !!profile.is_admin;
+  STATE.isVerified = !!profile.is_verified;
 
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");
-  if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} <span class="premium-verified">✓</span>`;
+  if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} ${STATE.isVerified ? '<span class="premium-verified">✓</span>' : ""}`;
   if (handleEl) handleEl.textContent = `@${profile.username}`;
   syncMyAvatarEverywhere(profile.avatar_url);
 
@@ -3557,6 +3720,10 @@ async function applyProfileToUI(profile) {
   if (adminBtn) adminBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminWithdrawalsBtn = document.getElementById("btn-admin-withdrawals");
   if (adminWithdrawalsBtn) adminWithdrawalsBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminUsersBtn = document.getElementById("btn-admin-users");
+  if (adminUsersBtn) adminUsersBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminStatsBtn = document.getElementById("btn-admin-stats");
+  if (adminStatsBtn) adminStatsBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();

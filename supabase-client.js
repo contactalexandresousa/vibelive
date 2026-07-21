@@ -374,6 +374,36 @@ const DB = {
     return data;
   },
 
+  async adminFindProfileByUsername(username) {
+    const { data, error } = await sb.from("profiles").select("*").eq("username", username).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async adminSuspendUser(userId, reason) {
+    const { data, error } = await sb.rpc("admin_suspend_user", { p_user_id: userId, p_reason: reason });
+    if (error) throw error;
+    return data;
+  },
+
+  async adminUnsuspendUser(userId) {
+    const { data, error } = await sb.rpc("admin_unsuspend_user", { p_user_id: userId });
+    if (error) throw error;
+    return data;
+  },
+
+  async adminSetVerified(userId, verified) {
+    const { data, error } = await sb.rpc("admin_set_verified", { p_user_id: userId, p_verified: verified });
+    if (error) throw error;
+    return data;
+  },
+
+  async getAdminStats() {
+    const { data, error } = await sb.rpc("get_admin_stats");
+    if (error) throw error;
+    return data;
+  },
+
   async getMyCpfStatus() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return null;

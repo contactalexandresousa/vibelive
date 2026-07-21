@@ -1,0 +1,12 @@
+{
+  "name": "vibelive",
+  "private": true,
+  "version": "1.0.0",
+  "description": "VibeLive — app de live streaming social (HTML/CSS/JS puro, sem build)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

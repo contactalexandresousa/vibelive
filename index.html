@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721i">
+  <link rel="stylesheet" href="styles.css?v=20260721j">
 </head>
 <body>
 
@@ -466,7 +466,7 @@
                 </div>
 
                 <div class="profile-bio-info">
-                  <h3>Alexandre Silva <span class="premium-verified">✓</span></h3>
+                  <h3>Alexandre Silva</h3>
                   <p class="profile-handle">@zcitando</p>
                   <p class="profile-bio-text">Criador digital • Focado em lives interativas 🎬🍿</p>
                   
@@ -959,6 +959,14 @@
                 💰 Painel de Saques (Admin)
               </button>
 
+              <button class="btn-publish-post" id="btn-admin-users" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminUsersPanel()">
+                👥 Gerenciar Usuários (Admin)
+              </button>
+
+              <button class="btn-publish-post" id="btn-admin-stats" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminStatsPanel()">
+                📈 Estatísticas Gerais (Admin)
+              </button>
+
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
 
               <div class="form-group-post">
@@ -1172,6 +1180,38 @@
               <div class="inbox-list" id="admin-withdrawals-list-container">
                 <!-- Preenchido via JS -->
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Gerenciar Usuários (buscar, suspender, verificar) -->
+        <div class="new-post-modal" id="modal-admin-users" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminUsersPanel()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>👥 Gerenciar Usuários</h3>
+              <button class="btn-close-new-post" onclick="closeAdminUsersPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <input type="text" id="admin-users-search-input" placeholder="Buscar por @usuário" style="flex: 1; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
+                <button class="btn-follow-primary" style="height: 44px; padding: 0 14px; margin-top: 0;" onclick="searchAdminUser()">Buscar</button>
+              </div>
+              <div id="admin-users-result-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Estatísticas Gerais -->
+        <div class="new-post-modal" id="modal-admin-stats" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminStatsPanel()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>📈 Estatísticas Gerais</h3>
+              <button class="btn-close-new-post" onclick="closeAdminStatsPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div id="admin-stats-cards" style="display: flex; flex-direction: column; gap: 10px;"></div>
             </div>
           </div>
         </div>
@@ -1611,9 +1651,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721i"></script>
+  <script src="supabase-client.js?v=20260721j"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721i"></script>
+  <script src="app.js?v=20260721j"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
