@@ -203,6 +203,13 @@ function requireAuth() {
 
 // 6. NAVEGAÇÃO E ROTAS (SPA)
 function navigateTo(screenId) {
+  // Ver o Discover sem conta continua liberado; a tela de Perfil não faz
+  // sentido pra quem não tem perfil nenhum, então pede login/cadastro ali.
+  if (screenId === "profile" && !STATE.isLoggedIn) {
+    requireAuth();
+    return;
+  }
+
   // Guarda a tela anterior e já atualiza o estado antes da limpeza,
   // evitando recursão infinita quando closeLiveRoom chama navigateTo() de volta.
   const previousScreen = STATE.activeScreen;
@@ -467,6 +474,10 @@ function createRealLiveCardElement(session) {
 // checa se a live é restrita (senha ou só convidados) — quem transmite
 // sempre entra livre na própria live.
 async function enterRealLiveRoom(hostUserId) {
+  // Ver quem está ao vivo no Discover continua aberto pra visitante sem
+  // conta; entrar de fato numa live já exige login/cadastro.
+  if (!requireAuth()) return;
+
   let profile;
   try {
     profile = await DB.getProfile(hostUserId);
@@ -486,7 +497,6 @@ async function enterRealLiveRoom(hostUserId) {
   const isHost = me && me.id === hostUserId;
 
   if (!isHost && session.invite_only) {
-    if (!requireAuth()) return;
     let invited = false;
     try {
       invited = await DB.isInvitedToLiveSession(session.id, me.id);
@@ -500,7 +510,6 @@ async function enterRealLiveRoom(hostUserId) {
   }
 
   if (!isHost && session.has_password) {
-    if (!requireAuth()) return;
     openLivePasswordGate(hostUserId);
     return;
   }
