@@ -4,21 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>VibeLive - App de Vídeos ao Vivo</title>
-  <meta name="description" content="VibeLive — protótipo de app de lives ao vivo com presentes, batalhas PK, chat e recarga via PIX.">
+  <meta name="description" content="VibeLive — app de lives ao vivo com contas, carteira, vídeo e pagamento reais. Chat, presentes e transmissão de verdade via WebRTC, recarga de moedas via PIX de verdade.">
   <meta name="theme-color" content="#0a0a0d">
 
   <!-- Ícone -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!-- Instalável como app (PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VibeLive">
 
   <!-- Open Graph / redes sociais -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="VibeLive - App de Vídeos ao Vivo">
-  <meta property="og:description" content="Protótipo de app de lives ao vivo com presentes, batalhas PK, chat e recarga via PIX.">
+  <meta property="og:description" content="App de lives ao vivo com contas, carteira, vídeo e pagamento reais — não é um protótipo com dados simulados.">
   <meta property="og:image" content="https://contactalexandresousa.github.io/vibelive/og-image.png">
   <meta property="og:url" content="https://contactalexandresousa.github.io/vibelive/">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="VibeLive - App de Vídeos ao Vivo">
-  <meta name="twitter:description" content="Protótipo de app de lives ao vivo com presentes, batalhas PK, chat e recarga via PIX.">
+  <meta name="twitter:description" content="App de lives ao vivo com contas, carteira, vídeo e pagamento reais — não é um protótipo com dados simulados.">
   <meta name="twitter:image" content="https://contactalexandresousa.github.io/vibelive/og-image.png">
 
   <!-- Google Fonts para tipografia moderna -->
@@ -1066,5 +1073,10 @@
   <script src="supabase-client.js"></script>
   <!-- Script Principal -->
   <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+    }
+  </script>
 </body>
 </html>
