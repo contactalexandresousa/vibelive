@@ -693,6 +693,10 @@
                    <div class="setup-action-icon">🖼️</div>
                    <span>Atmosfera</span>
                  </div>
+                 <div class="setup-action-item" onclick="openLivePrivacyModal()">
+                   <div class="setup-action-icon" id="setup-privacy-icon">🌐</div>
+                   <span>Privacidade</span>
+                 </div>
                </div>
 
                <!-- Botão Cyan de Transmissão -->
@@ -1075,6 +1079,60 @@
             </p>
             <input type="password" id="new-password-input" placeholder="Nova senha (mín. 6 caracteres)" style="width: 100%; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
             <button class="btn-publish-post" onclick="submitNewPassword()" style="margin-top: 14px;">Salvar Nova Senha</button>
+          </div>
+        </div>
+
+        <!-- Modal: Privacidade da Live (pública, com senha, ou só convidados) -->
+        <div class="new-post-modal" id="modal-live-privacy" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLivePrivacyModal()"></div>
+          <div class="new-post-content">
+            <header class="new-post-header">
+              <h3>Privacidade da Live</h3>
+              <button class="btn-close-new-post" onclick="closeLivePrivacyModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div class="privacy-options-list">
+                <label class="privacy-option">
+                  <input type="radio" name="live-privacy" value="public" onchange="updateLivePrivacyUI()">
+                  <div><strong>Pública</strong><span>Qualquer pessoa pode entrar e assistir</span></div>
+                </label>
+                <label class="privacy-option">
+                  <input type="radio" name="live-privacy" value="password" onchange="updateLivePrivacyUI()">
+                  <div><strong>Com senha</strong><span>Só entra quem souber a senha</span></div>
+                </label>
+                <label class="privacy-option">
+                  <input type="radio" name="live-privacy" value="invite" onchange="updateLivePrivacyUI()">
+                  <div><strong>Só convidados</strong><span>Escolha entre quem te segue e você segue de volta</span></div>
+                </label>
+              </div>
+
+              <div id="live-privacy-password-group" style="display: none; margin-top: 14px;">
+                <input type="password" id="live-privacy-password-input" class="onboarding-input" placeholder="Senha da live" maxlength="40">
+              </div>
+
+              <div id="live-privacy-invite-group" style="display: none; margin-top: 14px;">
+                <p style="font-size: 0.7rem; color: var(--light-gray); margin-bottom: 8px;">Seguidores mútuos:</p>
+                <div id="live-privacy-invite-list" class="inbox-list" style="max-height: 180px; overflow-y: auto;"></div>
+              </div>
+
+              <button class="btn-follow-primary" style="margin-top: 18px; width: 100%;" onclick="closeLivePrivacyModal()">Salvar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: pedir senha pra entrar numa live protegida -->
+        <div class="new-post-modal" id="modal-live-password-gate" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLivePasswordGate()"></div>
+          <div class="new-post-content" style="align-items: center; text-align: center;">
+            <div style="font-size: 2rem;">🔒</div>
+            <h3 style="margin: 8px 0; font-family: var(--font-display);">Live com senha</h3>
+            <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Peça a senha pra quem está transmitindo.</p>
+            <input type="password" id="live-password-gate-input" class="onboarding-input" placeholder="Senha">
+            <span class="onboarding-error" id="live-password-gate-error"></span>
+            <div style="display: flex; gap: 10px; width: 100%; margin-top: 14px;">
+              <button class="btn-follow-primary" style="flex: 1;" onclick="submitLivePasswordGate()">Entrar</button>
+              <button type="button" class="onboarding-skip-btn" onclick="closeLivePasswordGate()">Cancelar</button>
+            </div>
           </div>
         </div>
 

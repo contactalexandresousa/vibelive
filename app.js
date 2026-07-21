@@ -24,6 +24,10 @@ const STATE = {
   myLiveGiftsChannel: null, // canal Realtime que avisa quem transmite quando chega um presente de verdade
   facingMode: "user", // câmera frontal ("user") ou traseira ("environment")
   isMuted: false,
+  livePrivacyMode: "public", // "public" | "password" | "invite"
+  livePrivacyPassword: "",
+  liveInviteeIds: [],
+  mutualFollowersCache: null,
   realLiveSessions: [], // quem está transmitindo de verdade agora
   realLiveSessionsChannel: null,
   currentLiveIsReal: false,
@@ -256,6 +260,12 @@ function navigateTo(screenId) {
     if (thumb) thumb.src = STATE.myAvatarUrl || "";
     const titleInput = document.getElementById("live-title-input");
     if (titleInput) titleInput.value = "";
+    STATE.livePrivacyMode = "public";
+    STATE.livePrivacyPassword = "";
+    STATE.liveInviteeIds = [];
+    STATE.mutualFollowersCache = null;
+    const privacyIcon = document.getElementById("setup-privacy-icon");
+    if (privacyIcon) privacyIcon.textContent = "🌐";
   }
 }
 
@@ -420,6 +430,11 @@ function createRealLiveCardElement(session) {
   const name = escapeHtml(profile.display_name || profile.username || "Ao vivo");
   const avatar = profile.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150";
   const titleHtml = session.title ? `<span class="card-live-title">${escapeHtml(session.title)}</span>` : "";
+  const restrictedBadge = session.invite_only
+    ? `<span class="card-restricted-badge">👥 Convidados</span>`
+    : session.has_password
+      ? `<span class="card-restricted-badge">🔒 Com senha</span>`
+      : "";
 
   const card = document.createElement("div");
   card.className = "live-card";
@@ -431,6 +446,7 @@ function createRealLiveCardElement(session) {
     <div class="card-viewers">
       <span style="color: var(--primary); font-weight: 800;">🔴 AO VIVO</span>
     </div>
+    ${restrictedBadge}
     <div class="card-details">
       <span class="card-name">${name}</span>
       ${titleHtml}
@@ -445,7 +461,9 @@ function createRealLiveCardElement(session) {
 
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM REAL)
 // Entra numa transmissão de verdade (pessoa real, vídeo real via LiveKit) —
-// hostUserId é o id da conta de quem está transmitindo.
+// hostUserId é o id da conta de quem está transmitindo. Antes de conectar,
+// checa se a live é restrita (senha ou só convidados) — quem transmite
+// sempre entra livre na própria live.
 async function enterRealLiveRoom(hostUserId) {
   let profile;
   try {
@@ -454,6 +472,83 @@ async function enterRealLiveRoom(hostUserId) {
     showToast("Não foi possível entrar nessa live.");
     return;
   }
+
+  const session = STATE.realLiveSessions.find(s => s.user_id === hostUserId)
+    || (await DB.getActiveLiveSessions()).find(s => s.user_id === hostUserId);
+  if (!session) {
+    showToast("Essa live não está mais ao ar.");
+    return;
+  }
+
+  const me = await Auth.getUser();
+  const isHost = me && me.id === hostUserId;
+
+  if (!isHost && session.invite_only) {
+    if (!requireAuth()) return;
+    let invited = false;
+    try {
+      invited = await DB.isInvitedToLiveSession(session.id, me.id);
+    } catch (err) {
+      console.error("Falha ao checar convite:", err);
+    }
+    if (!invited) {
+      showToast("Essa live é só para convidados.");
+      return;
+    }
+  }
+
+  if (!isHost && session.has_password) {
+    if (!requireAuth()) return;
+    openLivePasswordGate(hostUserId);
+    return;
+  }
+
+  await enterRealLiveRoomUnlocked(hostUserId, profile);
+}
+
+function openLivePasswordGate(hostUserId) {
+  STATE.pendingLiveEntryHostId = hostUserId;
+  document.getElementById("live-password-gate-input").value = "";
+  document.getElementById("live-password-gate-error").textContent = "";
+  document.getElementById("modal-live-password-gate").style.display = "flex";
+}
+
+function closeLivePasswordGate() {
+  document.getElementById("modal-live-password-gate").style.display = "none";
+  STATE.pendingLiveEntryHostId = null;
+}
+
+async function submitLivePasswordGate() {
+  const hostUserId = STATE.pendingLiveEntryHostId;
+  if (!hostUserId) return;
+  const password = document.getElementById("live-password-gate-input").value;
+  const errorEl = document.getElementById("live-password-gate-error");
+
+  try {
+    const ok = await DB.checkLiveSessionPassword(`live-${hostUserId}`, password);
+    if (!ok) {
+      errorEl.textContent = "Senha incorreta.";
+      return;
+    }
+  } catch (err) {
+    errorEl.textContent = "Não foi possível checar agora. Tente de novo.";
+    return;
+  }
+
+  document.getElementById("modal-live-password-gate").style.display = "none";
+  STATE.pendingLiveEntryHostId = null;
+
+  let profile;
+  try {
+    profile = await DB.getProfile(hostUserId);
+  } catch (err) {
+    showToast("Não foi possível entrar nessa live.");
+    return;
+  }
+  await enterRealLiveRoomUnlocked(hostUserId, profile);
+}
+
+async function enterRealLiveRoomUnlocked(hostUserId, profile) {
   const b = {
     id: hostUserId,
     name: profile.display_name || profile.username,
@@ -1362,6 +1457,80 @@ async function toggleCameraFacing() {
   }
 }
 
+// ==========================================================================
+// PRIVACIDADE DA LIVE (pública / com senha / só convidados)
+// ==========================================================================
+async function openLivePrivacyModal() {
+  const radios = document.querySelectorAll('input[name="live-privacy"]');
+  radios.forEach(r => { r.checked = r.value === STATE.livePrivacyMode; });
+  document.getElementById("live-privacy-password-input").value = STATE.livePrivacyPassword;
+  updateLivePrivacyUI();
+
+  if (STATE.livePrivacyMode === "invite") {
+    await renderInviteList();
+  }
+
+  document.getElementById("modal-live-privacy").style.display = "flex";
+}
+
+function closeLivePrivacyModal() {
+  const selected = document.querySelector('input[name="live-privacy"]:checked');
+  STATE.livePrivacyMode = selected ? selected.value : "public";
+  STATE.livePrivacyPassword = document.getElementById("live-privacy-password-input").value.trim();
+
+  const icon = document.getElementById("setup-privacy-icon");
+  if (icon) {
+    icon.textContent = STATE.livePrivacyMode === "password" ? "🔒" : STATE.livePrivacyMode === "invite" ? "👥" : "🌐";
+  }
+  document.getElementById("modal-live-privacy").style.display = "none";
+}
+
+async function updateLivePrivacyUI() {
+  const mode = document.querySelector('input[name="live-privacy"]:checked')?.value || "public";
+  document.getElementById("live-privacy-password-group").style.display = mode === "password" ? "block" : "none";
+  document.getElementById("live-privacy-invite-group").style.display = mode === "invite" ? "block" : "none";
+  if (mode === "invite" && !STATE.mutualFollowersCache) {
+    await renderInviteList();
+  }
+}
+
+async function renderInviteList() {
+  const container = document.getElementById("live-privacy-invite-list");
+  container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Carregando...</div>`;
+  try {
+    if (!STATE.mutualFollowersCache) {
+      STATE.mutualFollowersCache = await DB.getMutualFollowers();
+    }
+    const mutuals = STATE.mutualFollowersCache;
+    if (mutuals.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Ninguém que te segue e você segue de volta ainda.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    mutuals.forEach(p => {
+      const name = escapeHtml(p.display_name || p.username);
+      const item = document.createElement("label");
+      item.className = "invite-checkbox-item";
+      item.innerHTML = `
+        <input type="checkbox" value="${p.id}" ${STATE.liveInviteeIds.includes(p.id) ? "checked" : ""} onchange="toggleInvitee('${p.id}', this.checked)">
+        <img src="${p.avatar_url || ""}" alt="${name}">
+        <span>${name}</span>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Não foi possível carregar. Tente de novo.</div>`;
+  }
+}
+
+function toggleInvitee(userId, checked) {
+  if (checked) {
+    if (!STATE.liveInviteeIds.includes(userId)) STATE.liveInviteeIds.push(userId);
+  } else {
+    STATE.liveInviteeIds = STATE.liveInviteeIds.filter(id => id !== userId);
+  }
+}
+
 function startOwnLiveStream() {
   if (!requireAuth()) return;
 
@@ -1436,6 +1605,32 @@ async function launchBroadcastingSession() {
     const titleInput = document.getElementById("live-title-input");
     const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
     await DB.startLiveSession(roomName, title);
+
+    // Aplica a privacidade escolhida (pública por padrão) — feito depois de
+    // criar a sessão porque as funções de senha/convite trabalham em cima da
+    // sessão ativa já existente pelo room_name.
+    try {
+      if (STATE.livePrivacyMode === "password" && STATE.livePrivacyPassword) {
+        await DB.setLiveSessionPassword(roomName, STATE.livePrivacyPassword);
+      } else {
+        await DB.setLiveSessionPassword(roomName, null);
+      }
+
+      if (STATE.livePrivacyMode === "invite") {
+        await DB.setLiveSessionInviteOnly(roomName, true);
+        const session = (await DB.getActiveLiveSessions()).find(s => s.room_name === roomName);
+        if (session) {
+          await Promise.all(STATE.liveInviteeIds.map(id =>
+            DB.inviteToLiveSession(session.id, id).catch(err => console.error("Falha ao convidar:", err))
+          ));
+        }
+      } else {
+        await DB.setLiveSessionInviteOnly(roomName, false);
+      }
+    } catch (err) {
+      console.error("Falha ao aplicar privacidade da live:", err);
+      showToast("Live no ar, mas houve um problema ao aplicar a privacidade escolhida.");
+    }
 
     // Avisa em tempo real quando um presente de verdade chega — o servidor já
     // creditou a carteira (RPC send_gift/send_quick_rose); aqui só reflete

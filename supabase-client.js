@@ -338,6 +338,64 @@ const DB = {
     if (error) throw error;
   },
 
+  // Quem eu sigo E que também me segue de volta — só essas pessoas podem ser
+  // convidadas pra uma live restrita.
+  async getMutualFollowers() {
+    const { data: { user } } = await sb.auth.getUser();
+    const me = await sb.from("profiles").select("username").eq("id", user.id).single();
+    if (me.error) throw me.error;
+
+    const [followingRes, followersRes] = await Promise.all([
+      sb.from("follows").select("followed_handle").eq("follower_id", user.id),
+      sb.from("follows")
+        .select("profiles!follows_follower_id_fkey(id, username, display_name, avatar_url)")
+        .eq("followed_handle", me.data.username)
+    ]);
+    if (followingRes.error) throw followingRes.error;
+    if (followersRes.error) throw followersRes.error;
+
+    const followingSet = new Set((followingRes.data || []).map(r => r.followed_handle));
+    return (followersRes.data || [])
+      .map(r => r.profiles)
+      .filter(p => p && followingSet.has(p.username));
+  },
+
+  // Live com senha: hash nunca sai do banco — set/check rodam via RPC
+  // SECURITY DEFINER (0031_onboarding_and_live_features.sql).
+  async setLiveSessionPassword(roomName, password) {
+    const { error } = await sb.rpc("set_live_session_password", { p_room_name: roomName, p_password: password || null });
+    if (error) throw error;
+  },
+
+  async checkLiveSessionPassword(roomName, password) {
+    const { data, error } = await sb.rpc("check_live_session_password", { p_room_name: roomName, p_password: password });
+    if (error) throw error;
+    return data;
+  },
+
+  // Live restrita a convidados (seguidores mútuos escolhidos por quem transmite).
+  async setLiveSessionInviteOnly(roomName, inviteOnly) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("live_sessions").update({ invite_only: inviteOnly }).eq("room_name", roomName).eq("user_id", user.id);
+    if (error) throw error;
+  },
+
+  async inviteToLiveSession(liveSessionId, invitedUserId) {
+    const { error } = await sb.from("live_session_invites").insert({ live_session_id: liveSessionId, invited_user_id: invitedUserId });
+    if (error) throw error;
+  },
+
+  async isInvitedToLiveSession(liveSessionId, userId) {
+    const { data, error } = await sb
+      .from("live_session_invites")
+      .select("live_session_id")
+      .eq("live_session_id", liveSessionId)
+      .eq("invited_user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
+  },
+
   // Vídeo ao vivo real (LiveKit) — token assinado no servidor, o cliente nunca
   // vê o API Secret do LiveKit.
   async createLivekitToken(roomName) {
