@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721c">
+  <link rel="stylesheet" href="styles.css?v=20260721d">
 </head>
 <body>
 
@@ -181,16 +181,6 @@
                 <span class="vibe-category-label">Vibe Privada</span>
               </button>
             </div>
-
-            <!-- Conteúdo pago de quem você segue -->
-            <button class="following-paid-banner" onclick="openFollowingPaidContent()">
-              <span class="following-paid-icon">💎</span>
-              <span class="following-paid-text">
-                <strong>Conteúdo pago</strong>
-                <small>Veja o que quem você segue está vendendo</small>
-              </span>
-              <svg class="following-paid-arrow" viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
-            </button>
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
@@ -776,6 +766,9 @@
               <path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
             </svg>
           </div>
+          <div class="nav-item" onclick="openFollowingPaidContent()">
+            <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M6 3h12l4 6-10 12L2 9l4-6zm.66 2L4.4 8.5h4.53L10.5 5H6.66zm4.94 0l-1.57 3.5h3.94L12.4 5h-1.4zm2.9 0l1.57 3.5h4.53L17.34 5h-3.84zM4.7 10.5L11 18.7 7.94 10.5H4.7zm4.75 0L12 19l2.55-8.5h-5.1zm5.85 0L12 18.7l6.3-8.2h-3.25zm4.85-2h-4.53l1.57-3.5-2.96 3.5z"/></svg>
+          </div>
           <div class="nav-item" data-screen="messages" onclick="navigateTo('messages')">
             <div class="nav-icon-wrapper">
               <svg class="nav-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -1234,9 +1227,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721c"></script>
+  <script src="supabase-client.js?v=20260721d"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721c"></script>
+  <script src="app.js?v=20260721d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

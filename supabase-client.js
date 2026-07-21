@@ -137,6 +137,13 @@ const DB = {
     return data;
   },
 
+  // Sugestões de perfis reais antes de digitar qualquer coisa na busca.
+  async getRandomProfiles(limit = 8) {
+    const { data, error } = await sb.rpc("get_random_profiles", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
   // Upload real de avatar (Supabase Storage). Caminho é sempre
   // "<user_id>/avatar.<ext>" — RLS do bucket só deixa cada um escrever na
   // própria pasta. upsert:true substitui o arquivo anterior direto.

@@ -2458,6 +2458,43 @@ function closeSearchOverlay() {
   document.getElementById("modal-search-overlay").style.display = "none";
 }
 
+function renderProfileSearchResults(container, profiles) {
+  container.innerHTML = "";
+  profiles.forEach(p => {
+    const name = p.display_name || p.username;
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.style.padding = "10px 0";
+    item.style.borderBottom = "1px solid var(--glass-border)";
+
+    item.onclick = () => {
+      closeSearchOverlay();
+      openPrivateChat(p.id, name, p.avatar_url);
+    };
+
+    const safeName = escapeHtml(name);
+    const privateBtnHtml = p.private_content_price
+      ? `<button class="btn-lightbox-like" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff; margin-left: 6px;" onclick="event.stopPropagation(); closeSearchOverlay(); openPrivateContentModal('${p.id}');">🔒</button>`
+      : "";
+    item.innerHTML = `
+      <div class="inbox-avatar" style="width: 44px; height: 44px;">
+        <img src="${p.avatar_url}" alt="${safeName}" style="border-radius: 50%;">
+      </div>
+      <div class="inbox-details" style="margin-left: 12px;">
+        <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${safeName}</span>
+        <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${escapeHtml(p.username)}</span>
+      </div>
+      <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
+        <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
+          Mensagem
+        </button>
+        ${privateBtnHtml}
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
 let searchDebounceTimer = null;
 function performProfileSearch() {
   const query = document.getElementById("search-profile-input").value.trim();
@@ -2467,13 +2504,39 @@ function performProfileSearch() {
   clearTimeout(searchDebounceTimer);
 
   if (!query) {
-    container.innerHTML = `
-      <div class="discover-empty-state" style="display: flex;">
-        <div class="discover-empty-icon">🔍</div>
-        <h3>Buscar perfis reais</h3>
-        <p>Digite um nome ou @usuário para buscar pessoas reais no VibeLive.</p>
-      </div>
-    `;
+    // Sem nada digitado ainda: sugere gente real registrada na plataforma,
+    // em vez de só um texto pedindo pra digitar algo.
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.72rem;">Carregando sugestões...</div>`;
+    DB.getRandomProfiles(8)
+      .then(profiles => {
+        // A busca pode ter mudado enquanto a promise resolvia.
+        if (document.getElementById("search-profile-input").value.trim()) return;
+        const suggestions = profiles.filter(p => !STATE.blockedUsers.includes(p.id));
+        if (suggestions.length === 0) {
+          container.innerHTML = `
+            <div class="discover-empty-state" style="display: flex;">
+              <div class="discover-empty-icon">🔍</div>
+              <h3>Buscar perfis reais</h3>
+              <p>Digite um nome ou @usuário para buscar pessoas reais no VibeLive.</p>
+            </div>
+          `;
+          return;
+        }
+        renderProfileSearchResults(container, suggestions);
+        const label = document.createElement("p");
+        label.textContent = "Sugestões pra você";
+        label.style.cssText = "font-size:0.65rem;color:var(--light-gray);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;";
+        container.insertBefore(label, container.firstChild);
+      })
+      .catch(() => {
+        container.innerHTML = `
+          <div class="discover-empty-state" style="display: flex;">
+            <div class="discover-empty-icon">🔍</div>
+            <h3>Buscar perfis reais</h3>
+            <p>Digite um nome ou @usuário para buscar pessoas reais no VibeLive.</p>
+          </div>
+        `;
+      });
     return;
   }
 
@@ -2494,8 +2557,8 @@ function performProfileSearch() {
       return;
     }
 
-    container.innerHTML = "";
     if (matches.length === 0) {
+      container.innerHTML = "";
       const empty = document.createElement("div");
       empty.className = "discover-empty-state";
       empty.style.display = "flex";
@@ -2507,39 +2570,7 @@ function performProfileSearch() {
       return;
     }
 
-    matches.forEach(p => {
-      const name = p.display_name || p.username;
-      const item = document.createElement("div");
-      item.className = "inbox-item";
-      item.style.padding = "10px 0";
-      item.style.borderBottom = "1px solid var(--glass-border)";
-
-      item.onclick = () => {
-        closeSearchOverlay();
-        openPrivateChat(p.id, name, p.avatar_url);
-      };
-
-      const safeName = escapeHtml(name);
-      const privateBtnHtml = p.private_content_price
-        ? `<button class="btn-lightbox-like" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff; margin-left: 6px;" onclick="event.stopPropagation(); closeSearchOverlay(); openPrivateContentModal('${p.id}');">🔒</button>`
-        : "";
-      item.innerHTML = `
-        <div class="inbox-avatar" style="width: 44px; height: 44px;">
-          <img src="${p.avatar_url}" alt="${safeName}" style="border-radius: 50%;">
-        </div>
-        <div class="inbox-details" style="margin-left: 12px;">
-          <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${safeName}</span>
-          <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${escapeHtml(p.username)}</span>
-        </div>
-        <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
-          <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
-            Mensagem
-          </button>
-          ${privateBtnHtml}
-        </div>
-      `;
-      container.appendChild(item);
-    });
+    renderProfileSearchResults(container, matches);
   }, 300);
 }
 
