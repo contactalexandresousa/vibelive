@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721h">
+  <link rel="stylesheet" href="styles.css?v=20260721i">
 </head>
 <body>
 
@@ -86,6 +86,9 @@
                   </div>
                   <div class="auth-form-group" id="auth-birthdate-group" style="display: none;">
                     <input type="date" id="auth-birthdate" placeholder="Data de nascimento">
+                  </div>
+                  <div class="auth-form-group" id="auth-referral-group" style="display: none;">
+                    <input type="text" id="auth-referral-input" placeholder="Código de convite (opcional)">
                   </div>
                   <label class="privacy-option" id="auth-terms-group" style="display: none; margin-bottom: 14px;">
                     <input type="checkbox" id="auth-terms-checkbox">
@@ -915,7 +918,28 @@
                 🔔 Ativar Notificações
               </button>
 
-              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openHelpModal()">
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openReferralModal()">
+                🎁 Convide Amigos
+              </button>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 16px 0 10px; padding-top: 14px;"></div>
+              <p style="font-size: 0.62rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Segurança e privacidade</p>
+
+              <button class="btn-publish-post" id="btn-2fa-toggle" style="margin-top: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="open2faModal()">
+                🔐 Autenticação em Duas Etapas
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openSessionsModal()">
+                📱 Sessões e Dispositivos
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="exportMyData()">
+                ⬇️ Baixar Meus Dados
+              </button>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 16px 0 10px; padding-top: 14px;"></div>
+
+              <button class="btn-publish-post" style="margin-top: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openHelpModal()">
                 ❓ Central de Ajuda
               </button>
 
@@ -1416,6 +1440,83 @@
         </div>
 
         <!-- Modal: Termos de Uso e Política de Privacidade (texto completo, aberto de vários lugares) -->
+        <!-- Modal: Configurar/gerenciar 2FA (TOTP) -->
+        <div class="new-post-modal" id="modal-2fa-setup" style="display: none;">
+          <div class="new-post-overlay" onclick="close2faModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔐 Autenticação em Duas Etapas</h3>
+              <button class="btn-close-new-post" onclick="close2faModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div id="twofa-status-active" style="display: none; text-align: center; padding: 10px 0;">
+                <div style="font-size: 2rem; margin-bottom: 10px;">✅</div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 18px;">A verificação em duas etapas está ativada nessa conta.</p>
+                <button class="btn-follow-primary" style="width: 100%; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="disable2fa()">Desativar</button>
+              </div>
+              <div id="twofa-status-inactive" style="display: none;">
+                <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Escaneie o QR Code com um app autenticador (Google Authenticator, Authy etc.) e digite o código de 6 dígitos pra confirmar.</p>
+                <div id="twofa-qr-container" style="display: flex; justify-content: center; margin-bottom: 12px; background: #fff; border-radius: 12px; padding: 12px;"></div>
+                <p style="font-size: 0.62rem; color: var(--light-gray); text-align: center; margin-bottom: 14px; word-break: break-all;" id="twofa-manual-secret"></p>
+                <input type="text" id="twofa-code-input" class="onboarding-input" placeholder="Código de 6 dígitos" maxlength="6" inputmode="numeric">
+                <span class="onboarding-error" id="twofa-setup-error"></span>
+                <button class="btn-follow-primary" style="width: 100%; margin-top: 10px;" onclick="confirm2faEnrollment()">Confirmar e ativar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Desafio de 2FA no login — sem overlay clicável, é bloqueante -->
+        <div class="new-post-modal" id="modal-2fa-challenge" style="display: none;">
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔐 Confirme o código</h3>
+            </header>
+            <div class="new-post-body">
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Digite o código de 6 dígitos do seu app autenticador.</p>
+              <input type="text" id="twofa-challenge-code-input" class="onboarding-input" placeholder="Código de 6 dígitos" maxlength="6" inputmode="numeric">
+              <span class="onboarding-error" id="twofa-challenge-error"></span>
+              <button class="btn-follow-primary" style="width: 100%; margin-top: 12px;" onclick="submit2faChallenge()">Confirmar</button>
+              <button type="button" class="onboarding-skip-btn" style="margin-top: 8px;" onclick="cancel2faChallenge()">Cancelar login</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Sessões e Dispositivos -->
+        <div class="new-post-modal" id="modal-sessions" style="display: none;">
+          <div class="new-post-overlay" onclick="closeSessionsModal()"></div>
+          <div class="new-post-content" style="height: 75%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>📱 Sessões e Dispositivos</h3>
+              <button class="btn-close-new-post" onclick="closeSessionsModal()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Histórico de logins nessa conta (só o navegador/aparelho usado, sem localização).</p>
+              <div class="inbox-list" id="sessions-list-container"></div>
+              <button class="btn-follow-primary" style="width: 100%; margin-top: 16px; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="signOutOtherSessions()">Sair de todos os outros dispositivos</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Convide Amigos (programa de indicação) -->
+        <div class="new-post-modal" id="modal-referral" style="display: none;">
+          <div class="new-post-overlay" onclick="closeReferralModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🎁 Convide Amigos</h3>
+              <button class="btn-close-new-post" onclick="closeReferralModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Quando um amigo se cadastrar com seu link e fizer a primeira recarga PIX, vocês dois ganham 🪙 20 de bônus.</p>
+              <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                <input type="text" id="referral-link-display" readonly style="flex: 1; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.7rem;">
+                <button class="btn-follow-primary" style="height: 44px; padding: 0 14px; margin-top: 0;" onclick="copyReferralLink()">Copiar</button>
+              </div>
+              <p style="font-size: 0.72rem; color: var(--light-gray); text-align: center;"><span id="referral-count-label">0</span> amigo(s) indicado(s) até agora</p>
+            </div>
+          </div>
+        </div>
+
         <div class="new-post-modal" id="modal-terms" style="display: none;">
           <div class="new-post-overlay" onclick="closeTermsModal()"></div>
           <div class="new-post-content" style="align-items: stretch; height: 82%;">
@@ -1510,9 +1611,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721h"></script>
+  <script src="supabase-client.js?v=20260721i"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721h"></script>
+  <script src="app.js?v=20260721i"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

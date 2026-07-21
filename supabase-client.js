@@ -27,11 +27,11 @@ const Auth = {
     return data.user;
   },
 
-  async signUp(email, password, birthDate) {
+  async signUp(email, password, birthDate, referredByUsername) {
     const { data, error } = await sb.auth.signUp({
       email,
       password,
-      options: { data: { birth_date: birthDate, terms_accepted: true } }
+      options: { data: { birth_date: birthDate, terms_accepted: true, referred_by_username: referredByUsername || null } }
     });
     if (error) throw error;
     return data;
@@ -67,6 +67,43 @@ const Auth = {
   async updatePassword(newPassword) {
     const { error } = await sb.auth.updateUser({ password: newPassword });
     if (error) throw error;
+  },
+
+  // 2FA (TOTP) — o Supabase Auth já guarda tudo (fatores, desafios) do lado
+  // dele; não precisa de nenhuma tabela/migration nossa pra isso.
+  async mfaListFactors() {
+    const { data, error } = await sb.auth.mfa.listFactors();
+    if (error) throw error;
+    return data;
+  },
+
+  async mfaEnroll() {
+    // Nome único por tentativa: listFactors() só devolve fatores VERIFICADOS
+    // (um fator "unverified" abandonado fica invisível pro cliente), então
+    // sem isso, uma segunda tentativa de cadastro colide com "já existe um
+    // fator com esse nome" mesmo sem nenhum fator visível pra limpar.
+    const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: `totp-${Date.now()}` });
+    if (error) throw error;
+    return data;
+  },
+
+  async mfaChallengeAndVerify(factorId, code) {
+    const { data: challenge, error: challengeErr } = await sb.auth.mfa.challenge({ factorId });
+    if (challengeErr) throw challengeErr;
+    const { data, error } = await sb.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
+    if (error) throw error;
+    return data;
+  },
+
+  async mfaUnenroll(factorId) {
+    const { error } = await sb.auth.mfa.unenroll({ factorId });
+    if (error) throw error;
+  },
+
+  async mfaGetAssuranceLevel() {
+    const { data, error } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) throw error;
+    return data;
   }
 };
 
@@ -231,6 +268,83 @@ const DB = {
 
   async verifyAgeAndAcceptTerms(birthDate) {
     const { data, error } = await sb.rpc("verify_age_and_accept_terms", { p_birth_date: birthDate });
+    if (error) throw error;
+    return data;
+  },
+
+  // Coleta tudo que a própria RLS já deixa o dono ver, em cada tabela onde a
+  // conta aparece — sem endpoint novo, sem service role, só as mesmas
+  // políticas que já protegem cada tabela no dia a dia.
+  async exportAllMyData() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado");
+
+    const [
+      profile, posts, transactions, withdrawals,
+      subscriptionsAsSubscriber, subscriptionsAsCreator,
+      messagesSent, messagesReceived, notifications, follows,
+      unlocksAsBuyer, unlocksAsCreator, identity, blocks, reports
+    ] = await Promise.all([
+      sb.from("profiles").select("*").eq("id", user.id).single(),
+      sb.from("posts").select("*").eq("user_id", user.id),
+      sb.from("wallet_transactions").select("*").eq("user_id", user.id),
+      sb.from("withdrawal_requests").select("*").eq("user_id", user.id),
+      sb.from("creator_subscriptions").select("*").eq("subscriber_id", user.id),
+      sb.from("creator_subscriptions").select("*").eq("creator_id", user.id),
+      sb.from("direct_messages").select("*").eq("sender_id", user.id),
+      sb.from("direct_messages").select("*").eq("recipient_id", user.id),
+      sb.from("notifications").select("*").eq("user_id", user.id),
+      sb.from("follows").select("*").eq("follower_id", user.id),
+      sb.from("private_content_unlocks").select("*").eq("unlocker_id", user.id),
+      sb.from("private_content_unlocks").select("*").eq("creator_id", user.id),
+      sb.from("user_identity").select("*").eq("user_id", user.id).maybeSingle(),
+      sb.from("blocked_users").select("*").eq("blocker_id", user.id),
+      sb.from("user_reports").select("*").eq("reporter_id", user.id),
+    ]);
+
+    return {
+      exported_at: new Date().toISOString(),
+      account_email: user.email,
+      profile: profile.data,
+      posts: posts.data,
+      wallet_transactions: transactions.data,
+      withdrawal_requests: withdrawals.data,
+      subscriptions_as_subscriber: subscriptionsAsSubscriber.data,
+      subscriptions_as_creator: subscriptionsAsCreator.data,
+      direct_messages_sent: messagesSent.data,
+      direct_messages_received: messagesReceived.data,
+      notifications: notifications.data,
+      follows: follows.data,
+      private_content_unlocked_from_others: unlocksAsBuyer.data,
+      private_content_sold_to_others: unlocksAsCreator.data,
+      identity_cpf: identity.data,
+      blocked_users: blocks.data,
+      reports_submitted: reports.data,
+    };
+  },
+
+  async logLoginEvent() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    const { error } = await sb.from("login_events").insert({ user_id: user.id, user_agent: navigator.userAgent });
+    if (error) throw error;
+  },
+
+  async getMyLoginEvents(limit = 15) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("login_events")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyReferralCount() {
+    const { data, error } = await sb.rpc("get_my_referral_count");
     if (error) throw error;
     return data;
   },

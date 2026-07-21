@@ -162,6 +162,12 @@ sb.auth.onAuthStateChange((event) => {
   if (event === "PASSWORD_RECOVERY") {
     showNewPasswordModal();
   }
+  // SIGNED_IN só dispara em login de verdade (senha, OAuth, magic link) —
+  // reload de página com sessão já existente dispara INITIAL_SESSION, não
+  // isso, então não duplica linha no histórico a cada F5.
+  if (event === "SIGNED_IN") {
+    DB.logLoginEvent().catch(() => {});
+  }
 });
 
 // 4. INICIALIZAÇÃO DO APP
@@ -2877,6 +2883,217 @@ async function saveMyCpf() {
   }
 }
 
+// ==========================================================================
+// 26. AUTENTICAÇÃO EM DUAS ETAPAS (2FA/TOTP)
+// ==========================================================================
+let pendingMfaFactorId = null; // usado só durante o desafio de login
+
+async function open2faModal() {
+  if (!requireAuth()) return;
+  document.getElementById("modal-2fa-setup").style.display = "flex";
+  document.getElementById("twofa-status-active").style.display = "none";
+  document.getElementById("twofa-status-inactive").style.display = "none";
+  document.getElementById("twofa-setup-error").textContent = "";
+  document.getElementById("twofa-code-input").value = "";
+
+  try {
+    const factors = await Auth.mfaListFactors();
+    const verified = factors.totp.find(f => f.status === "verified");
+    if (verified) {
+      document.getElementById("twofa-status-active").style.display = "block";
+      return;
+    }
+
+    const enrolled = await Auth.mfaEnroll();
+    STATE.pendingMfaEnrollFactorId = enrolled.id;
+    document.getElementById("twofa-qr-container").innerHTML = `<img src="${enrolled.totp.qr_code}" alt="QR Code" style="width: 200px; height: 200px;">`;
+    document.getElementById("twofa-manual-secret").textContent = `Código manual: ${enrolled.totp.secret}`;
+    document.getElementById("twofa-status-inactive").style.display = "block";
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar as configurações de 2FA.");
+    close2faModal();
+  }
+}
+
+function close2faModal() {
+  document.getElementById("modal-2fa-setup").style.display = "none";
+}
+
+async function confirm2faEnrollment() {
+  const code = document.getElementById("twofa-code-input").value.trim();
+  const errorEl = document.getElementById("twofa-setup-error");
+  errorEl.textContent = "";
+
+  if (!/^\d{6}$/.test(code)) {
+    errorEl.textContent = "Digite os 6 dígitos do código.";
+    return;
+  }
+
+  try {
+    await Auth.mfaChallengeAndVerify(STATE.pendingMfaEnrollFactorId, code);
+    showToast("Autenticação em duas etapas ativada!");
+    await open2faModal();
+  } catch (err) {
+    errorEl.textContent = "Código inválido. Confira o horário do seu celular e tente de novo.";
+  }
+}
+
+async function disable2fa() {
+  if (!confirm("Desativar a autenticação em duas etapas? Sua conta fica menos protegida.")) return;
+  try {
+    const factors = await Auth.mfaListFactors();
+    const verified = factors.totp.find(f => f.status === "verified");
+    if (verified) await Auth.mfaUnenroll(verified.id);
+    showToast("Autenticação em duas etapas desativada.");
+    await open2faModal();
+  } catch (err) {
+    showToast(err.message || "Não foi possível desativar agora.");
+  }
+}
+
+// Chamado no meio do login (handleAuthSubmit) quando a conta tem 2FA ativo —
+// bloqueia o acesso até confirmar o código, mesmo já com a senha certa.
+function showMfaChallenge(factorId) {
+  pendingMfaFactorId = factorId;
+  document.getElementById("twofa-challenge-code-input").value = "";
+  document.getElementById("twofa-challenge-error").textContent = "";
+  document.getElementById("modal-2fa-challenge").style.display = "flex";
+}
+
+async function submit2faChallenge() {
+  const code = document.getElementById("twofa-challenge-code-input").value.trim();
+  const errorEl = document.getElementById("twofa-challenge-error");
+  errorEl.textContent = "";
+
+  if (!/^\d{6}$/.test(code)) {
+    errorEl.textContent = "Digite os 6 dígitos do código.";
+    return;
+  }
+
+  try {
+    await Auth.mfaChallengeAndVerify(pendingMfaFactorId, code);
+    document.getElementById("modal-2fa-challenge").style.display = "none";
+    pendingMfaFactorId = null;
+    await finishLoginAfterAuth("Login realizado com sucesso!");
+  } catch (err) {
+    errorEl.textContent = "Código inválido. Tente de novo.";
+  }
+}
+
+async function cancel2faChallenge() {
+  pendingMfaFactorId = null;
+  document.getElementById("modal-2fa-challenge").style.display = "none";
+  await Auth.signOut();
+  showToast("Login cancelado.");
+}
+
+// ==========================================================================
+// 28. SESSÕES E DISPOSITIVOS
+// ==========================================================================
+function parseUserAgentLabel(ua) {
+  if (!ua) return "Dispositivo desconhecido";
+  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Navegador";
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "";
+  return os ? `${browser} · ${os}` : browser;
+}
+
+async function openSessionsModal() {
+  if (!requireAuth()) return;
+  const container = document.getElementById("sessions-list-container");
+  document.getElementById("modal-sessions").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const events = await DB.getMyLoginEvents(15);
+    container.innerHTML = "";
+    if (events.length === 0) {
+      container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);text-align:center;padding:10px 0;">Nenhum login registrado ainda.</p>`;
+      return;
+    }
+    events.forEach(ev => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-details">
+          <span class="inbox-name">📱 ${escapeHtml(parseUserAgentLabel(ev.user_agent))}</span>
+          <span class="inbox-message">${formatMessageTime(ev.created_at)}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);text-align:center;padding:10px 0;">Não foi possível carregar o histórico agora.</p>`;
+  }
+}
+
+function closeSessionsModal() {
+  document.getElementById("modal-sessions").style.display = "none";
+}
+
+async function signOutOtherSessions() {
+  if (!confirm("Encerrar todas as outras sessões dessa conta? Só o dispositivo/navegador atual continua logado.")) return;
+  try {
+    const { error } = await sb.auth.signOut({ scope: "others" });
+    if (error) throw error;
+    showToast("Outras sessões encerradas.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível encerrar as outras sessões agora.");
+  }
+}
+
+// ==========================================================================
+// 29. PROGRAMA DE INDICAÇÃO
+// ==========================================================================
+async function openReferralModal() {
+  if (!requireAuth()) return;
+  document.getElementById("modal-referral").style.display = "flex";
+  const link = `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(STATE.myUsername || "")}`;
+  document.getElementById("referral-link-display").value = link;
+
+  try {
+    const count = await DB.getMyReferralCount();
+    document.getElementById("referral-count-label").textContent = count;
+  } catch (err) {
+    console.error("Falha ao carregar contagem de indicações:", err);
+  }
+}
+
+function closeReferralModal() {
+  document.getElementById("modal-referral").style.display = "none";
+}
+
+function copyReferralLink() {
+  const input = document.getElementById("referral-link-display");
+  input.select();
+  navigator.clipboard.writeText(input.value)
+    .then(() => showToast("Link copiado!"))
+    .catch(() => showToast("Não foi possível copiar. Copie manualmente."));
+}
+
+// ==========================================================================
+// 27. EXPORTAR MEUS DADOS (LGPD) — tudo via RLS já existente, sem endpoint novo
+// ==========================================================================
+async function exportMyData() {
+  if (!requireAuth()) return;
+  showToast("Preparando seu arquivo...");
+
+  try {
+    const data = await DB.exportAllMyData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibelive-meus-dados-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("Download iniciado!");
+  } catch (err) {
+    showToast(err.message || "Não foi possível gerar o arquivo agora.");
+  }
+}
+
 async function handleAvatarFileSelected(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
@@ -3140,6 +3357,7 @@ function toggleAuthTab(mode) {
   const confirmGroup = document.getElementById("auth-confirm-password-group");
   const birthdateGroup = document.getElementById("auth-birthdate-group");
   const termsGroup = document.getElementById("auth-terms-group");
+  const referralGroup = document.getElementById("auth-referral-group");
 
   if (mode === "login") {
     tabLogin.classList.add("active");
@@ -3150,6 +3368,7 @@ function toggleAuthTab(mode) {
     if (confirmGroup) confirmGroup.style.display = "none";
     if (birthdateGroup) birthdateGroup.style.display = "none";
     if (termsGroup) termsGroup.style.display = "none";
+    if (referralGroup) referralGroup.style.display = "none";
   } else {
     tabLogin.classList.remove("active");
     tabRegister.classList.add("active");
@@ -3159,6 +3378,14 @@ function toggleAuthTab(mode) {
     if (confirmGroup) confirmGroup.style.display = "block";
     if (birthdateGroup) birthdateGroup.style.display = "block";
     if (termsGroup) termsGroup.style.display = "flex";
+    if (referralGroup) {
+      referralGroup.style.display = "block";
+      const refInput = document.getElementById("auth-referral-input");
+      if (!refInput.value) {
+        const urlRef = new URLSearchParams(window.location.search).get("ref");
+        if (urlRef) refInput.value = urlRef;
+      }
+    }
   }
 }
 
@@ -3400,6 +3627,10 @@ async function handleAuthSubmit() {
     }
   }
 
+  const referredByUsername = STATE.authMode === "register"
+    ? document.getElementById("auth-referral-input").value.trim().replace(/^@/, "")
+    : null;
+
   const btn = document.getElementById("btn-auth-submit");
   if (btn) btn.disabled = true;
   showToast("Autenticando...");
@@ -3407,7 +3638,7 @@ async function handleAuthSubmit() {
   try {
     const data = STATE.authMode === "login"
       ? await Auth.signIn(email, password)
-      : await Auth.signUp(email, password, birthDate);
+      : await Auth.signUp(email, password, birthDate, referredByUsername);
 
     document.getElementById("auth-username").value = "";
     document.getElementById("auth-password").value = "";
@@ -3423,24 +3654,44 @@ async function handleAuthSubmit() {
       return;
     }
 
-    STATE.isLoggedIn = true;
-    const profile = await DB.getProfile(data.user.id);
-    const ageGatePending = await applyProfileToUI(profile);
-
-    showToast(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
-
-    if (ageGatePending) {
-      // O modal de verificação de idade já está aberto — o onboarding só
-      // aparece depois de confirmar (ver submitAgeVerification).
-    } else if (!profile.onboarding_completed) {
-      openOnboardingWizard();
-    } else {
-      navigateTo("discover");
+    // Sessão existe (AAL1), mas se a conta tem 2FA ativo o Supabase exige
+    // AAL2 antes de liberar qualquer coisa — mostra o desafio e para aqui;
+    // finishLoginAfterAuth só roda depois do código confirmado (submit2faChallenge).
+    const aal = await Auth.mfaGetAssuranceLevel();
+    if (aal.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
+      const factors = await Auth.mfaListFactors();
+      const verified = factors.totp.find(f => f.status === "verified");
+      if (verified) {
+        showMfaChallenge(verified.id);
+        return;
+      }
     }
+
+    await finishLoginAfterAuth(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
   } catch (err) {
     showToast(translateAuthError(err));
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+// Compartilhado entre login normal e login com 2FA (chamado só depois do
+// desafio confirmado, se a conta tiver autenticação em duas etapas ativa).
+async function finishLoginAfterAuth(toastMessage) {
+  const user = await Auth.getUser();
+  STATE.isLoggedIn = true;
+  const profile = await DB.getProfile(user.id);
+  const ageGatePending = await applyProfileToUI(profile);
+
+  if (toastMessage) showToast(toastMessage);
+
+  if (ageGatePending) {
+    // O modal de verificação de idade já está aberto — o onboarding só
+    // aparece depois de confirmar (ver submitAgeVerification).
+  } else if (!profile.onboarding_completed) {
+    openOnboardingWizard();
+  } else {
+    navigateTo("discover");
   }
 }
 
