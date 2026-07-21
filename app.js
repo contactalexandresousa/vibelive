@@ -170,6 +170,30 @@ sb.auth.onAuthStateChange((event) => {
   }
 });
 
+// Monitoramento de erro em produção: antes, um bug real na tela de alguém só
+// chegava até nós se a pessoa reportasse manualmente. Teto por sessão evita
+// que um erro em loop (ex: um handler com bug próprio) vire uma enxurrada de
+// inserts — 20 é generoso pra diagnóstico sem virar spam no banco.
+let clientErrorLogCount = 0;
+const CLIENT_ERROR_LOG_LIMIT = 20;
+
+function logClientErrorSafely(message, stack) {
+  if (clientErrorLogCount >= CLIENT_ERROR_LOG_LIMIT) return;
+  clientErrorLogCount++;
+  DB.logClientError(message, stack, window.location.href).catch(() => {});
+}
+
+window.addEventListener("error", (event) => {
+  logClientErrorSafely(event.message, event.error && event.error.stack);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : null;
+  logClientErrorSafely(message, stack);
+});
+
 // 4. INICIALIZAÇÃO DO APP
 document.addEventListener("DOMContentLoaded", () => {
   renderCoins();
@@ -1770,6 +1794,48 @@ function closeAdminStatsPanel() {
   document.getElementById("modal-admin-stats").style.display = "none";
 }
 
+async function openAdminErrorsPanel() {
+  if (!STATE.isAdmin) return;
+  const container = document.getElementById("admin-errors-list-container");
+  document.getElementById("modal-admin-errors").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const errors = await DB.getRecentClientErrors(50);
+    container.innerHTML = "";
+    if (errors.length === 0) {
+      container.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">✅</div>
+          <h3>Nenhum erro nos últimos 7 dias</h3>
+        </div>
+      `;
+      return;
+    }
+    errors.forEach(e => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.style.flexDirection = "column";
+      item.style.alignItems = "stretch";
+      item.style.padding = "12px 0";
+      item.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <span class="inbox-name" style="white-space:normal;">${escapeHtml(e.message)}</span>
+          <span style="font-size:0.6rem; font-weight:700; color:var(--danger); white-space:nowrap; background:rgba(241,85,76,0.1); padding:2px 8px; border-radius:8px;">${e.occurrences}×</span>
+        </div>
+        <span class="inbox-time" style="display:block; margin-top:4px;">Visto por último ${formatMessageTime(e.last_seen)}${e.sample_url ? " · " + escapeHtml(e.sample_url) : ""}</span>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar os erros agora.</p>`;
+  }
+}
+
+function closeAdminErrorsPanel() {
+  document.getElementById("modal-admin-errors").style.display = "none";
+}
+
 // 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
 const TRANSACTION_TYPE_INFO = {
   gift: { label: "Presente enviado", icon: "🎁" },
@@ -2892,6 +2958,66 @@ function closePostLightbox() {
   document.getElementById("modal-post-lightbox").style.display = "none";
   document.getElementById("lightbox-video").pause();
   STATE.activeLightboxPostId = null;
+  cancelLightboxPostEdit();
+}
+
+function editLightboxPost() {
+  const post = STATE.myPosts.find(p => p.id === STATE.activeLightboxPostId);
+  if (!post) return;
+  document.getElementById("lightbox-edit-caption-input").value = post.caption || "";
+  document.getElementById("lightbox-edit-private-input").checked = !!post.is_private;
+  document.getElementById("lightbox-edit-form").style.display = "block";
+  document.getElementById("lightbox-actions-row").style.display = "none";
+  document.getElementById("lightbox-caption").style.display = "none";
+}
+
+function cancelLightboxPostEdit() {
+  const form = document.getElementById("lightbox-edit-form");
+  if (form) form.style.display = "none";
+  const actionsRow = document.getElementById("lightbox-actions-row");
+  if (actionsRow) actionsRow.style.display = "flex";
+  const caption = document.getElementById("lightbox-caption");
+  if (caption) caption.style.display = "block";
+}
+
+async function saveLightboxPostEdit() {
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
+  const newCaption = document.getElementById("lightbox-edit-caption-input").value.trim();
+  const newIsPrivate = document.getElementById("lightbox-edit-private-input").checked;
+
+  if (newIsPrivate && !STATE.myPrivateContentPrice) {
+    showToast("Defina um preço pro seu conteúdo privado nas Configurações do Perfil antes de marcar isso.");
+    return;
+  }
+
+  try {
+    const updated = await DB.updatePost(postId, { caption: newCaption, is_private: newIsPrivate });
+    const index = STATE.myPosts.findIndex(p => p.id === postId);
+    if (index !== -1) STATE.myPosts[index] = updated;
+    document.getElementById("lightbox-caption").textContent = updated.caption;
+    cancelLightboxPostEdit();
+    showToast("Post atualizado!");
+  } catch (err) {
+    showToast(err.message || "Não foi possível salvar as alterações.");
+  }
+}
+
+async function deleteLightboxPost() {
+  const postId = STATE.activeLightboxPostId;
+  const post = STATE.myPosts.find(p => p.id === postId);
+  if (!post) return;
+  if (!confirm("Excluir este post? Essa ação não pode ser desfeita.")) return;
+
+  try {
+    await DB.deletePost(postId, post.media_url);
+    STATE.myPosts = STATE.myPosts.filter(p => p.id !== postId);
+    closePostLightbox();
+    await renderProfilePosts();
+    showToast("Post excluído.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível excluir o post agora.");
+  }
 }
 
 function renderLightboxComments(comments) {
@@ -3724,6 +3850,8 @@ async function applyProfileToUI(profile) {
   if (adminUsersBtn) adminUsersBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminStatsBtn = document.getElementById("btn-admin-stats");
   if (adminStatsBtn) adminStatsBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminErrorsBtn = document.getElementById("btn-admin-errors");
+  if (adminErrorsBtn) adminErrorsBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();

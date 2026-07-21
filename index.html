@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721j">
+  <link rel="stylesheet" href="styles.css?v=20260721k">
 </head>
 <body>
 
@@ -853,11 +853,26 @@
                 </div>
               </div>
               <p class="lightbox-caption" id="lightbox-caption">Legenda do post</p>
-              <div class="lightbox-actions">
+
+              <div id="lightbox-edit-form" style="display: none; margin-bottom: 10px;">
+                <textarea id="lightbox-edit-caption-input" class="onboarding-input onboarding-textarea" maxlength="280" style="margin-bottom: 8px;"></textarea>
+                <label class="privacy-option" style="margin-bottom: 8px; padding: 8px 10px;">
+                  <input type="checkbox" id="lightbox-edit-private-input">
+                  <div><span style="font-size: 0.68rem;">Conteúdo privado</span></div>
+                </label>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn-follow-primary" style="flex: 1; margin-top: 0;" onclick="saveLightboxPostEdit()">Salvar</button>
+                  <button type="button" class="onboarding-skip-btn" onclick="cancelLightboxPostEdit()">Cancelar</button>
+                </div>
+              </div>
+
+              <div class="lightbox-actions" id="lightbox-actions-row">
                 <button class="btn-lightbox-like" onclick="likeLightboxPost()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                   <span id="lightbox-likes-count">42 curtidas</span>
                 </button>
+                <button class="btn-lightbox-like" style="margin-left: 8px;" onclick="editLightboxPost()">✏️ Editar</button>
+                <button class="btn-lightbox-like" style="margin-left: 8px; color: var(--danger);" onclick="deleteLightboxPost()">🗑️ Excluir</button>
               </div>
               <div class="lightbox-comments-list" id="lightbox-comments-list">
                 <!-- Comentários gerados via JS -->
@@ -965,6 +980,10 @@
 
               <button class="btn-publish-post" id="btn-admin-stats" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminStatsPanel()">
                 📈 Estatísticas Gerais (Admin)
+              </button>
+
+              <button class="btn-publish-post" id="btn-admin-errors" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminErrorsPanel()">
+                🐞 Erros em Produção (Admin)
               </button>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
@@ -1212,6 +1231,21 @@
             </header>
             <div class="search-results-scroll">
               <div id="admin-stats-cards" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Erros em Produção (agrupados por mensagem) -->
+        <div class="new-post-modal" id="modal-admin-errors" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminErrorsPanel()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>🐞 Erros em Produção</h3>
+              <button class="btn-close-new-post" onclick="closeAdminErrorsPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Agrupado por mensagem, últimos 7 dias.</p>
+              <div class="inbox-list" id="admin-errors-list-container"></div>
             </div>
           </div>
         </div>
@@ -1651,9 +1685,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721j"></script>
+  <script src="supabase-client.js?v=20260721k"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721j"></script>
+  <script src="app.js?v=20260721k"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

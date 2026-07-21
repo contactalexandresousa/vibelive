@@ -398,6 +398,22 @@ const DB = {
     return data;
   },
 
+  async logClientError(message, stack, url) {
+    const { error } = await sb.from("client_errors").insert({
+      message: String(message || "Erro desconhecido").slice(0, 500),
+      stack: stack ? String(stack).slice(0, 4000) : null,
+      url: url ? String(url).slice(0, 500) : null,
+      user_agent: navigator.userAgent.slice(0, 300),
+    });
+    if (error) throw error;
+  },
+
+  async getRecentClientErrors(limit = 50) {
+    const { data, error } = await sb.rpc("get_recent_client_errors", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
   async getAdminStats() {
     const { data, error } = await sb.rpc("get_admin_stats");
     if (error) throw error;
@@ -559,6 +575,25 @@ const DB = {
     const { data, error } = await sb.rpc("cancel_subscription", { p_creator_id: creatorId });
     if (error) throw error;
     return data;
+  },
+
+  async updatePost(postId, fields) {
+    const { data, error } = await sb.from("posts").update(fields).eq("id", postId).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deletePost(postId, mediaUrl) {
+    // Apaga o arquivo do Storage também, não só a linha — senão o bucket só
+    // cresce com mídia órfã de posts já excluídos.
+    const marker = "/storage/v1/object/public/posts/";
+    const idx = mediaUrl ? mediaUrl.indexOf(marker) : -1;
+    if (idx !== -1) {
+      const path = decodeURIComponent(mediaUrl.slice(idx + marker.length));
+      await sb.storage.from("posts").remove([path]).catch(() => {});
+    }
+    const { error } = await sb.from("posts").delete().eq("id", postId);
+    if (error) throw error;
   },
 
   async getMyPosts() {
