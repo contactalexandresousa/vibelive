@@ -47,6 +47,10 @@
 
           <!-- 0. TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO) -->
           <section id="screen-auth" class="screen">
+            <div class="auth-ambient-glow">
+              <div class="auth-glow-orb orb-coral"></div>
+              <div class="auth-glow-orb orb-gold"></div>
+            </div>
             <div class="auth-container">
               <div class="auth-logo">
                 <div class="logo-circle small">
@@ -347,8 +351,8 @@
           <!-- 4. TELA DE MENSAGENS DIRETAS (DMs) -->
           <section id="screen-messages" class="screen">
             <header class="chat-header">
-              <h1 class="chat-header-title">alejr.sn</h1>
-              <button class="chat-new-btn" onclick="showToast('Nova conversa não implementada')">
+              <h1 class="chat-header-title no-dropdown">Mensagens</h1>
+              <button class="chat-new-btn" onclick="openSearchOverlay()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
               </button>
             </header>
@@ -357,7 +361,6 @@
 
             <!-- Lista de Conversas Recentes -->
             <div class="inbox-section">
-              <h3 class="inbox-title">Mensagens</h3>
               <div class="inbox-list" id="inbox-list-container">
                 <!-- Inserido via JS -->
               </div>
@@ -374,13 +377,9 @@
                 <img id="chat-partner-avatar" src="" alt="Avatar">
                 <div class="chat-partner-text">
                   <span id="chat-partner-name">Nome</span>
-                  <span id="chat-partner-status" class="online">Online agora</span>
                 </div>
               </div>
               <div class="chat-header-actions">
-                <button class="chat-action-btn" onclick="showToast('Ligando...')">
-                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.2c.28-.28.36-.67.25-1.02C8.79 6.34 8.59 5.15 8.59 3.92A1 1 0 0 0 7.59 3H4a1 1 0 0 0-1 1c0 9.39 7.61 17 17 17a1 1 0 0 0 1-1v-3.62a1 1 0 0 0-1-1z"/></svg>
-                </button>
                 <button class="chat-action-btn" onclick="simulatePrivateVideoCall()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
                 </button>
@@ -561,9 +560,15 @@
               <!-- Conteúdo das Tabs -->
               <div class="profile-tabs-content">
                 <!-- Tab Publicações (Grid de Posts) -->
-                <div class="tab-pane active" id="profile-tab-posts">
+                <div class="tab-pane active" id="profile-tab-posts" style="display: flex;">
                   <div class="profile-posts-grid" id="profile-posts-grid-container">
                     <!-- Gerado via JS -->
+                  </div>
+                  <div class="discover-empty-state" id="profile-posts-empty-state" style="display: none;">
+                    <div class="discover-empty-icon">🎬</div>
+                    <h3>Nenhuma publicação ainda</h3>
+                    <p>Suas fotos e vídeos aparecem aqui assim que você publicar.</p>
+                    <button class="btn-follow-primary" onclick="openNewPostModal()">Publicar Agora</button>
                   </div>
                 </div>
 
@@ -572,19 +577,11 @@
                   <div class="profile-metrics-panel">
                     <div class="metric-row">
                       <span>Tempo transmitido:</span>
-                      <strong>14h 35min</strong>
+                      <strong id="metric-time-live">—</strong>
                     </div>
                     <div class="metric-row">
-                      <span>Total de espectadores:</span>
-                      <strong>4,8 mil</strong>
-                    </div>
-                    <div class="metric-row">
-                      <span>Pontuação no PK:</span>
-                      <strong>24,5 mil pts</strong>
-                    </div>
-                    <div class="metric-row">
-                      <span>Diamantes coletados:</span>
-                      <strong>💎 1.250</strong>
+                      <span>Total de lives:</span>
+                      <strong id="metric-total-lives">—</strong>
                     </div>
                   </div>
                 </div>
@@ -646,22 +643,13 @@
              <div class="go-live-setup-overlay" id="go-live-setup">
                <button class="btn-close-setup-x" onclick="navigateTo('discover')">×</button>
 
-               <!-- Caixa superior de título e hashtags -->
+               <!-- Caixa superior de título da live -->
                <div class="setup-settings-card">
                  <div class="setup-thumbnail-wrapper">
-                   <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" class="setup-thumb-img" alt="Thumbnail">
-                   <div class="setup-edit-badge">Edit</div>
+                   <img src="" id="setup-thumb-img" class="setup-thumb-img" alt="Sua foto de perfil">
                  </div>
                  <div class="setup-title-input-wrapper">
-                   <input type="text" id="live-title-input" placeholder="Adicionar um title ao chat" value="Adicionar um title ao chat">
-                 </div>
-                 <div class="setup-divider-line"></div>
-                 <div class="setup-tags-row">
-                   <div class="setup-tag"># QueensWithoutBorders +</div>
-                   <div class="setup-tag"># MissBrasil +</div>
-                   <button class="btn-setup-tag-dropdown">
-                     <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
-                   </button>
+                   <input type="text" id="live-title-input" placeholder="Adicione um título à sua live" maxlength="80">
                  </div>
                </div>
 
@@ -693,31 +681,11 @@
                    <div class="setup-action-icon">🖼️</div>
                    <span>Atmosfera</span>
                  </div>
-                 <div class="setup-action-item" onclick="showToast('Mixer de áudio otimizado 🎛️')">
-                   <div class="setup-action-icon">🎛️</div>
-                   <span>Mixer</span>
-                 </div>
-                 <div class="setup-action-item" onclick="showToast('Painel do Criador: VibeLive Analytics 📈')">
-                   <div class="setup-action-icon">📈</div>
-                   <span>Centro de Criadores</span>
-                 </div>
-                 <div class="setup-action-item" onclick="showToast('Mais recursos em breve!')">
-                   <div class="setup-action-icon">▲</div>
-                   <span>Expandir</span>
-                 </div>
                </div>
 
                <!-- Botão Cyan de Transmissão -->
                <div class="setup-go-live-btn-wrapper">
                  <button class="btn-start-broadcasting-tiktok" onclick="startOwnLiveStream()">Ao vivo</button>
-               </div>
-
-               <!-- Barra de Modos de Transmissão Deslizantes -->
-               <div class="setup-modes-swipe-bar">
-                 <div class="setup-mode-tab">Live de Vários-convidados</div>
-                 <div class="setup-mode-tab active">LIVE</div>
-                 <div class="setup-mode-tab">Live de Áudio</div>
-                 <div class="setup-mode-tab">Jogo Ao V.</div>
                </div>
              </div>
             </div>
@@ -809,18 +777,12 @@
                 </div>
               </div>
               <div class="form-group-post">
-                <label>Selecione uma Mídia Demo:</label>
-                <select id="post-media-preset" onchange="previewSelectedMedia()">
-                  <!-- Fotos -->
-                  <option value="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500">Pôr do Sol na Praia 🌅</option>
-                  <option value="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500">Balada / Show 💃</option>
-                  <option value="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500">Viagens ✈️</option>
-                  <option value="https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500">Selfie Estilo 🤳</option>
-                </select>
+                <label>Escolha um arquivo:</label>
+                <input type="file" id="post-file-input" accept="image/*" onchange="handlePostFileSelected(event)">
               </div>
-              <div class="post-media-preview-container">
-                <img id="post-preview-img" src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500" alt="Preview">
-                <video id="post-preview-video" style="display: none;" loop muted></video>
+              <div class="post-media-preview-container" id="post-media-preview-container" style="display: none;">
+                <img id="post-preview-img" src="" alt="Preview" style="display: none;">
+                <video id="post-preview-video" style="display: none;" loop muted controls></video>
               </div>
               <div class="form-group-post">
                 <label for="post-caption-input">Legenda:</label>
@@ -842,10 +804,10 @@
             </div>
             <div class="lightbox-details">
               <div class="lightbox-author-row">
-                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" class="lightbox-avatar" alt="Avatar">
+                <img src="" id="lightbox-author-avatar" class="lightbox-avatar" alt="Avatar">
                 <div class="lightbox-author-text">
-                  <strong>Alexandre Silva</strong>
-                  <span>@zcitando</span>
+                  <strong id="lightbox-author-name">—</strong>
+                  <span id="lightbox-author-handle">—</span>
                 </div>
               </div>
               <p class="lightbox-caption" id="lightbox-caption">Legenda do post</p>
@@ -942,7 +904,7 @@
               <input type="text" id="search-profile-input" placeholder="Pesquisar pelo nome..." oninput="performProfileSearch()">
             </div>
 
-            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
+            <div class="search-results-scroll">
               <div id="search-results-container" class="inbox-list">
                 <!-- Perfis correspondentes mostrados aqui -->
               </div>
@@ -1060,7 +1022,7 @@
               <h3>🛡️ Denúncias Recebidas</h3>
               <button class="btn-close-new-post" onclick="closeAdminReportsPanel()">×</button>
             </header>
-            <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
+            <div class="search-results-scroll">
               <div class="inbox-list" id="admin-reports-list-container">
                 <!-- Preenchido via JS -->
               </div>

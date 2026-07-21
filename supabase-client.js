@@ -106,6 +106,27 @@ const DB = {
     };
   },
 
+  // Métricas reais de transmissão (tempo total e número de lives) — o painel
+  // "Métricas" do perfil mostrava números fixos (inclusive uma pontuação de
+  // PK, recurso que nem existe mais no app).
+  async getLiveMetrics(userId) {
+    const { data, error } = await sb
+      .from("live_sessions")
+      .select("started_at, ended_at")
+      .eq("user_id", userId);
+    if (error) throw error;
+
+    const totalMs = (data || []).reduce((sum, s) => {
+      const end = s.ended_at ? new Date(s.ended_at) : new Date();
+      return sum + Math.max(0, end - new Date(s.started_at));
+    }, 0);
+
+    return {
+      totalLives: (data || []).length,
+      totalMinutes: Math.round(totalMs / 60000)
+    };
+  },
+
   async searchProfiles(query) {
     const { data, error } = await sb
       .from("profiles")
@@ -133,6 +154,22 @@ const DB = {
     // Cache-buster: o nome do arquivo não muda entre uploads (upsert), então
     // sem isso o navegador/CDN poderia continuar mostrando a imagem antiga.
     return `${data.publicUrl}?t=${Date.now()}`;
+  },
+
+  // Upload real de foto/vídeo de publicação (Supabase Storage). Substitui o
+  // antigo seletor de mídia de estoque ("MÍDIA DEMO"). Caminho único por
+  // arquivo (não upsert, diferente do avatar) já que cada post é permanente.
+  async uploadPostMedia(userId, file) {
+    const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+    const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: uploadError } = await sb.storage.from("posts").upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type || "application/octet-stream"
+    });
+    if (uploadError) throw uploadError;
+
+    const { data } = sb.storage.from("posts").getPublicUrl(path);
+    return data.publicUrl;
   },
 
   // Painel de moderação — só retorna dados se a conta logada tiver
@@ -332,12 +369,12 @@ const DB = {
   },
 
   // Quem está transmitindo de verdade agora (separado dos streamers mockados).
-  async startLiveSession(roomName) {
+  async startLiveSession(roomName, title) {
     const { data: { user } } = await sb.auth.getUser();
     // Encerra qualquer sessão própria anterior que tenha ficado pendurada
     // (ex: fechou a aba sem clicar em "Encerrar") antes de abrir uma nova.
     await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
-    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName });
+    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName, title: title || null });
     if (error) throw error;
   },
 

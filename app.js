@@ -119,7 +119,6 @@ const DOM = {
   // Tela Chat Privado
   chatPartnerAvatar: document.getElementById("chat-partner-avatar"),
   chatPartnerName: document.getElementById("chat-partner-name"),
-  chatPartnerStatus: document.getElementById("chat-partner-status"),
   privateChatHistory: document.getElementById("private-chat-history"),
   privateChatInput: document.getElementById("private-chat-input"),
   
@@ -242,6 +241,10 @@ function navigateTo(screenId) {
     }
   } else if (screenId === "go-live") {
     initiateCameraStream();
+    const thumb = document.getElementById("setup-thumb-img");
+    if (thumb) thumb.src = STATE.myAvatarUrl || "";
+    const titleInput = document.getElementById("live-title-input");
+    if (titleInput) titleInput.value = "";
   }
 }
 
@@ -323,7 +326,7 @@ function renderNotificationsList() {
   }
 
   STATE.notifications.forEach((n, index) => {
-    const actorName = n.actor ? (n.actor.display_name || n.actor.username) : "Alguém";
+    const actorName = escapeHtml(n.actor ? (n.actor.display_name || n.actor.username) : "Alguém");
     const avatar = n.actor ? n.actor.avatar_url : "";
     const text = n.type === "new_follower"
       ? `${actorName} começou a seguir você`
@@ -403,8 +406,9 @@ function renderRealLiveSessions(allSessions) {
 
 function createRealLiveCardElement(session) {
   const profile = session.profiles || {};
-  const name = profile.display_name || profile.username || "Ao vivo";
+  const name = escapeHtml(profile.display_name || profile.username || "Ao vivo");
   const avatar = profile.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150";
+  const titleHtml = session.title ? `<span class="card-live-title">${escapeHtml(session.title)}</span>` : "";
 
   const card = document.createElement("div");
   card.className = "live-card";
@@ -418,6 +422,7 @@ function createRealLiveCardElement(session) {
     </div>
     <div class="card-details">
       <span class="card-name">${name}</span>
+      ${titleHtml}
     </div>
     <button class="card-btn-call" onclick="event.stopPropagation(); enterRealLiveRoom('${session.user_id}');">
       <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
@@ -462,7 +467,8 @@ async function enterRealLiveRoom(hostUserId) {
   DOM.streamerAvatar.src = b.avatar;
   DOM.streamerName.textContent = b.name;
   if (DOM.streamerStats) {
-    DOM.streamerStats.textContent = "ao vivo agora";
+    const activeSession = STATE.realLiveSessions.find(s => s.user_id === hostUserId);
+    DOM.streamerStats.textContent = (activeSession && activeSession.title) || "ao vivo agora";
   }
   // Contagem real de espectadores (Presence) substitui o número mockado assim
   // que a inscrição na sala conectar — até lá, mostra você mesmo entrando.
@@ -602,7 +608,7 @@ async function toggleFollowStreamer() {
 function addSystemComment(text) {
   const msgEl = document.createElement("div");
   msgEl.className = "chat-msg system";
-  msgEl.innerHTML = `<span class="msg-content">${text}</span>`;
+  msgEl.innerHTML = `<span class="msg-content">${escapeHtml(text)}</span>`;
   DOM.liveChatMessages.appendChild(msgEl);
   scrollLiveChatToBottom();
 }
@@ -610,24 +616,27 @@ function addSystemComment(text) {
 function addLiveComment(author, content, isGift = false, emoji = "") {
   const msgEl = document.createElement("div");
   msgEl.className = isGift ? "chat-msg gift-ann" : "chat-msg";
-  
+
   let vipPrefix = "";
   if ((author === "Você" || author === STATE.profileName) && STATE.isVIP) {
     vipPrefix = `<span style="color:var(--secondary); font-weight:900; margin-right:4px; font-size:0.58rem; background:rgba(240,178,61,0.15); padding:1px 4px; border-radius:4px; border:1px solid rgba(240,178,61,0.4);">VIP</span>`;
   }
 
+  const safeAuthor = escapeHtml(author);
+  const safeContent = escapeHtml(content);
+
   if (isGift) {
     msgEl.innerHTML = `
-      ${vipPrefix}<span class="msg-author">${author}</span>
-      <span class="msg-content">enviou ${content} ${emoji}</span>
+      ${vipPrefix}<span class="msg-author">${safeAuthor}</span>
+      <span class="msg-content">enviou ${safeContent} ${emoji}</span>
     `;
   } else {
     msgEl.innerHTML = `
-      ${vipPrefix}<span class="msg-author">${author}:</span>
-      <span class="msg-content">${content}</span>
+      ${vipPrefix}<span class="msg-author">${safeAuthor}:</span>
+      <span class="msg-content">${safeContent}</span>
     `;
   }
-  
+
   DOM.liveChatMessages.appendChild(msgEl);
   scrollLiveChatToBottom();
 }
@@ -793,6 +802,16 @@ function renderCoins() {
 }
 
 
+// Escapa texto vindo de outros usuários (nome, bio, mensagens, comentários,
+// motivo de denúncia) antes de jogar em innerHTML — sem isso, qualquer pessoa
+// podia colocar HTML/script no próprio nome de perfil ou numa mensagem de chat
+// e ele rodava no navegador de quem lesse, inclusive um admin abrindo denúncias.
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
 // 12. TELA DE MENSAGENS E DIRECT MESSAGES (INBOX)
 function formatMessageTime(isoString) {
   const d = new Date(isoString);
@@ -850,13 +869,14 @@ async function renderInboxList() {
 
     item.onclick = () => openPrivateChat(chat.partnerId, chat.name, chat.avatar);
 
+    const safeName = escapeHtml(chat.name);
     item.innerHTML = `
       <div class="inbox-avatar">
-        <img src="${chat.avatar}" alt="${chat.name}">
+        <img src="${chat.avatar}" alt="${safeName}">
       </div>
       <div class="inbox-details">
-        <span class="inbox-name">${chat.name}</span>
-        <span class="inbox-message">${chat.lastMessage}</span>
+        <span class="inbox-name">${safeName}</span>
+        <span class="inbox-message">${escapeHtml(chat.lastMessage)}</span>
       </div>
       <div class="inbox-right">
         <span class="inbox-time">${chat.time}</span>
@@ -889,7 +909,17 @@ async function openPrivateChat(partnerId, name, avatar) {
   try {
     const user = await Auth.getUser();
     const history = await DB.getConversationHistory(partnerId);
-    history.forEach(msg => appendPrivateChatBubble(msg, user.id));
+    if (history.length === 0) {
+      DOM.privateChatHistory.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">👋</div>
+          <h3>Comece a conversa</h3>
+          <p>Envie a primeira mensagem para ${escapeHtml(name)}.</p>
+        </div>
+      `;
+    } else {
+      history.forEach(msg => appendPrivateChatBubble(msg, user.id));
+    }
     await DB.markConversationRead(partnerId);
   } catch (err) {
     console.error("Falha ao carregar conversa:", err);
@@ -898,6 +928,9 @@ async function openPrivateChat(partnerId, name, avatar) {
 }
 
 function appendPrivateChatBubble(msg, myUserId) {
+  const emptyHint = DOM.privateChatHistory.querySelector(".discover-empty-state");
+  if (emptyHint) emptyHint.remove();
+
   const bubble = document.createElement("div");
   const isMine = msg.sender_id === myUserId;
   bubble.className = isMine ? "chat-bubble sent" : "chat-bubble received";
@@ -909,7 +942,7 @@ function appendPrivateChatBubble(msg, myUserId) {
 
   bubble.innerHTML = `
     ${vipSuffix}
-    <span>${msg.text}</span>
+    <span>${escapeHtml(msg.text)}</span>
     <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
   `;
   DOM.privateChatHistory.appendChild(bubble);
@@ -1072,8 +1105,8 @@ function renderAdminReportsList() {
   }
 
   STATE.adminReports.forEach((r, index) => {
-    const reporterName = r.reporter ? (r.reporter.display_name || r.reporter.username) : "Usuário removido";
-    const reportedName = r.reported ? (r.reported.display_name || r.reported.username) : "Usuário removido";
+    const reporterName = escapeHtml(r.reporter ? (r.reporter.display_name || r.reporter.username) : "Usuário removido");
+    const reportedName = escapeHtml(r.reported ? (r.reported.display_name || r.reported.username) : "Usuário removido");
 
     const item = document.createElement("div");
     item.className = r.reviewed_at ? "inbox-item" : "inbox-item unread";
@@ -1085,7 +1118,7 @@ function renderAdminReportsList() {
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
           <span class="inbox-name" style="display:block;">${reporterName} denunciou ${reportedName}</span>
-          <span class="inbox-message" style="display:block; margin-top:4px; white-space:normal;">${r.reason}</span>
+          <span class="inbox-message" style="display:block; margin-top:4px; white-space:normal;">${escapeHtml(r.reason)}</span>
           <span class="inbox-time" style="display:block; margin-top:4px;">${formatMessageTime(r.created_at)}</span>
         </div>
         ${r.reviewed_at
@@ -1249,20 +1282,6 @@ function initiateCameraStream() {
     });
 }
 
-function applyFilter(btn, filterClass) {
-  // Mudar classe ativa do botão
-  const btns = DOM.goLiveSetup.querySelectorAll(".filter-btn");
-  btns.forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  
-  // Remover filtros anteriores da tag video
-  DOM.goLiveVideo.className = "";
-  STATE.currentVideoFilter = filterClass;
-  
-  if (filterClass !== "none") {
-    DOM.goLiveVideo.classList.add(`video-${filterClass}`);
-  }
-}
 
 function startOwnLiveStream() {
   if (!requireAuth()) return;
@@ -1335,7 +1354,9 @@ async function launchBroadcastingSession() {
       if (audioTrack) await room.localParticipant.publishTrack(audioTrack);
     }
 
-    await DB.startLiveSession(roomName);
+    const titleInput = document.getElementById("live-title-input");
+    const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
+    await DB.startLiveSession(roomName, title);
   } catch (err) {
     console.error("Falha ao publicar transmissão real:", err);
     showToast("Sua câmera está ativa, mas outras pessoas podem não conseguir assistir agora.");
@@ -1374,15 +1395,17 @@ async function stopOwnLiveStream() {
 
 function addMyLiveComment(author, content, isSystem = false, isGift = false) {
   const msgEl = document.createElement("div");
+  const safeAuthor = escapeHtml(author);
+  const safeContent = escapeHtml(content);
   if (isSystem) {
     msgEl.className = "chat-msg system";
-    msgEl.innerHTML = `<span class="msg-content">${content}</span>`;
+    msgEl.innerHTML = `<span class="msg-content">${safeContent}</span>`;
   } else if (isGift) {
     msgEl.className = "chat-msg gift-ann";
-    msgEl.innerHTML = `<span class="msg-author">${author}</span> <span class="msg-content">${content}</span>`;
+    msgEl.innerHTML = `<span class="msg-author">${safeAuthor}</span> <span class="msg-content">${safeContent}</span>`;
   } else {
     msgEl.className = "chat-msg";
-    msgEl.innerHTML = `<span class="msg-author">${author}:</span> <span class="msg-content">${content}</span>`;
+    msgEl.innerHTML = `<span class="msg-author">${safeAuthor}:</span> <span class="msg-content">${safeContent}</span>`;
   }
   DOM.myLiveChatMessages.appendChild(msgEl);
   DOM.myLiveChatMessages.scrollTop = DOM.myLiveChatMessages.scrollHeight;
@@ -1410,13 +1433,31 @@ function switchProfileTab(tabName) {
   if (tabName === "posts") {
     btnPosts.classList.add("active");
     btnStats.classList.remove("active");
-    panePosts.style.display = "block";
+    panePosts.style.display = "flex";
     paneStats.style.display = "none";
   } else {
     btnPosts.classList.remove("active");
     btnStats.classList.add("active");
     panePosts.style.display = "none";
     paneStats.style.display = "block";
+    refreshProfileMetrics();
+  }
+}
+
+async function refreshProfileMetrics() {
+  const timeEl = document.getElementById("metric-time-live");
+  const livesEl = document.getElementById("metric-total-lives");
+  if (!timeEl || !livesEl || !STATE.isLoggedIn) return;
+
+  try {
+    const user = await Auth.getUser();
+    const { totalLives, totalMinutes } = await DB.getLiveMetrics(user.id);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    timeEl.textContent = totalMinutes === 0 ? "0min" : (h > 0 ? `${h}h ${m}min` : `${m}min`);
+    livesEl.textContent = String(totalLives);
+  } catch (err) {
+    console.error("Falha ao carregar métricas:", err);
   }
 }
 
@@ -1444,6 +1485,7 @@ async function refreshProfileStats(userId, username) {
 
 async function renderProfilePosts() {
   const container = document.getElementById("profile-posts-grid-container");
+  const emptyState = document.getElementById("profile-posts-empty-state");
   if (!container) return;
 
   if (!STATE.isLoggedIn) {
@@ -1462,6 +1504,14 @@ async function renderProfilePosts() {
   STATE.myPosts = posts;
 
   container.innerHTML = "";
+
+  if (posts.length === 0) {
+    container.style.display = "none";
+    if (emptyState) emptyState.style.display = "flex";
+    return;
+  }
+  container.style.display = "grid";
+  if (emptyState) emptyState.style.display = "none";
 
   posts.forEach(post => {
     const item = document.createElement("div");
@@ -1504,6 +1554,9 @@ function openNewPostModal() {
   document.getElementById("modal-new-post").style.display = "flex";
   // Reset fields
   document.getElementById("post-caption-input").value = "";
+  document.getElementById("post-file-input").value = "";
+  document.getElementById("post-media-preview-container").style.display = "none";
+  STATE.selectedPostFile = null;
   setPostType("image");
 }
 
@@ -1516,68 +1569,81 @@ function setPostType(type) {
   STATE.currentPostType = type;
   const btnPhoto = document.getElementById("post-type-photo");
   const btnVideo = document.getElementById("post-type-video");
-  const select = document.getElementById("post-media-preset");
+  const fileInput = document.getElementById("post-file-input");
 
-  select.innerHTML = "";
+  btnPhoto.classList.toggle("active", type === "image");
+  btnVideo.classList.toggle("active", type === "video");
+  fileInput.accept = type === "image" ? "image/*" : "video/*";
 
-  if (type === "image") {
-    btnPhoto.classList.add("active");
-    btnVideo.classList.remove("active");
-    
-    // Inserir presets de fotos
-    select.innerHTML = `
-      <option value="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500">Pôr do Sol na Praia 🌅</option>
-      <option value="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=500">Balada / Show 💃</option>
-      <option value="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500">Viagens ✈️</option>
-      <option value="https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500">Selfie Estilo 🤳</option>
-    `;
-  } else {
-    btnPhoto.classList.remove("active");
-    btnVideo.classList.add("active");
-
-    // Inserir presets de videos
-    select.innerHTML = `
-      <option value="https://assets.mixkit.co/videos/preview/mixkit-girl-taking-selfies-with-her-smart-phone-41444-large.mp4">Selfie Gravando Live 🎥</option>
-      <option value="https://assets.mixkit.co/videos/preview/mixkit-woman-filming-herself-with-a-smartphone-41436-large.mp4">Conversando sorrindo 🤳</option>
-    `;
-  }
-  previewSelectedMedia();
+  // Trocar o tipo depois de já ter escolhido um arquivo descarta a escolha
+  // anterior — evita publicar um vídeo marcado como foto (ou vice-versa).
+  STATE.selectedPostFile = null;
+  fileInput.value = "";
+  document.getElementById("post-media-preview-container").style.display = "none";
 }
 
-function previewSelectedMedia() {
-  const select = document.getElementById("post-media-preset");
+function handlePostFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const isImage = STATE.currentPostType === "image";
+  if (isImage && !file.type.startsWith("image/")) {
+    showToast("Escolha um arquivo de imagem.");
+    return;
+  }
+  if (!isImage && !file.type.startsWith("video/")) {
+    showToast("Escolha um arquivo de vídeo.");
+    return;
+  }
+  const maxSize = isImage ? 8 * 1024 * 1024 : 25 * 1024 * 1024;
+  if (file.size > maxSize) {
+    showToast(`Arquivo muito grande (máximo ${isImage ? "8MB" : "25MB"}).`);
+    return;
+  }
+
+  STATE.selectedPostFile = file;
+  const url = URL.createObjectURL(file);
   const imgPreview = document.getElementById("post-preview-img");
   const videoPreview = document.getElementById("post-preview-video");
-  const val = select.value;
+  document.getElementById("post-media-preview-container").style.display = "block";
 
-  if (STATE.currentPostType === "image") {
+  if (isImage) {
     imgPreview.style.display = "block";
     videoPreview.style.display = "none";
     videoPreview.pause();
-    imgPreview.src = val;
+    imgPreview.src = url;
   } else {
     imgPreview.style.display = "none";
     videoPreview.style.display = "block";
-    videoPreview.src = val;
+    videoPreview.src = url;
     videoPreview.play().catch(e => console.log(e));
   }
 }
 
 async function publishNewPost() {
   if (!requireAuth()) return;
-  const select = document.getElementById("post-media-preset");
   const caption = document.getElementById("post-caption-input").value.trim();
-  const val = select.value;
+  const file = STATE.selectedPostFile;
 
-  if (!val) return;
+  if (!file) {
+    showToast("Escolha uma foto ou vídeo para publicar.");
+    return;
+  }
+
+  const btn = document.querySelector(".btn-publish-post");
+  if (btn) { btn.disabled = true; btn.textContent = "Publicando..."; }
 
   try {
-    await DB.createPost(val, STATE.currentPostType, caption || "Sem legenda.");
+    const user = await Auth.getUser();
+    const mediaUrl = await DB.uploadPostMedia(user.id, file);
+    await DB.createPost(mediaUrl, STATE.currentPostType, caption || "Sem legenda.");
     await renderProfilePosts();
     closeNewPostModal();
     showToast("Publicação realizada com sucesso!");
   } catch (err) {
     showToast(err.message || "Não foi possível publicar. Tente novamente.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Publicar no Perfil"; }
   }
 }
 
@@ -1599,6 +1665,13 @@ async function openPostLightbox(postId) {
   caption.textContent = post.caption;
   likes.textContent = "carregando…";
   likeBtn.classList.remove("active");
+
+  const authorAvatar = document.getElementById("lightbox-author-avatar");
+  const authorName = document.getElementById("lightbox-author-name");
+  const authorHandle = document.getElementById("lightbox-author-handle");
+  if (authorAvatar) authorAvatar.src = STATE.myAvatarUrl || "";
+  if (authorName) authorName.textContent = STATE.profileName || "";
+  if (authorHandle) authorHandle.textContent = "@" + (STATE.myUsername || "");
 
   if (post.media_type === "image") {
     img.style.display = "block";
@@ -1645,7 +1718,7 @@ function renderLightboxComments(comments) {
     const item = document.createElement("div");
     item.className = "lightbox-comment-item";
     const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
-    item.innerHTML = `<strong>${authorName}</strong> ${c.text}`;
+    item.innerHTML = `<strong>${escapeHtml(authorName)}</strong> ${escapeHtml(c.text)}`;
     list.appendChild(item);
   });
 }
@@ -1793,7 +1866,7 @@ async function saveProfileChanges() {
     const nameEl = document.querySelector(".profile-bio-info h3");
     const handleEl = document.querySelector(".profile-handle");
     const bioEl = document.querySelector(".profile-bio-text");
-    if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
+    if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} <span class="premium-verified">✓</span>`;
     if (handleEl) handleEl.textContent = `@${profile.username}`;
     if (bioEl) bioEl.textContent = profile.bio;
 
@@ -1859,8 +1932,10 @@ function performProfileSearch() {
 
   if (!query) {
     container.innerHTML = `
-      <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
-        Digite um nome ou @usuário para buscar pessoas reais no VibeLive.
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">🔍</div>
+        <h3>Buscar perfis reais</h3>
+        <p>Digite um nome ou @usuário para buscar pessoas reais no VibeLive.</p>
       </div>
     `;
     return;
@@ -1874,8 +1949,10 @@ function performProfileSearch() {
       matches = (await DB.searchProfiles(query)).filter(p => !STATE.blockedUsers.includes(p.id));
     } catch (err) {
       container.innerHTML = `
-        <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
-          Não foi possível buscar agora. Tente de novo.
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">⚠️</div>
+          <h3>Não foi possível buscar agora</h3>
+          <p>Tente de novo em instantes.</p>
         </div>
       `;
       return;
@@ -1883,11 +1960,14 @@ function performProfileSearch() {
 
     container.innerHTML = "";
     if (matches.length === 0) {
-      container.innerHTML = `
-        <div style="text-align: center; padding: 30px; color: var(--light-gray); font-size: 0.8rem;">
-          Nenhum perfil encontrado para "${query}".
-        </div>
-      `;
+      const empty = document.createElement("div");
+      empty.className = "discover-empty-state";
+      empty.style.display = "flex";
+      empty.innerHTML = `<div class="discover-empty-icon">🔍</div><h3>Nenhum perfil encontrado</h3>`;
+      const p = document.createElement("p");
+      p.textContent = `Não encontramos ninguém para "${query}".`;
+      empty.appendChild(p);
+      container.appendChild(empty);
       return;
     }
 
@@ -1903,13 +1983,14 @@ function performProfileSearch() {
         openPrivateChat(p.id, name, p.avatar_url);
       };
 
+      const safeName = escapeHtml(name);
       item.innerHTML = `
         <div class="inbox-avatar" style="width: 44px; height: 44px;">
-          <img src="${p.avatar_url}" alt="${name}" style="border-radius: 50%;">
+          <img src="${p.avatar_url}" alt="${safeName}" style="border-radius: 50%;">
         </div>
         <div class="inbox-details" style="margin-left: 12px;">
-          <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${name}</span>
-          <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${p.username}</span>
+          <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${safeName}</span>
+          <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${escapeHtml(p.username)}</span>
         </div>
         <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
           <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
@@ -2022,12 +2103,13 @@ async function applyProfileToUI(profile) {
   STATE.level = profile.level;
   STATE.isVIP = profile.is_vip;
   STATE.profileName = profile.display_name || profile.username;
+  STATE.myUsername = profile.username;
   STATE.myAvatarUrl = profile.avatar_url;
   STATE.isAdmin = !!profile.is_admin;
 
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");
-  if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
+  if (nameEl) nameEl.innerHTML = `${escapeHtml(STATE.profileName)} <span class="premium-verified">✓</span>`;
   if (handleEl) handleEl.textContent = `@${profile.username}`;
   syncMyAvatarEverywhere(profile.avatar_url);
 
@@ -2176,18 +2258,14 @@ async function sendQuickRose(event) {
 // ==========================================================================
 
 function openAtmosferaSelector() {
-  let filters = ["none", "vintage", "neon", "bw"];
-  let currentFilter = STATE.currentFilter || "none";
-  let nextIdx = (filters.indexOf(currentFilter) + 1) % filters.length;
-  let nextFilter = filters[nextIdx];
-  STATE.currentFilter = nextFilter;
-  
-  const video = document.getElementById("go-live-video");
-  if (video) {
-    video.className = "";
-    if (nextFilter !== "none") {
-      video.classList.add(`filter-${nextFilter}`);
-    }
+  const filters = ["none", "vintage", "neon", "bw"];
+  const currentFilter = STATE.currentVideoFilter || "none";
+  const nextFilter = filters[(filters.indexOf(currentFilter) + 1) % filters.length];
+  STATE.currentVideoFilter = nextFilter;
+
+  DOM.goLiveVideo.className = "";
+  if (nextFilter !== "none") {
+    DOM.goLiveVideo.classList.add(`video-${nextFilter}`);
   }
   showToast(`Atmosfera (Filtro): ${nextFilter.toUpperCase()}`);
 }
@@ -2218,12 +2296,13 @@ function renderStories() {
     if (s.isSelf) item.classList.add("self-story");
     
     item.onclick = () => openStoryViewer(index);
+    const safeUsername = escapeHtml(s.username);
     item.innerHTML = `
       <div class="story-avatar-ring">
-        <img src="${s.avatar}" alt="${s.username}">
+        <img src="${s.avatar}" alt="${safeUsername}">
         ${s.isSelf ? '<div class="add-story-plus">+</div>' : ''}
       </div>
-      <span class="story-username-label">${s.username}</span>
+      <span class="story-username-label">${safeUsername}</span>
     `;
     container.appendChild(item);
   });
