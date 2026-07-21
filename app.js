@@ -9,6 +9,7 @@ const STATE = {
   isLoggedIn: true,
   authMode: "login",
   myCoins: 99,
+  myAvatarUrl: null,
   activeScreen: "splash",
   followedStreamers: [], // IDs dos streamers seguidos
   blockedUsers: [], // ids (uuid) de quem eu bloqueei
@@ -1610,7 +1611,7 @@ async function addLightboxComment() {
 
 function openProfileSettingsModal() {
   document.getElementById("modal-profile-settings").style.display = "flex";
-  
+
   // Preencher inputs com valores atuais da UI
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");
@@ -1623,6 +1624,55 @@ function openProfileSettingsModal() {
   document.getElementById("edit-profile-name").value = rawName;
   document.getElementById("edit-profile-handle").value = handleEl ? handleEl.textContent : "@zcitando";
   document.getElementById("edit-profile-bio").value = bioEl ? bioEl.textContent : "Criador digital • Focado em lives interativas 🎬🍿";
+  document.getElementById("edit-profile-avatar-preview").src = STATE.myAvatarUrl || "";
+}
+
+async function handleAvatarFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!requireAuth()) return;
+
+  if (!file.type.startsWith("image/")) {
+    showToast("Escolha um arquivo de imagem.");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast("Imagem muito grande (máximo 5MB).");
+    return;
+  }
+
+  const preview = document.getElementById("edit-profile-avatar-preview");
+  const previousSrc = preview.src;
+  preview.style.opacity = "0.5";
+
+  try {
+    const user = await Auth.getUser();
+    const newUrl = await DB.uploadAvatar(user.id, file);
+    await DB.updateProfile(user.id, { avatar_url: newUrl });
+
+    STATE.myAvatarUrl = newUrl;
+    preview.src = newUrl;
+    syncMyAvatarEverywhere(newUrl);
+    showToast("Foto de perfil atualizada!");
+  } catch (err) {
+    preview.src = previousSrc;
+    showToast(err.message || "Não foi possível enviar a foto.");
+  } finally {
+    preview.style.opacity = "1";
+    event.target.value = "";
+  }
+}
+
+function syncMyAvatarEverywhere(avatarUrl) {
+  if (!avatarUrl) return;
+  const mainAvatar = document.getElementById("profile-main-avatar-img");
+  const headerAvatar = document.getElementById("header-my-avatar-img");
+  if (mainAvatar) mainAvatar.src = avatarUrl;
+  if (headerAvatar) headerAvatar.src = avatarUrl;
+  if (STATE.stories[0] && STATE.stories[0].isSelf) {
+    STATE.stories[0].avatar = avatarUrl;
+    renderStories();
+  }
 }
 
 function closeProfileSettingsModal() {
@@ -1808,11 +1858,13 @@ async function applyProfileToUI(profile) {
   STATE.level = profile.level;
   STATE.isVIP = profile.is_vip;
   STATE.profileName = profile.display_name || profile.username;
+  STATE.myAvatarUrl = profile.avatar_url;
 
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");
   if (nameEl) nameEl.innerHTML = `${STATE.profileName} <span class="premium-verified">✓</span>`;
   if (handleEl) handleEl.textContent = `@${profile.username}`;
+  syncMyAvatarEverywhere(profile.avatar_url);
 
   renderCoins();
   updateXPProgressUI();

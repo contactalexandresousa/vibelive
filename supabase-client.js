@@ -95,6 +95,25 @@ const DB = {
     return data;
   },
 
+  // Upload real de avatar (Supabase Storage). Caminho é sempre
+  // "<user_id>/avatar.<ext>" — RLS do bucket só deixa cada um escrever na
+  // própria pasta. upsert:true substitui o arquivo anterior direto.
+  async uploadAvatar(userId, file) {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${userId}/avatar.${ext}`;
+    const { error: uploadError } = await sb.storage.from("avatars").upload(path, file, {
+      upsert: true,
+      cacheControl: "3600",
+      contentType: file.type || "image/jpeg"
+    });
+    if (uploadError) throw uploadError;
+
+    const { data } = sb.storage.from("avatars").getPublicUrl(path);
+    // Cache-buster: o nome do arquivo não muda entre uploads (upsert), então
+    // sem isso o navegador/CDN poderia continuar mostrando a imagem antiga.
+    return `${data.publicUrl}?t=${Date.now()}`;
+  },
+
   async updateProfile(userId, fields) {
     const { data, error } = await sb.from("profiles").update(fields).eq("id", userId).select().single();
     if (error) throw error;
