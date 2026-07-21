@@ -130,7 +130,7 @@ const DB = {
   async searchProfiles(query) {
     const { data, error } = await sb
       .from("profiles")
-      .select("id, username, display_name, avatar_url, bio")
+      .select("id, username, display_name, avatar_url, bio, private_content_price")
       .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
       .limit(20);
     if (error) throw error;
@@ -265,13 +265,46 @@ const DB = {
   },
 
   // Posts / curtidas / comentários
-  async createPost(mediaUrl, mediaType, caption) {
+  async createPost(mediaUrl, mediaType, caption, isPrivate = false) {
     const { data: { user } } = await sb.auth.getUser();
     const { data, error } = await sb.from("posts").insert({
-      user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption
+      user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption, is_private: isPrivate
     }).select().single();
     if (error) throw error;
     return data;
+  },
+
+  // Conteúdo privado com preço definido pelo criador — desbloqueio único
+  // (não é assinatura recorrente), pago com moedas (elas mesmas compradas
+  // via PIX real ou ganhas de graça no app).
+  async unlockPrivateContent(creatorId) {
+    const { data, error } = await sb.rpc("unlock_private_content", { p_creator_id: creatorId });
+    if (error) throw error;
+    return data;
+  },
+
+  async getPrivateContentInfo(creatorId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const isOwner = user && user.id === creatorId;
+
+    const profileRes = await sb.from("profiles").select("id, username, display_name, avatar_url, private_content_price").eq("id", creatorId).single();
+    if (profileRes.error) throw profileRes.error;
+
+    let unlocked = isOwner;
+    if (!isOwner && user) {
+      const unlockRes = await sb.from("private_content_unlocks").select("creator_id").eq("creator_id", creatorId).eq("unlocker_id", user.id).maybeSingle();
+      if (unlockRes.error) throw unlockRes.error;
+      unlocked = !!unlockRes.data;
+    }
+
+    let posts = [];
+    if (unlocked) {
+      const postsRes = await sb.from("posts").select("*").eq("user_id", creatorId).eq("is_private", true).order("created_at", { ascending: false });
+      if (postsRes.error) throw postsRes.error;
+      posts = postsRes.data;
+    }
+
+    return { profile: profileRes.data, isOwner, unlocked, posts };
   },
 
   async getMyPosts() {

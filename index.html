@@ -810,6 +810,10 @@
                 <label for="post-caption-input">Legenda:</label>
                 <textarea id="post-caption-input" placeholder="Escreva uma legenda..."></textarea>
               </div>
+              <label class="invite-checkbox-item" style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
+                <input type="checkbox" id="post-is-private-input">
+                <span>🔒 Conteúdo privado (só quem desbloquear seu conteúdo pago vê)</span>
+              </label>
               <button class="btn-publish-post" onclick="publishNewPost()">Publicar no Perfil</button>
             </div>
           </div>
@@ -880,7 +884,11 @@
                 <label for="edit-profile-bio">Biografia:</label>
                 <textarea id="edit-profile-bio">Criador digital • Focado em lives interativas 🎬🍿</textarea>
               </div>
-              
+              <div class="form-group-post">
+                <label for="edit-profile-private-price">Preço do conteúdo privado (moedas, vazio = não vender):</label>
+                <input type="number" id="edit-profile-private-price" min="1" step="1" placeholder="Ex: 50">
+              </div>
+
               <button class="btn-publish-post" style="margin-top: 10px;" onclick="saveProfileChanges()">
                 Salvar Alterações
               </button>
@@ -1079,6 +1087,30 @@
             </p>
             <input type="password" id="new-password-input" placeholder="Nova senha (mín. 6 caracteres)" style="width: 100%; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
             <button class="btn-publish-post" onclick="submitNewPassword()" style="margin-top: 14px;">Salvar Nova Senha</button>
+          </div>
+        </div>
+
+        <!-- Modal: Conteúdo Privado (desbloqueio único pago com moedas) -->
+        <div class="new-post-modal" id="modal-private-content" style="display: none;">
+          <div class="new-post-overlay" onclick="closePrivateContentModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3 id="private-content-title">Conteúdo Privado</h3>
+              <button class="btn-close-new-post" onclick="closePrivateContentModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div id="private-content-locked-view" style="text-align: center; padding: 10px 0 20px;">
+                <img id="private-content-avatar" src="" alt="" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+                <h3 id="private-content-creator-name" style="margin-bottom: 6px; font-family: var(--font-display);"></h3>
+                <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 18px;">Desbloqueie o conteúdo exclusivo desta pessoa — pagamento único, acesso pra sempre.</p>
+                <button class="btn-follow-primary" id="btn-unlock-private-content" style="width: 100%; margin-top: 0;" onclick="unlockPrivateContentNow()">Desbloquear por 🪙 <span id="private-content-price-label"></span></button>
+              </div>
+              <div id="private-content-grid" class="profile-posts-grid" style="display: none;"></div>
+              <div id="private-content-empty" class="discover-empty-state" style="display: none;">
+                <div class="discover-empty-icon">🔒</div>
+                <h3>Ainda não publicou nada privado</h3>
+              </div>
+            </div>
           </div>
         </div>
 

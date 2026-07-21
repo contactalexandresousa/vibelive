@@ -1531,6 +1531,75 @@ function toggleInvitee(userId, checked) {
   }
 }
 
+// ==========================================================================
+// CONTEÚDO PRIVADO (desbloqueio único pago com moedas, preço do criador)
+// ==========================================================================
+async function openPrivateContentModal(creatorId) {
+  if (!requireAuth()) return;
+  STATE.viewingPrivateContentCreatorId = creatorId;
+  document.getElementById("modal-private-content").style.display = "flex";
+  document.getElementById("private-content-locked-view").style.display = "none";
+  document.getElementById("private-content-grid").style.display = "none";
+  document.getElementById("private-content-empty").style.display = "none";
+
+  try {
+    const info = await DB.getPrivateContentInfo(creatorId);
+    const name = info.profile.display_name || info.profile.username;
+    document.getElementById("private-content-title").textContent = `Conteúdo de ${name}`;
+
+    if (!info.unlocked) {
+      document.getElementById("private-content-avatar").src = info.profile.avatar_url || "";
+      document.getElementById("private-content-creator-name").textContent = name;
+      document.getElementById("private-content-price-label").textContent = info.profile.private_content_price;
+      document.getElementById("private-content-locked-view").style.display = "block";
+      return;
+    }
+
+    if (info.posts.length === 0) {
+      document.getElementById("private-content-empty").style.display = "flex";
+      return;
+    }
+
+    const grid = document.getElementById("private-content-grid");
+    grid.style.display = "grid";
+    grid.innerHTML = "";
+    info.posts.forEach(post => {
+      const item = document.createElement("div");
+      item.className = "post-grid-item";
+      item.innerHTML = post.media_type === "image"
+        ? `<img src="${post.media_url}" alt="Post privado">`
+        : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+      grid.appendChild(item);
+    });
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar esse conteúdo.");
+    closePrivateContentModal();
+  }
+}
+
+function closePrivateContentModal() {
+  document.getElementById("modal-private-content").style.display = "none";
+  STATE.viewingPrivateContentCreatorId = null;
+}
+
+async function unlockPrivateContentNow() {
+  const creatorId = STATE.viewingPrivateContentCreatorId;
+  if (!creatorId) return;
+  const btn = document.getElementById("btn-unlock-private-content");
+  if (btn) { btn.disabled = true; btn.textContent = "Desbloqueando..."; }
+  try {
+    const profile = await DB.unlockPrivateContent(creatorId);
+    STATE.myCoins = profile.coins;
+    renderCoins();
+    showToast("Conteúdo desbloqueado!");
+    await openPrivateContentModal(creatorId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível desbloquear agora. Confira seu saldo de moedas.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = `Desbloquear por 🪙 ${document.getElementById("private-content-price-label").textContent}`; }
+  }
+}
+
 function startOwnLiveStream() {
   if (!requireAuth()) return;
 
@@ -1667,7 +1736,11 @@ async function stopOwnLiveStream() {
     DOM.goLiveVideo.srcObject = null;
   }
 
-  // Desconectar do LiveKit e encerrar a sessão real (some da lista "Ao Vivo Agora" de todo mundo)
+  // Desconectar do LiveKit e encerrar a sessão real (some da lista "Ao Vivo Agora" de todo mundo).
+  // wasBroadcasting é o sinal de que existia mesmo uma transmissão ativa —
+  // sem isso, só entrar na tela "Ir Ao Vivo" e sair (sem nunca transmitir)
+  // tentava encerrar uma sessão que nunca existiu.
+  const wasBroadcasting = !!STATE.myLiveKitRoom;
   if (STATE.myLiveKitRoom) {
     STATE.myLiveKitRoom.disconnect();
     STATE.myLiveKitRoom = null;
@@ -1676,10 +1749,12 @@ async function stopOwnLiveStream() {
     sb.removeChannel(STATE.myLiveGiftsChannel);
     STATE.myLiveGiftsChannel = null;
   }
-  try {
-    await DB.endLiveSession();
-  } catch (err) {
-    console.error("Falha ao encerrar sessão de live:", err);
+  if (wasBroadcasting) {
+    try {
+      await DB.endLiveSession();
+    } catch (err) {
+      console.error("Falha ao encerrar sessão de live:", err);
+    }
   }
 
   // Reiniciar telas do go live
@@ -1690,7 +1765,9 @@ async function stopOwnLiveStream() {
   const fallback = DOM.goLive.querySelector(".camera-fallback-msg");
   fallback.style.display = "flex";
 
-  showToast("Transmissão encerrada com sucesso!");
+  if (wasBroadcasting) {
+    showToast("Transmissão encerrada com sucesso!");
+  }
 }
 
 function addMyLiveComment(author, content, isSystem = false, isGift = false) {
@@ -1831,6 +1908,7 @@ async function renderProfilePosts() {
     item.innerHTML = `
       ${mediaHtml}
       ${indicatorHtml}
+      ${post.is_private ? '<div class="post-private-badge">🔒</div>' : ""}
       <div class="post-grid-overlay">
         <span>❤️ <span class="post-likes-count" data-post="${post.id}">…</span></span>
         <span>💬 <span class="post-comments-count" data-post="${post.id}">…</span></span>
@@ -1856,6 +1934,7 @@ function openNewPostModal() {
   document.getElementById("post-caption-input").value = "";
   document.getElementById("post-file-input").value = "";
   document.getElementById("post-media-preview-container").style.display = "none";
+  document.getElementById("post-is-private-input").checked = false;
   STATE.selectedPostFile = null;
   setPostType("image");
 }
@@ -1924,9 +2003,14 @@ async function publishNewPost() {
   if (!requireAuth()) return;
   const caption = document.getElementById("post-caption-input").value.trim();
   const file = STATE.selectedPostFile;
+  const isPrivate = document.getElementById("post-is-private-input").checked;
 
   if (!file) {
     showToast("Escolha uma foto ou vídeo para publicar.");
+    return;
+  }
+  if (isPrivate && !STATE.myPrivateContentPrice) {
+    showToast("Defina um preço pro seu conteúdo privado nas Configurações do Perfil antes de publicar.");
     return;
   }
 
@@ -1936,7 +2020,7 @@ async function publishNewPost() {
   try {
     const user = await Auth.getUser();
     const mediaUrl = await DB.uploadPostMedia(user.id, file);
-    await DB.createPost(mediaUrl, STATE.currentPostType, caption || "Sem legenda.");
+    await DB.createPost(mediaUrl, STATE.currentPostType, caption || "Sem legenda.", isPrivate);
     await renderProfilePosts();
     closeNewPostModal();
     showToast("Publicação realizada com sucesso!");
@@ -2091,6 +2175,7 @@ function openProfileSettingsModal() {
   document.getElementById("edit-profile-handle").value = handleEl ? handleEl.textContent : "@zcitando";
   document.getElementById("edit-profile-bio").value = bioEl ? bioEl.textContent : "Criador digital • Focado em lives interativas 🎬🍿";
   document.getElementById("edit-profile-avatar-preview").src = STATE.myAvatarUrl || "";
+  document.getElementById("edit-profile-private-price").value = STATE.myPrivateContentPrice || "";
 }
 
 async function handleAvatarFileSelected(event) {
@@ -2149,6 +2234,8 @@ async function saveProfileChanges() {
   const newName = document.getElementById("edit-profile-name").value.trim();
   const newHandle = document.getElementById("edit-profile-handle").value.trim().replace(/^@/, "");
   const newBio = document.getElementById("edit-profile-bio").value.trim();
+  const priceRaw = document.getElementById("edit-profile-private-price").value.trim();
+  const newPrice = priceRaw ? Math.max(1, Math.round(Number(priceRaw))) : null;
 
   if (!newName || !newHandle) {
     showToast("Nome e Username não podem ser vazios!");
@@ -2158,11 +2245,12 @@ async function saveProfileChanges() {
 
   try {
     const user = await Auth.getUser();
-    const profile = await DB.updateProfile(user.id, { display_name: newName, username: newHandle, bio: newBio });
+    const profile = await DB.updateProfile(user.id, { display_name: newName, username: newHandle, bio: newBio, private_content_price: newPrice });
 
     // Refletir exatamente o que foi salvo no servidor (não o que foi digitado) —
     // o nome usado no chat ao vivo (STATE.profileName) também é atualizado aqui.
     STATE.profileName = profile.display_name || profile.username;
+    STATE.myPrivateContentPrice = profile.private_content_price;
     const nameEl = document.querySelector(".profile-bio-info h3");
     const handleEl = document.querySelector(".profile-handle");
     const bioEl = document.querySelector(".profile-bio-text");
@@ -2284,6 +2372,9 @@ function performProfileSearch() {
       };
 
       const safeName = escapeHtml(name);
+      const privateBtnHtml = p.private_content_price
+        ? `<button class="btn-lightbox-like" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff; margin-left: 6px;" onclick="event.stopPropagation(); closeSearchOverlay(); openPrivateContentModal('${p.id}');">🔒</button>`
+        : "";
       item.innerHTML = `
         <div class="inbox-avatar" style="width: 44px; height: 44px;">
           <img src="${p.avatar_url}" alt="${safeName}" style="border-radius: 50%;">
@@ -2296,6 +2387,7 @@ function performProfileSearch() {
           <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
             Mensagem
           </button>
+          ${privateBtnHtml}
         </div>
       `;
       container.appendChild(item);
@@ -2417,6 +2509,7 @@ async function applyProfileToUI(profile) {
   STATE.profileName = profile.display_name || profile.username;
   STATE.myUsername = profile.username;
   STATE.myAvatarUrl = profile.avatar_url;
+  STATE.myPrivateContentPrice = profile.private_content_price;
   STATE.isAdmin = !!profile.is_admin;
 
   const nameEl = document.querySelector(".profile-bio-info h3");
