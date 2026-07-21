@@ -68,7 +68,7 @@
                 <h2>Vibe<span>Live</span></h2>
               </div>
 
-              <div class="auth-card">
+              <div class="auth-card" id="auth-card-form">
                 <div class="auth-tabs">
                   <button class="auth-tab-btn active" id="btn-tab-login" onclick="toggleAuthTab('login')">Entrar</button>
                   <button class="auth-tab-btn" id="btn-tab-register" onclick="toggleAuthTab('register')">Criar Conta</button>
@@ -81,26 +81,34 @@
                   <div class="auth-form-group">
                     <input type="password" id="auth-password" placeholder="Senha">
                   </div>
+                  <div class="auth-form-group" id="auth-confirm-password-group" style="display: none;">
+                    <input type="password" id="auth-confirm-password" placeholder="Confirme a senha">
+                  </div>
                   <button class="btn-auth-submit" id="btn-auth-submit" onclick="handleAuthSubmit()">Entrar</button>
                   <button type="button" id="btn-forgot-password" onclick="openForgotPasswordModal()" style="display: block; margin: 10px auto 0; background: none; border: none; color: var(--light-gray); font-size: 0.68rem; text-decoration: underline; cursor: pointer;">Esqueci minha senha</button>
                 </div>
               </div>
 
-              <div class="auth-social-divider">
+              <!-- Mostrado depois de criar conta, no lugar do formulário, até a pessoa confirmar o e-mail -->
+              <div class="auth-card" id="auth-card-confirm-email" style="display: none; text-align: center; padding: 28px 20px;">
+                <div style="font-size: 2.2rem; margin-bottom: 10px;">📧</div>
+                <h3 style="font-family: var(--font-display); font-size: 1rem; margin-bottom: 8px;">Confirme seu e-mail</h3>
+                <p style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 18px;">
+                  Enviamos um link de confirmação para <strong id="confirm-email-address"></strong>. Clique nele pra ativar sua conta e entrar automaticamente.
+                </p>
+                <button type="button" class="btn-auth-submit" onclick="backToAuthForm()" style="position: static;">Voltar</button>
+              </div>
+
+              <div class="auth-social-divider" id="auth-social-divider">
                 <span>ou continue com</span>
               </div>
 
-              <div class="auth-social-row">
+              <div class="auth-social-row" id="auth-social-row">
                 <button class="social-btn google" onclick="loginWithGoogle()">
                   <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46c-.28 1.5-1.13 2.77-2.4 3.62v3.01h3.89c2.28-2.1 3.57-5.2 3.57-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.91l-3.89-3.01c-1.08.72-2.46 1.15-4.05 1.15-3.11 0-5.75-2.1-6.69-4.92H1.28v3.1C3.26 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.31 14.31c-.24-.72-.38-1.49-.38-2.31s.14-1.59.38-2.31V6.59H1.28A11.96 11.96 0 000 12c0 1.93.47 3.76 1.28 5.41l4.03-3.1z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.45-3.45C17.94 1.19 15.24 0 12 0 7.3 0 3.26 2.7 1.28 6.59l4.03 3.1c.94-2.82 3.58-4.94 6.69-4.94z"/></svg>
                   <span>Entrar com Google</span>
                 </button>
               </div>
-
-              <!-- Acesso rápido sem cadastro: cada visitante recebe uma conta real e privada -->
-              <button class="btn-guest-login" onclick="loginAsGuest()" style="margin-top: 20px; width: 100%; height: 42px; background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 14px; color: var(--text-secondary); font-size: 0.72rem; font-weight: 600; cursor: pointer;">
-                Continuar como Visitante
-              </button>
             </div>
 
           </section>
@@ -140,7 +148,7 @@
                 </div>
                 <div class="wallet-badge" onclick="navigateTo('profile')">
                   <svg class="icon-coin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
-                  <span id="user-coins">99</span>
+                  <span id="user-coins">0</span>
                   <div class="wallet-add">+</div>
                 </div>
               </div>
@@ -301,7 +309,7 @@
                   <h3>Enviar Presente</h3>
                   <div class="drawer-wallet">
                     <svg class="icon-coin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 16h-2v-2h2v2zm1.07-7.75l-.9.92C12.45 11.9 12 12.5 12 14h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
-                    <span id="drawer-coins-count">99</span> Moedas
+                    <span id="drawer-coins-count">0</span> Moedas
                   </div>
                 </div>
                 <div class="gifts-grid">
@@ -519,7 +527,7 @@
                   <h3 class="shop-title">Recarga de Moedas</h3>
                   <div class="balance-display">
                     <span>Saldo: 🪙</span>
-                    <strong id="profile-coins-display">99</strong>
+                    <strong id="profile-coins-display">0</strong>
                   </div>
                 </div>
                 <p class="shop-subtitle">⚠️ Compre com PIX e receba na hora!</p>
@@ -711,6 +719,12 @@
                     <svg class="icon-eye" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                     <span id="my-live-viewer-count">0</span>
                   </div>
+                  <button class="btn-live-control" id="btn-toggle-mute" onclick="toggleMute()" title="Mudo">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+                  </button>
+                  <button class="btn-live-control" onclick="toggleCameraFacing()" title="Trocar câmera">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm5.6-9.5L14.5 9.6l1.1-1.1 3.1 3.1-3.1 3.1-1.1-1.1 2.1-2.1H12v-1.5h4.6z"/></svg>
+                  </button>
                   <button class="btn-stop-my-live" onclick="stopOwnLiveStream(); navigateTo('discover');">ENCERRAR</button>
                 </div>
               </div>
@@ -1061,6 +1075,63 @@
             </p>
             <input type="password" id="new-password-input" placeholder="Nova senha (mín. 6 caracteres)" style="width: 100%; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
             <button class="btn-publish-post" onclick="submitNewPassword()" style="margin-top: 14px;">Salvar Nova Senha</button>
+          </div>
+        </div>
+
+        <!-- Modal: Assistente de Perfil (pós-cadastro) -->
+        <div class="new-post-modal" id="modal-onboarding" style="display: none;">
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>Complete seu perfil</h3>
+            </header>
+
+            <div class="onboarding-progress">
+              <div class="onboarding-dot active" id="onboarding-dot-1"></div>
+              <div class="onboarding-dot" id="onboarding-dot-2"></div>
+              <div class="onboarding-dot" id="onboarding-dot-3"></div>
+              <div class="onboarding-dot" id="onboarding-dot-4"></div>
+            </div>
+
+            <div class="onboarding-step" id="onboarding-step-1">
+              <p class="onboarding-hint">Escolha uma foto de perfil</p>
+              <div class="onboarding-avatar-picker" onclick="document.getElementById('onboarding-avatar-input').click()">
+                <img id="onboarding-avatar-preview" src="" alt="Foto de perfil">
+                <div class="onboarding-avatar-plus">+</div>
+              </div>
+              <input type="file" id="onboarding-avatar-input" accept="image/*" style="display: none;" onchange="handleOnboardingAvatarSelected(event)">
+              <div class="onboarding-actions">
+                <button class="btn-follow-primary" onclick="onboardingNext()">Próximo</button>
+                <button type="button" class="onboarding-skip-btn" onclick="onboardingNext()">Pular</button>
+              </div>
+            </div>
+
+            <div class="onboarding-step" id="onboarding-step-2" style="display: none;">
+              <p class="onboarding-hint">Como podemos te chamar?</p>
+              <input type="text" id="onboarding-name-input" class="onboarding-input" placeholder="Seu nome" maxlength="40">
+              <div class="onboarding-actions">
+                <button class="btn-follow-primary" onclick="onboardingNext()">Próximo</button>
+                <button type="button" class="onboarding-skip-btn" onclick="onboardingNext()">Pular</button>
+              </div>
+            </div>
+
+            <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
+              <p class="onboarding-hint">Escolha seu @ (único, só letras minúsculas/números/ponto/underline)</p>
+              <input type="text" id="onboarding-username-input" class="onboarding-input" placeholder="seu_usuario" maxlength="24">
+              <span class="onboarding-error" id="onboarding-username-error"></span>
+              <div class="onboarding-actions">
+                <button class="btn-follow-primary" onclick="onboardingNext()">Próximo</button>
+                <button type="button" class="onboarding-skip-btn" onclick="onboardingNext()">Pular</button>
+              </div>
+            </div>
+
+            <div class="onboarding-step" id="onboarding-step-4" style="display: none;">
+              <p class="onboarding-hint">Fale um pouco sobre você (opcional)</p>
+              <textarea id="onboarding-bio-input" class="onboarding-input onboarding-textarea" placeholder="Sua bio..." maxlength="150"></textarea>
+              <div class="onboarding-actions">
+                <button class="btn-follow-primary" onclick="finishOnboarding()">Concluir</button>
+                <button type="button" class="onboarding-skip-btn" onclick="finishOnboarding()">Pular</button>
+              </div>
+            </div>
           </div>
         </div>
 

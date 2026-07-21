@@ -6,9 +6,9 @@
 
 
 const STATE = {
-  isLoggedIn: true,
+  isLoggedIn: false,
   authMode: "login",
-  myCoins: 99,
+  myCoins: 0,
   myAvatarUrl: null,
   isAdmin: false,
   adminReports: [],
@@ -22,6 +22,8 @@ const STATE = {
   liveKitRoom: null, // conexão LiveKit como espectador (assistindo vídeo real)
   myLiveKitRoom: null, // conexão LiveKit como transmissor (própria live)
   myLiveGiftsChannel: null, // canal Realtime que avisa quem transmite quando chega um presente de verdade
+  facingMode: "user", // câmera frontal ("user") ou traseira ("environment")
+  isMuted: false,
   realLiveSessions: [], // quem está transmitindo de verdade agora
   realLiveSessionsChannel: null,
   currentLiveIsReal: false,
@@ -161,19 +163,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
+    let profile = null;
     try {
       const session = await Auth.getSession();
       if (session) {
         STATE.isLoggedIn = true;
-        const profile = await DB.getProfile(session.user.id);
+        profile = await DB.getProfile(session.user.id);
         await applyProfileToUI(profile);
+      } else {
+        STATE.isLoggedIn = false;
       }
     } catch (err) {
       console.error("Falha ao checar sessão:", err);
+      STATE.isLoggedIn = false;
     }
     // Navegação sem login continua permitida (dados mockados); ações que gravam
     // dado real checam STATE.isLoggedIn e pedem login na hora, via requireAuth().
-    navigateTo("discover");
+    if (profile && !profile.onboarding_completed) {
+      openOnboardingWizard();
+    } else {
+      navigateTo("discover");
+    }
   }, 2500);
 });
 
@@ -1271,13 +1281,15 @@ function copyPixCode() {
 
 // 14. TRANSMITIR AO VIVO (GO LIVE)
 function initiateCameraStream() {
-  const constraints = { video: { facingMode: "user" }, audio: false };
+  const constraints = { video: { facingMode: STATE.facingMode }, audio: true };
   const fallback = DOM.goLive.querySelector(".camera-fallback-msg");
 
   navigator.mediaDevices.getUserMedia(constraints)
     .then(stream => {
       STATE.localStream = stream;
       DOM.goLiveVideo.srcObject = stream;
+      STATE.isMuted = false;
+      updateMuteButtonUI();
       if (fallback) fallback.style.display = "none";
     })
     .catch(err => {
@@ -1289,6 +1301,66 @@ function initiateCameraStream() {
     });
 }
 
+// Muta/desmuta o microfone. Como o mesmo MediaStreamTrack é o que já foi
+// publicado no LiveKit (quando ao vivo), desativar .enabled já corta o áudio
+// pra quem está assistindo, sem precisar tocar na publicação.
+function toggleMute() {
+  if (!STATE.localStream) return;
+  const audioTrack = STATE.localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+  audioTrack.enabled = !audioTrack.enabled;
+  STATE.isMuted = !audioTrack.enabled;
+  updateMuteButtonUI();
+  showToast(STATE.isMuted ? "Microfone mudo" : "Microfone ativado");
+}
+
+function updateMuteButtonUI() {
+  const btn = document.getElementById("btn-toggle-mute");
+  if (!btn) return;
+  btn.classList.toggle("muted", STATE.isMuted);
+  btn.innerHTML = STATE.isMuted
+    ? `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12h-2zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
+    : `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>`;
+}
+
+// Troca entre câmera frontal e traseira. Se já estiver ao vivo, troca também
+// a track publicada no LiveKit na hora, sem cortar a transmissão pra quem assiste.
+async function toggleCameraFacing() {
+  STATE.facingMode = STATE.facingMode === "user" ? "environment" : "user";
+  showToast(`Trocando para câmera ${STATE.facingMode === "user" ? "frontal" : "traseira"}...`);
+
+  const wasMuted = STATE.isMuted;
+  if (STATE.localStream) {
+    STATE.localStream.getTracks().forEach(track => track.stop());
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: STATE.facingMode }, audio: true });
+    STATE.localStream = stream;
+    DOM.goLiveVideo.srcObject = stream;
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) audioTrack.enabled = !wasMuted;
+    STATE.isMuted = wasMuted;
+    updateMuteButtonUI();
+
+    if (STATE.myLiveKitRoom) {
+      const room = STATE.myLiveKitRoom;
+      for (const pub of Array.from(room.localParticipant.videoTrackPublications.values())) {
+        if (pub.track) await room.localParticipant.unpublishTrack(pub.track);
+      }
+      for (const pub of Array.from(room.localParticipant.audioTrackPublications.values())) {
+        if (pub.track) await room.localParticipant.unpublishTrack(pub.track);
+      }
+      const newVideoTrack = stream.getVideoTracks()[0];
+      if (newVideoTrack) await room.localParticipant.publishTrack(newVideoTrack);
+      if (audioTrack) await room.localParticipant.publishTrack(audioTrack);
+    }
+  } catch (err) {
+    console.error("Falha ao trocar de câmera:", err);
+    showToast("Não foi possível trocar de câmera.");
+  }
+}
 
 function startOwnLiveStream() {
   if (!requireAuth()) return;
@@ -2046,6 +2118,7 @@ function toggleAuthTab(mode) {
   const tabRegister = document.getElementById("btn-tab-register");
   const submitBtn = document.getElementById("btn-auth-submit");
   const forgotBtn = document.getElementById("btn-forgot-password");
+  const confirmGroup = document.getElementById("auth-confirm-password-group");
 
   if (mode === "login") {
     tabLogin.classList.add("active");
@@ -2053,13 +2126,24 @@ function toggleAuthTab(mode) {
     submitBtn.textContent = "Entrar";
     document.getElementById("auth-username").placeholder = "E-mail";
     if (forgotBtn) forgotBtn.style.display = "block";
+    if (confirmGroup) confirmGroup.style.display = "none";
   } else {
     tabLogin.classList.remove("active");
     tabRegister.classList.add("active");
     submitBtn.textContent = "Criar Conta";
     document.getElementById("auth-username").placeholder = "E-mail";
     if (forgotBtn) forgotBtn.style.display = "none";
+    if (confirmGroup) confirmGroup.style.display = "block";
   }
+}
+
+// Volta do card "confirme seu e-mail" pro formulário normal de login/cadastro.
+function backToAuthForm() {
+  document.getElementById("auth-card-confirm-email").style.display = "none";
+  document.getElementById("auth-card-form").style.display = "block";
+  document.getElementById("auth-social-divider").style.display = "flex";
+  document.getElementById("auth-social-row").style.display = "flex";
+  toggleAuthTab("login");
 }
 
 function openForgotPasswordModal() {
@@ -2191,6 +2275,14 @@ async function handleAuthSubmit() {
     return;
   }
 
+  if (STATE.authMode === "register") {
+    const confirmPassword = document.getElementById("auth-confirm-password").value.trim();
+    if (password !== confirmPassword) {
+      showToast("As senhas não coincidem.");
+      return;
+    }
+  }
+
   const btn = document.getElementById("btn-auth-submit");
   if (btn) btn.disabled = true;
   showToast("Autenticando...");
@@ -2200,8 +2292,17 @@ async function handleAuthSubmit() {
       ? await Auth.signIn(email, password)
       : await Auth.signUp(email, password);
 
+    document.getElementById("auth-username").value = "";
+    document.getElementById("auth-password").value = "";
+    document.getElementById("auth-confirm-password").value = "";
+
     if (!data.session) {
-      showToast("Conta criada! Verifique seu e-mail para confirmar o login.");
+      // Cadastro exige confirmação por e-mail — sem sessão ainda até clicar no link.
+      document.getElementById("confirm-email-address").textContent = email;
+      document.getElementById("auth-card-form").style.display = "none";
+      document.getElementById("auth-card-confirm-email").style.display = "block";
+      document.getElementById("auth-social-divider").style.display = "none";
+      document.getElementById("auth-social-row").style.display = "none";
       return;
     }
 
@@ -2211,10 +2312,11 @@ async function handleAuthSubmit() {
 
     showToast(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
 
-    document.getElementById("auth-username").value = "";
-    document.getElementById("auth-password").value = "";
-
-    navigateTo("discover");
+    if (!profile.onboarding_completed) {
+      openOnboardingWizard();
+    } else {
+      navigateTo("discover");
+    }
   } catch (err) {
     showToast(err.message || "Erro ao autenticar. Tente novamente.");
   } finally {
@@ -2259,6 +2361,101 @@ async function handleLogout() {
   showToast("Sessão encerrada!");
 }
 
+// ==========================================================================
+// 25.1 ASSISTENTE DE PERFIL (ONBOARDING PÓS-CADASTRO)
+// ==========================================================================
+function openOnboardingWizard() {
+  STATE.onboardingStep = 1;
+  STATE.onboardingAvatarFile = null;
+  document.getElementById("onboarding-name-input").value = "";
+  document.getElementById("onboarding-username-input").value = "";
+  document.getElementById("onboarding-bio-input").value = "";
+  document.getElementById("onboarding-username-error").textContent = "";
+  document.getElementById("onboarding-avatar-preview").src = STATE.myAvatarUrl || "";
+  showOnboardingStep(1);
+  document.getElementById("modal-onboarding").style.display = "flex";
+}
+
+function showOnboardingStep(step) {
+  for (let i = 1; i <= 4; i++) {
+    const pane = document.getElementById(`onboarding-step-${i}`);
+    const dot = document.getElementById(`onboarding-dot-${i}`);
+    if (pane) pane.style.display = i === step ? "flex" : "none";
+    if (dot) dot.classList.toggle("active", i <= step);
+  }
+}
+
+function handleOnboardingAvatarSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    showToast("Escolha um arquivo de imagem.");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast("Imagem muito grande (máximo 5MB).");
+    return;
+  }
+  STATE.onboardingAvatarFile = file;
+  document.getElementById("onboarding-avatar-preview").src = URL.createObjectURL(file);
+}
+
+async function onboardingNext() {
+  const step = STATE.onboardingStep;
+
+  if (step === 3) {
+    const errorEl = document.getElementById("onboarding-username-error");
+    const raw = document.getElementById("onboarding-username-input").value.trim().toLowerCase();
+    if (raw) {
+      if (!/^[a-z0-9_.]{3,24}$/.test(raw)) {
+        errorEl.textContent = "Use só letras minúsculas, números, ponto ou underline (3 a 24 caracteres).";
+        return;
+      }
+      try {
+        const available = await DB.isUsernameAvailable(raw);
+        if (!available) {
+          errorEl.textContent = "Esse @ já está em uso.";
+          return;
+        }
+      } catch (err) {
+        errorEl.textContent = "Não foi possível checar agora. Tente de novo.";
+        return;
+      }
+    }
+    errorEl.textContent = "";
+  }
+
+  STATE.onboardingStep = step + 1;
+  showOnboardingStep(STATE.onboardingStep);
+}
+
+async function finishOnboarding() {
+  try {
+    const user = await Auth.getUser();
+    const updates = { onboarding_completed: true };
+
+    const name = document.getElementById("onboarding-name-input").value.trim();
+    const username = document.getElementById("onboarding-username-input").value.trim().toLowerCase();
+    const bio = document.getElementById("onboarding-bio-input").value.trim();
+    if (name) updates.display_name = name;
+    if (username) updates.username = username;
+    if (bio) updates.bio = bio;
+
+    if (STATE.onboardingAvatarFile) {
+      updates.avatar_url = await DB.uploadAvatar(user.id, STATE.onboardingAvatarFile);
+    }
+
+    const profile = await DB.updateProfile(user.id, updates);
+    await applyProfileToUI(profile);
+
+    document.getElementById("modal-onboarding").style.display = "none";
+    showToast("Perfil pronto!");
+    navigateTo("discover");
+  } catch (err) {
+    showToast(err.message || "Não foi possível salvar o perfil. Tente novamente.");
+  }
+}
+
 async function sendQuickRose(event) {
   if (!requireAuth()) return;
   // Captura as coordenadas AGORA — o objeto do evento nativo fica inválido
@@ -2301,20 +2498,6 @@ function openAtmosferaSelector() {
     DOM.goLiveVideo.classList.add(`video-${nextFilter}`);
   }
   showToast(`Atmosfera (Filtro): ${nextFilter.toUpperCase()}`);
-}
-
-async function loginAsGuest() {
-  showToast("Entrando como visitante...");
-  try {
-    const data = await Auth.signInAnonymously();
-    STATE.isLoggedIn = true;
-    const profile = await DB.getProfile(data.user.id);
-    await applyProfileToUI(profile);
-    showToast("Bem-vindo(a), Visitante!");
-    navigateTo("discover");
-  } catch (err) {
-    showToast(err.message || "Não foi possível entrar como visitante.");
-  }
 }
 
 function renderStories() {

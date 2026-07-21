@@ -2013,6 +2013,31 @@ body {
   color: #fff;
 }
 
+.btn-live-control {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-live-control svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-live-control.muted {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
 .my-live-bottom-row {
   display: flex;
   justify-content: space-between;
@@ -4991,4 +5016,122 @@ body {
 
 .btn-live-sfx:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* ==========================================================================
+   35. ASSISTENTE DE PERFIL (ONBOARDING PÓS-CADASTRO)
+   ========================================================================== */
+.onboarding-progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 24px;
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  transition: var(--transition-smooth);
+}
+
+.onboarding-dot.active {
+  background: var(--primary);
+  width: 20px;
+  border-radius: 4px;
+}
+
+.onboarding-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 4px 4px;
+}
+
+.onboarding-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.onboarding-avatar-picker {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px dashed var(--glass-border);
+}
+
+.onboarding-avatar-picker img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-input);
+}
+
+.onboarding-avatar-plus {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  border: 2px solid var(--bg-deep);
+}
+
+.onboarding-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 12px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+}
+
+.onboarding-textarea {
+  height: 80px;
+  resize: none;
+}
+
+.onboarding-error {
+  font-size: 0.68rem;
+  color: var(--danger);
+  min-height: 14px;
+  text-align: center;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.onboarding-actions .btn-follow-primary {
+  width: 100%;
+  height: 44px;
+}
+
+.onboarding-skip-btn {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
 }

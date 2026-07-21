@@ -39,12 +39,6 @@ const Auth = {
     return data;
   },
 
-  async signInAnonymously() {
-    const { data, error } = await sb.auth.signInAnonymously();
-    if (error) throw error;
-    return data;
-  },
-
   async signInWithOAuth(provider) {
     // redirectTo precisa estar na allow-list configurada em supabase/config.toml
     // (additional_redirect_urls) — mesma regra do resetPasswordForEmail.
@@ -125,6 +119,12 @@ const DB = {
       totalLives: (data || []).length,
       totalMinutes: Math.round(totalMs / 60000)
     };
+  },
+
+  async isUsernameAvailable(username) {
+    const { data, error } = await sb.from("profiles").select("id").eq("username", username).maybeSingle();
+    if (error) throw error;
+    return !data;
   },
 
   async searchProfiles(query) {
@@ -385,9 +385,12 @@ const DB = {
   },
 
   async getActiveLiveSessions() {
+    // profiles!live_sessions_user_id_fkey desambigua explicitamente pro
+    // PostgREST — desde que live_session_invites também liga live_sessions a
+    // profiles (convidados), existe mais de um caminho possível sem isso.
     const { data, error } = await sb
       .from("live_sessions")
-      .select("*, profiles(username, display_name, avatar_url)")
+      .select("*, profiles!live_sessions_user_id_fkey(username, display_name, avatar_url)")
       .is("ended_at", null)
       .order("started_at", { ascending: false });
     if (error) throw error;
