@@ -173,12 +173,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
     let profile = null;
+    let ageGatePending = false;
     try {
       const session = await Auth.getSession();
       if (session) {
         STATE.isLoggedIn = true;
         profile = await DB.getProfile(session.user.id);
-        await applyProfileToUI(profile);
+        ageGatePending = await applyProfileToUI(profile);
       } else {
         STATE.isLoggedIn = false;
       }
@@ -188,7 +189,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     // Navegação sem login continua permitida (dados mockados); ações que gravam
     // dado real checam STATE.isLoggedIn e pedem login na hora, via requireAuth().
-    if (profile && !profile.onboarding_completed) {
+    // Idade pendente (login social sem data de nascimento, por exemplo) tem
+    // prioridade — não abre o onboarding por cima do modal de verificação.
+    if (!ageGatePending && profile && !profile.onboarding_completed) {
       openOnboardingWizard();
     } else {
       navigateTo("discover");
@@ -2923,7 +2926,13 @@ async function submitAgeVerification() {
   try {
     const profile = await DB.verifyAgeAndAcceptTerms(birthDate);
     document.getElementById("modal-age-verification").style.display = "none";
-    await applyProfileToUI(profile);
+    await applyProfileToUI(profile); // birth_date/terms_accepted_at já setados — não reabre o modal de idade
+
+    if (!profile.onboarding_completed) {
+      openOnboardingWizard();
+    } else {
+      navigateTo("discover");
+    }
   } catch (err) {
     errorEl.textContent = err.message && err.message.includes("18 anos")
       ? "É preciso ter 18 anos ou mais para usar o VibeLive."
@@ -3062,11 +3071,14 @@ async function applyProfileToUI(profile) {
     showToast(`Parabéns! Você subiu para o Nível ${profile.level}! 🎉`);
   }
 
-  // Conta sem data de nascimento confirmada ainda (login social ou conta
-  // anterior a essa verificação) — bloqueia com o modal de idade.
-  requireAgeVerificationIfNeeded(profile);
-
   updatePushButtonUI();
+
+  // Conta sem data de nascimento confirmada ainda (login social ou conta
+  // anterior a essa verificação) — bloqueia com o modal de idade. Quem chama
+  // usa o retorno pra NÃO abrir o assistente de onboarding por cima ao mesmo
+  // tempo (os dois são modais bloqueantes sem botão de fechar — abrir os
+  // dois juntos deixava um empilhado sobre o outro).
+  return requireAgeVerificationIfNeeded(profile);
 }
 
 async function handleAuthSubmit() {
@@ -3121,11 +3133,14 @@ async function handleAuthSubmit() {
 
     STATE.isLoggedIn = true;
     const profile = await DB.getProfile(data.user.id);
-    await applyProfileToUI(profile);
+    const ageGatePending = await applyProfileToUI(profile);
 
     showToast(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
 
-    if (!profile.onboarding_completed) {
+    if (ageGatePending) {
+      // O modal de verificação de idade já está aberto — o onboarding só
+      // aparece depois de confirmar (ver submitAgeVerification).
+    } else if (!profile.onboarding_completed) {
       openOnboardingWizard();
     } else {
       navigateTo("discover");
