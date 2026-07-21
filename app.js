@@ -4,6 +4,11 @@
 
 // 1. DADOS INICIAIS
 
+// Avatar genérico (ícone + gradiente da marca) usado sempre que uma conta
+// não tem foto de perfil própria — antes disso caía numa foto de estoque
+// de uma pessoa real específica, o que não fazia sentido como padrão pra
+// toda conta nova.
+const DEFAULT_AVATAR_DATA_URI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjRkNmQiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmMGIyM2QiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgZmlsbD0idXJsKCNnKSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTgiIHI9IjI4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuOTIpIi8+PHBhdGggZD0iTTIwIDE0NWMwLTMzIDI0LjYtNTYgNTUtNTZzNTUgMjMgNTUgNTYiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC45MikiLz48L3N2Zz4=";
 
 const STATE = {
   isLoggedIn: false,
@@ -63,7 +68,7 @@ const STATE = {
   currentVideoFilter: "none",
   // Sem stories fictícias de outras pessoas — só o placeholder do seu próprio status.
   stories: [
-    { username: "Seu status", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", media: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500", caption: "Preparando a live de hoje! 🎬🍿", viewed: false, isSelf: true }
+    { username: "Seu status", avatar: DEFAULT_AVATAR_DATA_URI, media: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500", caption: "Preparando a live de hoje! 🎬🍿", viewed: false, isSelf: true }
   ],
   activeStoryIndex: 0,
   storyInterval: null,
@@ -437,7 +442,7 @@ function renderRealLiveSessions(allSessions) {
 function createRealLiveCardElement(session) {
   const profile = session.profiles || {};
   const name = escapeHtml(profile.display_name || profile.username || "Ao vivo");
-  const avatar = profile.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150";
+  const avatar = profile.avatar_url || DEFAULT_AVATAR_DATA_URI;
   const titleHtml = session.title ? `<span class="card-live-title">${escapeHtml(session.title)}</span>` : "";
   const restrictedBadge = session.invite_only
     ? `<span class="card-restricted-badge">👥 Convidados</span>`
@@ -935,6 +940,29 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Traduz os códigos de erro reais que o Supabase Auth devolve (em inglês)
+// pra mensagens em português. Usa err.code — mais confiável do que casar
+// pelo texto em inglês, que pode mudar de versão pra versão.
+const AUTH_ERROR_MESSAGES_PT = {
+  weak_password: "A senha precisa ter pelo menos 6 caracteres.",
+  user_already_exists: "Esse e-mail já tem uma conta. Tente entrar em vez de cadastrar.",
+  invalid_credentials: "E-mail ou senha incorretos.",
+  email_address_invalid: "Esse e-mail não é válido.",
+  email_address_not_authorized: "Esse e-mail não pode ser usado.",
+  email_exists: "Esse e-mail já tem uma conta. Tente entrar em vez de cadastrar.",
+  over_email_send_rate_limit: "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.",
+  over_request_rate_limit: "Muitas tentativas em pouco tempo. Aguarde um pouco e tente de novo.",
+  signup_disabled: "Cadastro temporariamente desativado.",
+  email_not_confirmed: "Confirme seu e-mail antes de entrar (verifique sua caixa de entrada, inclusive spam).",
+  same_password: "A nova senha precisa ser diferente da atual.",
+};
+
+function translateAuthError(err) {
+  const code = err && err.code;
+  if (code && AUTH_ERROR_MESSAGES_PT[code]) return AUTH_ERROR_MESSAGES_PT[code];
+  return (err && err.message) || "Erro ao autenticar. Tente novamente.";
+}
+
 // 12. TELA DE MENSAGENS E DIRECT MESSAGES (INBOX)
 function formatMessageTime(isoString) {
   const d = new Date(isoString);
@@ -1317,13 +1345,12 @@ async function openPixModal(packageCode) {
 }
 
 function startPixCountdown() {
-  // Cobranças PIX reais do Mercado Pago expiram em 24h.
-  let duration = 24 * 60 * 60;
+  // Precisa bater com date_of_expiration definido em create-pix-payment/index.ts.
+  let duration = 5 * 60;
   const updateTimer = () => {
-    const hrs = String(Math.floor(duration / 3600)).padStart(2, '0');
-    const mins = String(Math.floor((duration % 3600) / 60)).padStart(2, '0');
+    const mins = String(Math.floor(duration / 60)).padStart(2, '0');
     const secs = String(duration % 60).padStart(2, '0');
-    DOM.pixTimer.textContent = `${hrs}:${mins}:${secs}`;
+    DOM.pixTimer.textContent = `${mins}:${secs}`;
     if (duration <= 0) {
       clearInterval(STATE.pixTimerInterval);
       closePixModal();
@@ -2464,7 +2491,7 @@ async function submitForgotPassword() {
     showToast("Link enviado! Verifique seu e-mail (inclusive spam).");
     closeForgotPasswordModal();
   } catch (err) {
-    showToast(err.message || "Não foi possível enviar o link de recuperação.");
+    showToast(translateAuthError(err));
   }
 }
 
@@ -2493,7 +2520,7 @@ async function submitNewPassword() {
     await applyProfileToUI(profile);
     navigateTo("discover");
   } catch (err) {
-    showToast(err.message || "Não foi possível atualizar a senha.");
+    showToast(translateAuthError(err));
   }
 }
 
@@ -2617,7 +2644,7 @@ async function handleAuthSubmit() {
       navigateTo("discover");
     }
   } catch (err) {
-    showToast(err.message || "Erro ao autenticar. Tente novamente.");
+    showToast(translateAuthError(err));
   } finally {
     if (btn) btn.disabled = false;
   }

@@ -46,6 +46,11 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Pacote inválido" }), { status: 400, headers: corsHeaders });
   }
 
+  // Sem date_of_expiration, o Mercado Pago usa o padrão dele (24h). Aqui fica
+  // fixo em 5 minutos — o timer visual no cliente (startPixCountdown em
+  // app.js) tem que bater com esse valor.
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
   const mpRes = await fetch("https://api.mercadopago.com/v1/payments", {
     method: "POST",
     headers: {
@@ -57,11 +62,8 @@ Deno.serve(async (req) => {
       transaction_amount: pkg.brl,
       description: `VibeLive - ${pkg.coins} moedas`,
       payment_method_id: "pix",
-      // Contas anônimas (visitante) não têm e-mail — o Supabase Auth devolve
-      // "" (string vazia), não null/undefined, então "??" não pega esse caso.
-      // Usa um placeholder com TLD válido (a API do Mercado Pago rejeita ".anon"
-      // como TLD inválido; ".app" passa).
-      payer: { email: user.email || `visitante-${user.id}@vibelive.app` },
+      date_of_expiration: expiresAt,
+      payer: { email: user.email },
     }),
   });
 
