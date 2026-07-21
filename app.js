@@ -514,11 +514,17 @@ async function enterRealLiveRoom(hostUserId) {
 
   STATE.liveChatChannel = DB.subscribeToLiveRoom(b.username, {
     onMessage: renderIncomingLiveChatRow,
-    onViewerCountChange: (count) => {
+    onViewerCountChange: (count, avatars) => {
       STATE.liveViewerCount = count;
       DOM.liveViewerCount.textContent = count;
+      const list = document.getElementById("header-viewers-list");
+      if (list) {
+        list.innerHTML = avatars.slice(0, 3)
+          .map(url => `<img src="${url}" class="viewer-mini-avatar" alt="">`)
+          .join("");
+      }
     }
-  });
+  }, { avatar_url: STATE.myAvatarUrl || "" });
 }
 
 // Conecta como espectador numa sala LiveKit real e anexa o vídeo/áudio

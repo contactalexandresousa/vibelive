@@ -423,9 +423,9 @@ const DB = {
   },
 
   // Inscreve num único canal por sala: mensagens novas (postgres_changes) +
-  // contagem real de quem está conectado agora (Presence). Quem chamar é
-  // responsável por dar sb.removeChannel(canal) ao sair da sala.
-  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange }) {
+  // contagem e avatares reais de quem está conectado agora (Presence). Quem
+  // chamar é responsável por dar sb.removeChannel(canal) ao sair da sala.
+  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange }, myPresence = {}) {
     const channel = sb.channel(`live_chat:${broadcasterHandle}`, {
       config: { presence: { key: crypto.randomUUID() } }
     })
@@ -434,11 +434,15 @@ const DB = {
         filter: `broadcaster_handle=eq.${broadcasterHandle}`
       }, (payload) => onMessage(payload.new))
       .on("presence", { event: "sync" }, () => {
-        onViewerCountChange(Object.keys(channel.presenceState()).length);
+        const state = channel.presenceState();
+        const avatars = Object.values(state)
+          .map(entries => entries[0] && entries[0].avatar_url)
+          .filter(Boolean);
+        onViewerCountChange(Object.keys(state).length, avatars);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          channel.track({ online_at: new Date().toISOString() });
+          channel.track({ online_at: new Date().toISOString(), ...myPresence });
         }
       });
     return channel;
