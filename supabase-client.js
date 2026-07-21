@@ -479,9 +479,11 @@ const DB = {
     // profiles!live_sessions_user_id_fkey desambigua explicitamente pro
     // PostgREST — desde que live_session_invites também liga live_sessions a
     // profiles (convidados), existe mais de um caminho possível sem isso.
+    // created_at do profile alimenta o filtro "Vibe Nova" (conta com menos
+    // de 1 semana); viewer_count alimenta o "Vibe Hot".
     const { data, error } = await sb
       .from("live_sessions")
-      .select("*, profiles!live_sessions_user_id_fkey(username, display_name, avatar_url)")
+      .select("*, profiles!live_sessions_user_id_fkey(username, display_name, avatar_url, created_at)")
       .is("ended_at", null)
       .order("started_at", { ascending: false });
     if (error) throw error;
@@ -493,6 +495,32 @@ const DB = {
       .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, onChange)
       .subscribe();
     return channel;
+  },
+
+  // Contagem real de espectadores agora (Presence), gravada pelo próprio
+  // transmissor pra alimentar o ranking "Vibe Hot" no Discover.
+  async updateLiveViewerCount(roomName, count) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("live_sessions").update({ viewer_count: count }).eq("room_name", roomName).eq("user_id", user.id);
+    if (error) throw error;
+  },
+
+  // Quem eu sigo que vende conteúdo privado — alimenta o botão "Conteúdo
+  // pago" do Discover.
+  async getFollowedPaidCreators() {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data: followingRows, error: followErr } = await sb.from("follows").select("followed_handle").eq("follower_id", user.id);
+    if (followErr) throw followErr;
+    const handles = (followingRows || []).map(r => r.followed_handle);
+    if (handles.length === 0) return [];
+
+    const { data, error } = await sb
+      .from("profiles")
+      .select("id, username, display_name, avatar_url, private_content_price")
+      .in("username", handles)
+      .not("private_content_price", "is", null);
+    if (error) throw error;
+    return data;
   },
 
   // Chat real da sala de live — mensagens persistidas e sincronizadas via Realtime
@@ -539,21 +567,6 @@ const DB = {
           channel.track({ online_at: new Date().toISOString(), ...myPresence });
         }
       });
-    return channel;
-  },
-
-  // Avisa quem está transmitindo quando um presente chega de verdade na
-  // própria sala — sem presence (isso já é feito do lado de quem assiste),
-  // só a mensagem, pra atualizar o "diamantes acumulados" e o saldo na hora.
-  subscribeToOwnGifts(broadcasterHandle, onGift) {
-    const channel = sb.channel(`own_gifts:${broadcasterHandle}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "live_chat_messages",
-        filter: `broadcaster_handle=eq.${broadcasterHandle}`
-      }, (payload) => {
-        if (payload.new.type === "gift") onGift(payload.new);
-      })
-      .subscribe();
     return channel;
   },
 

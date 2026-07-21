@@ -61,17 +61,12 @@ const STATE = {
   activePixPackage: null,
   activePixPayment: null,
   pixPaymentChannel: null,
-  
+  discoverFilter: "hot", // "hot" | "nova" | "privada" — filtro ativo do Discover
+
   // Transmissão Própria (Webcam)
   localStream: null,
   myLiveViewerCount: 0,
   currentVideoFilter: "none",
-  // Sem stories fictícias de outras pessoas — só o placeholder do seu próprio status.
-  stories: [
-    { username: "Seu status", avatar: DEFAULT_AVATAR_DATA_URI, media: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500", caption: "Preparando a live de hoje! 🎬🍿", viewed: false, isSelf: true }
-  ],
-  activeStoryIndex: 0,
-  storyInterval: null,
   xp: 150,
   level: 1,
   isVIP: false,
@@ -167,7 +162,6 @@ sb.auth.onAuthStateChange((event) => {
 document.addEventListener("DOMContentLoaded", () => {
   renderCoins();
   renderInboxList();
-  renderStories();
   initRealLiveSessionsFeed();
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
@@ -419,24 +413,63 @@ async function initRealLiveSessionsFeed() {
   });
 }
 
+// Categorias do Discover — cada uma filtra/ordena a mesma lista já carregada
+// em memória (STATE.realLiveSessions), então trocar de card atualiza a
+// grade na hora, sem precisar esperar nenhuma consulta nova.
+const DISCOVER_CATEGORIES = {
+  hot: { icon: "🔥", label: "Vibe Hot", emptyIcon: "🔥", emptyTitle: "Nenhuma live agora", emptyText: "Quando alguém começar uma live de verdade, ela aparece aqui." },
+  nova: { icon: "✨", label: "Vibe Nova", emptyIcon: "✨", emptyTitle: "Nenhuma conta nova ao vivo", emptyText: "Lives de contas criadas há menos de 1 semana aparecem aqui." },
+  privada: { icon: "🔒", label: "Vibe Privada", emptyIcon: "🔒", emptyTitle: "Nenhuma live privada agora", emptyText: "Lives com senha ou só para convidados aparecem aqui." },
+};
+
+function setDiscoverFilter(mode) {
+  STATE.discoverFilter = mode;
+  document.querySelectorAll(".vibe-category-card").forEach(el => {
+    el.classList.toggle("active", el.dataset.filter === mode);
+  });
+  renderRealLiveSessions(STATE.realLiveSessions);
+}
+
+function applyDiscoverFilter(sessions, mode) {
+  if (mode === "nova") {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return sessions.filter(s => s.profiles && s.profiles.created_at && new Date(s.profiles.created_at).getTime() > weekAgo);
+  }
+  if (mode === "privada") {
+    return sessions.filter(s => s.invite_only || s.has_password);
+  }
+  return [...sessions].sort((a, b) => (b.viewer_count || 0) - (a.viewer_count || 0));
+}
+
 function renderRealLiveSessions(allSessions) {
   // Não mostra quem eu bloqueei (nem quem me bloqueou não teria motivo de aparecer,
   // mas isso já é decidido do lado de quem bloqueou, não meu).
   const sessions = allSessions.filter(s => !STATE.blockedUsers.includes(s.user_id));
   STATE.realLiveSessions = sessions;
+
+  const mode = STATE.discoverFilter || "hot";
+  const category = DISCOVER_CATEGORIES[mode];
+  const filtered = applyDiscoverFilter(sessions, mode);
+
   const grid = document.getElementById("real-live-grid");
   const emptyState = document.getElementById("discover-empty-state");
   if (!grid) return;
 
+  const titleEl = document.getElementById("discover-section-title");
+  if (titleEl) titleEl.textContent = `${category.icon} ${category.label}`;
+
   grid.innerHTML = "";
-  if (sessions.length === 0) {
+  if (filtered.length === 0) {
     grid.style.display = "none";
     if (emptyState) emptyState.style.display = "flex";
+    document.getElementById("discover-empty-icon").textContent = category.emptyIcon;
+    document.getElementById("discover-empty-title").textContent = category.emptyTitle;
+    document.getElementById("discover-empty-text").textContent = category.emptyText;
     return;
   }
   grid.style.display = "grid";
   if (emptyState) emptyState.style.display = "none";
-  sessions.forEach(s => grid.appendChild(createRealLiveCardElement(s)));
+  filtered.forEach(s => grid.appendChild(createRealLiveCardElement(s)));
 }
 
 function createRealLiveCardElement(session) {
@@ -449,6 +482,7 @@ function createRealLiveCardElement(session) {
     : session.has_password
       ? `<span class="card-restricted-badge">🔒 Com senha</span>`
       : "";
+  const viewerCount = session.viewer_count || 0;
 
   const card = document.createElement("div");
   card.className = "live-card";
@@ -459,6 +493,7 @@ function createRealLiveCardElement(session) {
     <div class="card-overlay-gradient"></div>
     <div class="card-viewers">
       <span style="color: var(--primary); font-weight: 800;">🔴 AO VIVO</span>
+      ${viewerCount > 0 ? `<span>· 👁 ${viewerCount}</span>` : ""}
     </div>
     ${restrictedBadge}
     <div class="card-details">
@@ -1570,6 +1605,58 @@ function toggleInvitee(userId, checked) {
 }
 
 // ==========================================================================
+// CONTEÚDO PAGO DE QUEM VOCÊ SEGUE (Discover)
+// ==========================================================================
+async function openFollowingPaidContent() {
+  if (!requireAuth()) return;
+  const modal = document.getElementById("modal-following-paid-content");
+  const container = document.getElementById("following-paid-content-list");
+  modal.style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--light-gray);font-size:0.78rem;">Carregando...</div>`;
+
+  try {
+    const creators = await DB.getFollowedPaidCreators();
+    if (creators.length === 0) {
+      container.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">💎</div>
+          <h3>Nada por aqui ainda</h3>
+          <p>Quando alguém que você segue começar a vender conteúdo privado, aparece aqui.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = "";
+    creators.forEach(p => {
+      const name = escapeHtml(p.display_name || p.username);
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.onclick = () => { closeFollowingPaidContent(); openPrivateContentModal(p.id); };
+      item.innerHTML = `
+        <div class="inbox-avatar">
+          <img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}">
+        </div>
+        <div class="inbox-details">
+          <span class="inbox-name">${name}</span>
+          <span class="inbox-message">@${escapeHtml(p.username)}</span>
+        </div>
+        <div class="inbox-right">
+          <button class="btn-lightbox-like active" style="font-size: 0.65rem;">🪙 ${p.private_content_price}</button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora. Tente de novo.</div>`;
+  }
+}
+
+function closeFollowingPaidContent() {
+  document.getElementById("modal-following-paid-content").style.display = "none";
+}
+
+// ==========================================================================
 // CONTEÚDO PRIVADO (desbloqueio único pago com moedas, preço do criador)
 // ==========================================================================
 async function openPrivateContentModal(creatorId) {
@@ -1741,24 +1828,36 @@ async function launchBroadcastingSession() {
 
     // Avisa em tempo real quando um presente de verdade chega — o servidor já
     // creditou a carteira (RPC send_gift/send_quick_rose); aqui só reflete
-    // isso na tela de quem está transmitindo.
+    // isso na tela de quem está transmitindo. O mesmo canal também traz a
+    // contagem real de espectadores (Presence), que grava em live_sessions
+    // pra alimentar o ranking "Vibe Hot" no Discover.
     if (STATE.myLiveGiftsChannel) sb.removeChannel(STATE.myLiveGiftsChannel);
     if (STATE.myUsername) {
-      STATE.myLiveGiftsChannel = DB.subscribeToOwnGifts(STATE.myUsername, async (msg) => {
-        addMyLiveComment(msg.username, msg.text.replace(/^enviou /, ""), false, true);
-        try {
-          const profile = await DB.getProfile(user.id);
-          const delta = profile.coins - STATE.myCoins;
-          if (delta > 0) {
-            STATE.myLiveDiamonds += delta;
-            DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
+      STATE.myLiveGiftsChannel = DB.subscribeToLiveRoom(STATE.myUsername, {
+        onMessage: async (msg) => {
+          if (msg.type !== "gift") return;
+          addMyLiveComment(msg.username, msg.text.replace(/^enviou /, ""), false, true);
+          try {
+            const profile = await DB.getProfile(user.id);
+            const delta = profile.coins - STATE.myCoins;
+            if (delta > 0) {
+              STATE.myLiveDiamonds += delta;
+              DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
+            }
+            STATE.myCoins = profile.coins;
+            renderCoins();
+          } catch (err) {
+            console.error("Falha ao atualizar saldo após presente recebido:", err);
           }
-          STATE.myCoins = profile.coins;
-          renderCoins();
-        } catch (err) {
-          console.error("Falha ao atualizar saldo após presente recebido:", err);
+        },
+        onViewerCountChange: (count) => {
+          // Desconta a própria presença de quem transmite (não é espectador de si mesmo).
+          const realCount = Math.max(0, count - 1);
+          STATE.myLiveViewerCount = realCount;
+          if (DOM.myLiveViewerCount) DOM.myLiveViewerCount.textContent = String(realCount);
+          DB.updateLiveViewerCount(roomName, realCount).catch(err => console.error("Falha ao gravar contagem de espectadores:", err));
         }
-      });
+      }, { avatar_url: STATE.myAvatarUrl || "" });
     }
   } catch (err) {
     console.error("Falha ao publicar transmissão real:", err);
@@ -2258,10 +2357,6 @@ function syncMyAvatarEverywhere(avatarUrl) {
   const headerAvatar = document.getElementById("header-my-avatar-img");
   if (mainAvatar) mainAvatar.src = avatarUrl;
   if (headerAvatar) headerAvatar.src = avatarUrl;
-  if (STATE.stories[0] && STATE.stories[0].isSelf) {
-    STATE.stories[0].avatar = avatarUrl;
-    renderStories();
-  }
 }
 
 function closeProfileSettingsModal() {
@@ -2824,81 +2919,6 @@ function openAtmosferaSelector() {
     DOM.goLiveVideo.classList.add(`video-${nextFilter}`);
   }
   showToast(`Atmosfera (Filtro): ${nextFilter.toUpperCase()}`);
-}
-
-function renderStories() {
-  const container = document.getElementById("stories-container");
-  if (!container) return;
-  
-  container.innerHTML = "";
-
-  STATE.stories.forEach((s, index) => {
-    const item = document.createElement("div");
-    item.className = s.viewed ? "story-item viewed" : "story-item";
-    if (s.isSelf) item.classList.add("self-story");
-    
-    item.onclick = () => openStoryViewer(index);
-    const safeUsername = escapeHtml(s.username);
-    item.innerHTML = `
-      <div class="story-avatar-ring">
-        <img src="${s.avatar}" alt="${safeUsername}">
-        ${s.isSelf ? '<div class="add-story-plus">+</div>' : ''}
-      </div>
-      <span class="story-username-label">${safeUsername}</span>
-    `;
-    container.appendChild(item);
-  });
-}
-
-function openStoryViewer(index) {
-  const s = STATE.stories[index];
-  if (!s) return;
-
-  STATE.activeStoryIndex = index;
-  s.viewed = true;
-  renderStories();
-
-  const modal = document.getElementById("modal-stories-viewer");
-  if (!modal) return;
-
-  const avatar = document.getElementById("story-viewer-avatar");
-  const name = document.getElementById("story-viewer-name");
-  const img = document.getElementById("story-viewer-img");
-  const caption = document.getElementById("story-viewer-caption");
-
-  if (avatar) avatar.src = s.avatar;
-  if (name) name.textContent = s.username;
-  if (img) img.src = s.media;
-  if (caption) caption.textContent = s.caption;
-
-  modal.classList.add("active");
-
-  const progressFill = document.getElementById("story-progress-fill");
-  if (progressFill) progressFill.style.width = "0%";
-  
-  if (STATE.storyTimeout) clearTimeout(STATE.storyTimeout);
-  if (STATE.storyInterval) clearInterval(STATE.storyInterval);
-
-  let progress = 0;
-  STATE.storyInterval = setInterval(() => {
-    progress += 2;
-    if (progressFill) progressFill.style.width = `${progress}%`;
-    if (progress >= 100) {
-      clearInterval(STATE.storyInterval);
-      if (index < STATE.stories.length - 1) {
-        openStoryViewer(index + 1);
-      } else {
-        closeStoryViewer();
-      }
-    }
-  }, 100);
-}
-
-function closeStoryViewer() {
-  const modal = document.getElementById("modal-stories-viewer");
-  if (modal) modal.classList.remove("active");
-  if (STATE.storyTimeout) clearTimeout(STATE.storyTimeout);
-  if (STATE.storyInterval) clearInterval(STATE.storyInterval);
 }
 
 function openRouletteModal() {

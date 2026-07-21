@@ -166,24 +166,43 @@
               </div>
             </header>
 
-            <!-- Stories / Momentos (Horizontal Bar) -->
-            <div class="stories-scroll-bar">
-              <div class="stories-container" id="stories-container">
-                <!-- Gerado dinamicamente via JS -->
-              </div>
+            <!-- Categorias de Live — filtram a grade abaixo, atualiza na hora do clique -->
+            <div class="vibe-categories-row">
+              <button class="vibe-category-card active" data-filter="hot" onclick="setDiscoverFilter('hot')">
+                <span class="vibe-category-icon">🔥</span>
+                <span class="vibe-category-label">Vibe Hot</span>
+              </button>
+              <button class="vibe-category-card" data-filter="nova" onclick="setDiscoverFilter('nova')">
+                <span class="vibe-category-icon">✨</span>
+                <span class="vibe-category-label">Vibe Nova</span>
+              </button>
+              <button class="vibe-category-card" data-filter="privada" onclick="setDiscoverFilter('privada')">
+                <span class="vibe-category-icon">🔒</span>
+                <span class="vibe-category-label">Vibe Privada</span>
+              </button>
             </div>
+
+            <!-- Conteúdo pago de quem você segue -->
+            <button class="following-paid-banner" onclick="openFollowingPaidContent()">
+              <span class="following-paid-icon">💎</span>
+              <span class="following-paid-text">
+                <strong>Conteúdo pago</strong>
+                <small>Veja o que quem você segue está vendendo</small>
+              </span>
+              <svg class="following-paid-arrow" viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            </button>
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
               <section class="discover-section">
                 <div class="section-header">
-                  <h2>🔴 Ao Vivo Agora</h2>
+                  <h2 id="discover-section-title">🔥 Vibe Hot</h2>
                 </div>
                 <div class="lives-grid" id="real-live-grid"></div>
                 <div class="discover-empty-state" id="discover-empty-state" style="display: flex;">
-                  <div class="discover-empty-icon">📡</div>
-                  <h3>Nenhuma transmissão agora</h3>
-                  <p>Quando alguém começar uma live de verdade, ela aparece aqui.</p>
+                  <div class="discover-empty-icon" id="discover-empty-icon">📡</div>
+                  <h3 id="discover-empty-title">Nenhuma transmissão agora</h3>
+                  <p id="discover-empty-text">Quando alguém começar uma live de verdade, ela aparece aqui.</p>
                   <button class="btn-follow-primary" onclick="navigateTo('go-live')">Ir Ao Vivo</button>
                 </div>
               </section>
@@ -942,29 +961,6 @@
           </div>
         </div>
 
-        <!-- Modal de Visualização de Stories (Discover) -->
-        <div class="stories-viewer-modal" id="modal-stories-viewer">
-          <div class="stories-viewer-overlay" onclick="closeStoryViewer()"></div>
-          <div class="stories-viewer-content">
-            <div class="stories-progress-bar-wrapper">
-              <div class="stories-progress-bar-fill" id="story-progress-fill"></div>
-            </div>
-            
-            <header class="story-viewer-header">
-              <div class="story-author-info">
-                <img id="story-viewer-avatar" src="" alt="Avatar">
-                <span id="story-viewer-name">username</span>
-              </div>
-              <button class="btn-close-story" onclick="closeStoryViewer()">×</button>
-            </header>
-
-            <div class="story-viewer-media-container">
-              <img id="story-viewer-img" src="" alt="Story Media">
-              <p id="story-viewer-caption">Legenda do Story</p>
-            </div>
-          </div>
-        </div>
-
         <!-- Modal da Roleta da Fortuna (Discover / Live Room) -->
         <div class="new-post-modal" id="modal-live-wheel" style="display: none;">
           <div class="new-post-overlay" onclick="closeRouletteModal()"></div>
@@ -1087,6 +1083,20 @@
             </p>
             <input type="password" id="new-password-input" placeholder="Nova senha (mín. 6 caracteres)" style="width: 100%; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.8rem;">
             <button class="btn-publish-post" onclick="submitNewPassword()" style="margin-top: 14px;">Salvar Nova Senha</button>
+          </div>
+        </div>
+
+        <!-- Modal: Conteúdo pago de quem você segue -->
+        <div class="new-post-modal" id="modal-following-paid-content" style="display: none;">
+          <div class="new-post-overlay" onclick="closeFollowingPaidContent()"></div>
+          <div class="new-post-content">
+            <header class="new-post-header">
+              <h3>💎 Conteúdo Pago</h3>
+              <button class="btn-close-new-post" onclick="closeFollowingPaidContent()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div id="following-paid-content-list" class="inbox-list"></div>
+            </div>
           </div>
         </div>
 
