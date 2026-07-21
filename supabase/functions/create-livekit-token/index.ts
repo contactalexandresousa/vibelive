@@ -44,7 +44,30 @@ Deno.serve(async (req) => {
   // user id) pode publicar vídeo/áudio — em qualquer outra sala, entra só
   // como espectador. Evita que alguém peça um token com can_publish e invada
   // a transmissão de outra pessoa.
-  const canPublish = roomName === `live-${user.id}`;
+  let canPublish = roomName === `live-${user.id}`;
+
+  // Segunda chance: co-transmissor com convite ACEITO pra essa live específica
+  // também pode publicar — a decisão de quem confia é toda no banco (RLS já
+  // garante que só virou "accepted" com aceite de fato de quem foi convidado),
+  // aqui só consulta o resultado com a service role.
+  if (!canPublish) {
+    const { data: session } = await supabase
+      .from("live_sessions")
+      .select("id")
+      .eq("room_name", roomName)
+      .is("ended_at", null)
+      .maybeSingle();
+    if (session) {
+      const { data: invite } = await supabase
+        .from("live_cohost_invites")
+        .select("id")
+        .eq("live_session_id", session.id)
+        .eq("invited_user_id", user.id)
+        .eq("status", "accepted")
+        .maybeSingle();
+      canPublish = !!invite;
+    }
+  }
 
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,

@@ -444,6 +444,30 @@ const DB = {
     return data.push_preferences;
   },
 
+  async getTopSupporters(limit = 20) {
+    const { data, error } = await sb.rpc("get_top_supporters", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
+  async getTopCreators(limit = 20) {
+    const { data, error } = await sb.rpc("get_top_creators", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
+  async searchPostsByHashtag(tag, limit = 40) {
+    const { data, error } = await sb.rpc("search_posts_by_hashtag", { p_tag: tag.replace(/^#/, ""), p_limit: limit });
+    if (error) throw error;
+    if (data.length === 0) return [];
+
+    const userIds = [...new Set(data.map(p => p.user_id))];
+    const { data: profiles, error: profErr } = await sb.from("profiles").select("id, username, display_name, avatar_url").in("id", userIds);
+    if (profErr) throw profErr;
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+    return data.map(p => ({ ...p, author: profileMap.get(p.user_id) }));
+  },
+
   async getMyCpfStatus() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return null;
@@ -488,6 +512,12 @@ const DB = {
     const { data, error } = await sb.rpc("review_withdrawal_request", {
       p_request_id: requestId, p_new_status: newStatus, p_admin_notes: adminNotes || null
     });
+    if (error) throw error;
+    return data;
+  },
+
+  async acceptTermsVersion(version) {
+    const { data, error } = await sb.rpc("accept_terms_version", { p_version: version });
     if (error) throw error;
     return data;
   },
@@ -860,7 +890,7 @@ const DB = {
   // Inscreve num único canal por sala: mensagens novas (postgres_changes) +
   // contagem e avatares reais de quem está conectado agora (Presence). Quem
   // chamar é responsável por dar sb.removeChannel(canal) ao sair da sala.
-  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange }, myPresence = {}) {
+  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange, onPollInsert, onPollUpdate, onPollVote }, myPresence = {}) {
     const channel = sb.channel(`live_chat:${broadcasterHandle}`, {
       config: { presence: { key: crypto.randomUUID() } }
     })
@@ -880,7 +910,122 @@ const DB = {
           channel.track({ online_at: new Date().toISOString(), ...myPresence });
         }
       });
+
+    // Enquete usa canais separados: filtro por broadcaster_handle não dá
+    // pra combinar com o filtro de live_chat_messages no mesmo channel.on(),
+    // e o voto (live_poll_votes) não tem broadcaster_handle pra filtrar por
+    // — o cliente decide se o poll_id do payload é o da enquete ativa dele.
+    let pollChannel = null;
+    if (onPollInsert || onPollUpdate || onPollVote) {
+      pollChannel = sb.channel(`live_polls:${broadcasterHandle}`)
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "live_polls",
+          filter: `broadcaster_handle=eq.${broadcasterHandle}`
+        }, (payload) => onPollInsert && onPollInsert(payload.new))
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "live_polls",
+          filter: `broadcaster_handle=eq.${broadcasterHandle}`
+        }, (payload) => onPollUpdate && onPollUpdate(payload.new))
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "live_poll_votes"
+        }, (payload) => onPollVote && onPollVote(payload.new))
+        .subscribe();
+    }
+
+    channel._pollChannel = pollChannel;
     return channel;
+  },
+
+  async createLivePoll(broadcasterHandle, question, options) {
+    const { data, error } = await sb.rpc("create_live_poll", {
+      p_broadcaster_handle: broadcasterHandle, p_question: question, p_options: options
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async voteLivePoll(pollId, optionIndex) {
+    const { error } = await sb.rpc("vote_live_poll", { p_poll_id: pollId, p_option_index: optionIndex });
+    if (error) throw error;
+  },
+
+  async closeLivePoll(pollId) {
+    const { error } = await sb.rpc("close_live_poll", { p_poll_id: pollId });
+    if (error) throw error;
+  },
+
+  // Enquete ativa (se houver) + contagem de votos por opção + o que o
+  // usuário atual já votou — usado ao entrar na sala com uma enquete já em
+  // andamento (a realtime só avisa de mudanças NOVAS a partir de agora).
+  async getActiveLivePoll(broadcasterHandle) {
+    const { data: poll, error } = await sb
+      .from("live_polls")
+      .select("*")
+      .eq("broadcaster_handle", broadcasterHandle)
+      .is("closed_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!poll) return null;
+
+    const votes = await this.getPollVotes(poll.id);
+    return { poll, votes };
+  },
+
+  async getPollVotes(pollId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data, error } = await sb.from("live_poll_votes").select("user_id, option_index").eq("poll_id", pollId);
+    if (error) throw error;
+    const counts = {};
+    let myVote = null;
+    data.forEach(v => {
+      counts[v.option_index] = (counts[v.option_index] || 0) + 1;
+      if (user && v.user_id === user.id) myVote = v.option_index;
+    });
+    return { counts, total: data.length, myVote };
+  },
+
+  async getMyActiveLiveSession() {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data, error } = await sb.from("live_sessions").select("*").eq("user_id", user.id).is("ended_at", null).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async inviteCohost(liveSessionId, invitedUserId) {
+    const { data, error } = await sb.rpc("invite_cohost", { p_live_session_id: liveSessionId, p_invited_user_id: invitedUserId });
+    if (error) throw error;
+    return data;
+  },
+
+  async respondCohostInvite(inviteId, accept) {
+    const { data, error } = await sb.rpc("respond_cohost_invite", { p_invite_id: inviteId, p_accept: accept });
+    if (error) throw error;
+    return data;
+  },
+
+  async endCohost(inviteId) {
+    const { error } = await sb.rpc("end_cohost", { p_invite_id: inviteId });
+    if (error) throw error;
+  },
+
+  // Chamado pelo anfitrião ao encerrar a própria live — sem isso o convite
+  // ficaria "accepted" pra sempre, mesmo com a transmissão já parada.
+  async endActiveCohostsForSession(liveSessionId) {
+    const { data: invites, error } = await sb
+      .from("live_cohost_invites")
+      .select("id")
+      .eq("live_session_id", liveSessionId)
+      .eq("status", "accepted");
+    if (error) throw error;
+    await Promise.all((invites || []).map(i => sb.rpc("end_cohost", { p_invite_id: i.id })));
+  },
+
+  async getCohostInvite(inviteId) {
+    const { data, error } = await sb.from("live_cohost_invites").select("*, live_session:live_sessions(room_name, user_id)").eq("id", inviteId).maybeSingle();
+    if (error) throw error;
+    return data;
   },
 
   // Mensagens diretas (DM) reais — persistidas e sincronizadas via Realtime.

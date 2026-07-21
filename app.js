@@ -10,6 +10,11 @@
 // toda conta nova.
 const DEFAULT_AVATAR_DATA_URI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZjRkNmQiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmMGIyM2QiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgZmlsbD0idXJsKCNnKSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTgiIHI9IjI4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuOTIpIi8+PHBhdGggZD0iTTIwIDE0NWMwLTMzIDI0LjYtNTYgNTUtNTZzNTUgMjMgNTUgNTYiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC45MikiLz48L3N2Zz4=";
 
+// Sobe esse número (e atualiza o texto real em modal-terms no index.html)
+// da próxima vez que os Termos de Uso mudarem de verdade — isso já dispara
+// o modal de reaceite pra quem tiver uma versão antiga aceita.
+const CURRENT_TERMS_VERSION = 1;
+
 // Chave pública VAPID (par gerado uma vez, a privada só existe como segredo
 // da Edge Function send-push) — é pública por natureza do protocolo Web Push,
 // mesmo status da anon key do Supabase: segura pra ficar exposta no cliente.
@@ -185,6 +190,28 @@ function logClientErrorSafely(message, stack) {
 
 window.addEventListener("error", (event) => {
   logClientErrorSafely(event.message, event.error && event.error.stack);
+});
+
+// Acessibilidade: Esc fecha o modal aberto no topo, exceto os poucos que são
+// bloqueantes de propósito (verificação de idade, onboarding, desafio de
+// 2FA, reaceite de Termos, nova senha) — esses não têm botão de fechar
+// porque a ação é obrigatória, então Esc não deveria abrir uma saída.
+const ESCAPE_NON_DISMISSABLE_MODALS = new Set([
+  "modal-age-verification", "modal-onboarding", "modal-2fa-challenge",
+  "modal-terms-reaccept", "modal-new-password",
+]);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const openModals = Array.from(document.querySelectorAll(".new-post-modal, .lightbox-modal"))
+    .filter(m => getComputedStyle(m).display !== "none" && !ESCAPE_NON_DISMISSABLE_MODALS.has(m.id));
+  if (openModals.length === 0) return;
+  const topModal = openModals[openModals.length - 1];
+  if (topModal.id === "modal-post-lightbox") {
+    closePostLightbox();
+  } else {
+    topModal.style.display = "none";
+  }
 });
 
 window.addEventListener("unhandledrejection", (event) => {
@@ -413,6 +440,9 @@ function renderNotificationsList() {
     } else if (n.type === "live_invite") {
       text = `${actorName} te convidou pra uma live restrita`;
       icon = "🔒";
+    } else if (n.type === "cohost_invite") {
+      text = `${actorName} te chamou pra co-transmitir`;
+      icon = "👥";
     } else {
       text = `${actorName} está ao vivo agora!`;
       icon = "🔴";
@@ -442,6 +472,8 @@ function handleNotificationClick(index) {
     enterRealLiveRoom(n.actor_id);
   } else if (n.type === "new_follower") {
     openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
+  } else if (n.type === "cohost_invite" && n.metadata && n.metadata.invite_id) {
+    showCohostInviteResponse(n);
   }
 }
 
@@ -672,6 +704,7 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
     STATE.liveKitRoom.disconnect();
     STATE.liveKitRoom = null;
   }
+  detachCohostTile("live-cohost-video");
 
   STATE.currentLiveBroadcaster = b;
   STATE.currentLiveIsReal = true;
@@ -735,8 +768,13 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
           .map(url => `<img src="${url}" class="viewer-mini-avatar" alt="">`)
           .join("");
       }
-    }
+    },
+    onPollInsert: (poll) => handlePollRealtimeInsert("live-poll-card", poll),
+    onPollUpdate: (poll) => handlePollRealtimeUpdate("live-poll-card", poll),
+    onPollVote: (vote) => handlePollRealtimeVote("live-poll-card", vote),
   }, { avatar_url: STATE.myAvatarUrl || "" });
+
+  initLivePollForRoom("live-poll-card", b.username);
 }
 
 // Conecta como espectador numa sala LiveKit real e anexa o vídeo/áudio
@@ -749,14 +787,31 @@ async function connectToRealLiveVideo(hostUserId, loader) {
     const room = new LivekitClient.Room();
     STATE.liveKitRoom = room;
 
-    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      // O anfitrião publica na identidade hostUserId; qualquer outro
+      // participante publicando na mesma sala é um co-transmissor, cujo
+      // vídeo vai num tile PiP separado em vez de sobrescrever o principal.
+      const isCohost = participant.identity !== hostUserId;
+      const target = isCohost ? document.getElementById("live-cohost-video") : DOM.liveVideo;
+      if (!target) return;
+
       if (track.kind === "video") {
-        track.attach(DOM.liveVideo);
-        loader.style.opacity = "0";
-        setTimeout(() => { loader.style.display = "none"; }, 500);
-        DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
+        track.attach(target);
+        if (isCohost) {
+          target.style.display = "block";
+        } else {
+          loader.style.opacity = "0";
+          setTimeout(() => { loader.style.display = "none"; }, 500);
+        }
+        target.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
       } else if (track.kind === "audio") {
-        track.attach(DOM.liveVideo);
+        track.attach(target);
+      }
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      if (participant.identity !== hostUserId) {
+        detachCohostTile("live-cohost-video");
       }
     });
 
@@ -784,6 +839,7 @@ function closeLiveRoom() {
   DOM.liveVideo.srcObject = null;
 
   if (STATE.liveChatChannel) {
+    if (STATE.liveChatChannel._pollChannel) sb.removeChannel(STATE.liveChatChannel._pollChannel);
     sb.removeChannel(STATE.liveChatChannel);
     STATE.liveChatChannel = null;
   }
@@ -791,6 +847,8 @@ function closeLiveRoom() {
     STATE.liveKitRoom.disconnect();
     STATE.liveKitRoom = null;
   }
+  clearLivePoll("live-poll-card");
+  detachCohostTile("live-cohost-video");
 
   STATE.currentLiveBroadcaster = null;
   STATE.currentLiveIsReal = false;
@@ -2660,6 +2718,18 @@ async function launchBroadcastingSession() {
     const token = await DB.createLivekitToken(roomName);
     const room = new LivekitClient.Room();
     STATE.myLiveKitRoom = room;
+
+    // Se alguém aceitar o convite de co-transmissão, o vídeo/áudio dessa
+    // pessoa chega aqui como um segundo participante publicando na mesma
+    // sala — mostra num tile PiP em vez de sobrescrever a própria câmera.
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      if (participant.identity === user.id) return;
+      attachCohostTrack(track, "my-live-cohost-video");
+    });
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      if (participant.identity !== user.id) detachCohostTile("my-live-cohost-video");
+    });
+
     await room.connect(LIVEKIT_URL, token);
 
     if (STATE.localStream) {
@@ -2729,8 +2799,12 @@ async function launchBroadcastingSession() {
           STATE.myLiveViewerCount = realCount;
           if (DOM.myLiveViewerCount) DOM.myLiveViewerCount.textContent = String(realCount);
           DB.updateLiveViewerCount(roomName, realCount).catch(err => console.error("Falha ao gravar contagem de espectadores:", err));
-        }
+        },
+        onPollInsert: (poll) => handlePollRealtimeInsert("my-live-poll-card", poll),
+        onPollUpdate: (poll) => handlePollRealtimeUpdate("my-live-poll-card", poll),
+        onPollVote: (vote) => handlePollRealtimeVote("my-live-poll-card", vote),
       }, { avatar_url: STATE.myAvatarUrl || "" });
+      initLivePollForRoom("my-live-poll-card", STATE.myUsername);
     }
   } catch (err) {
     console.error("Falha ao publicar transmissão real:", err);
@@ -2756,16 +2830,22 @@ async function stopOwnLiveStream() {
     STATE.myLiveKitRoom = null;
   }
   if (STATE.myLiveGiftsChannel) {
+    if (STATE.myLiveGiftsChannel._pollChannel) sb.removeChannel(STATE.myLiveGiftsChannel._pollChannel);
     sb.removeChannel(STATE.myLiveGiftsChannel);
     STATE.myLiveGiftsChannel = null;
   }
+  clearLivePoll("my-live-poll-card");
   if (wasBroadcasting) {
     try {
+      const session = await DB.getMyActiveLiveSession();
+      if (session) await DB.endActiveCohostsForSession(session.id);
       await DB.endLiveSession();
     } catch (err) {
       console.error("Falha ao encerrar sessão de live:", err);
     }
   }
+  STATE.activeLiveSessionId = null;
+  document.getElementById("my-live-cohost-video").style.display = "none";
 
   // Reiniciar telas do go live
   DOM.goLiveSetup.style.display = "flex";
@@ -3107,7 +3187,7 @@ async function openPostLightbox(postId) {
   const likeBtn = modal.querySelector(".btn-lightbox-like");
 
   modal.style.display = "flex";
-  caption.textContent = post.caption;
+  caption.innerHTML = renderCaptionWithHashtags(post.caption);
   likes.textContent = "carregando…";
   likeBtn.classList.remove("active");
 
@@ -3185,7 +3265,7 @@ async function saveLightboxPostEdit() {
     const updated = await DB.updatePost(postId, { caption: newCaption, is_private: newIsPrivate });
     const index = STATE.myPosts.findIndex(p => p.id === postId);
     if (index !== -1) STATE.myPosts[index] = updated;
-    document.getElementById("lightbox-caption").textContent = updated.caption;
+    document.getElementById("lightbox-caption").innerHTML = renderCaptionWithHashtags(updated.caption);
     cancelLightboxPostEdit();
     showToast("Post atualizado!");
   } catch (err) {
@@ -3695,6 +3775,373 @@ function closeSearchOverlay() {
   document.getElementById("modal-search-overlay").style.display = "none";
 }
 
+// ==========================================================================
+// ENQUETES AO VIVO
+// ==========================================================================
+STATE.livePolls = {}; // containerId -> { poll, votes: { counts, total, myVote } }
+
+function openCreatePollModal() {
+  if (!requireAuth()) return;
+  document.getElementById("poll-question-input").value = "";
+  document.getElementById("poll-option-1").value = "";
+  document.getElementById("poll-option-2").value = "";
+  document.getElementById("poll-option-3").value = "";
+  document.getElementById("poll-option-4").value = "";
+  document.getElementById("create-poll-error").textContent = "";
+  document.getElementById("modal-create-poll").style.display = "flex";
+}
+
+function closeCreatePollModal() {
+  document.getElementById("modal-create-poll").style.display = "none";
+}
+
+async function submitCreatePoll() {
+  const question = document.getElementById("poll-question-input").value.trim();
+  const options = [1, 2, 3, 4]
+    .map(i => document.getElementById(`poll-option-${i}`).value.trim())
+    .filter(Boolean);
+  const errorEl = document.getElementById("create-poll-error");
+  errorEl.textContent = "";
+
+  if (!question) {
+    errorEl.textContent = "Escreva uma pergunta.";
+    return;
+  }
+  if (options.length < 2) {
+    errorEl.textContent = "Preencha pelo menos 2 opções.";
+    return;
+  }
+
+  try {
+    await DB.createLivePoll(STATE.myUsername, question, options);
+    closeCreatePollModal();
+    showToast("Enquete lançada!");
+  } catch (err) {
+    errorEl.textContent = err.message || "Não foi possível criar a enquete agora.";
+  }
+}
+
+function renderLivePollCard(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const state = STATE.livePolls[containerId];
+  if (!state || !state.poll || state.poll.closed_at) {
+    container.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const { poll, votes } = state;
+  container.style.display = "block";
+  const total = votes.total || 0;
+  const optionsHtml = poll.options.map((opt, i) => {
+    const count = votes.counts[i] || 0;
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const voted = votes.myVote === i;
+    return `
+      <div class="live-poll-option ${voted ? "voted" : ""}" onclick="voteOnPoll('${containerId}', ${i})">
+        <div class="live-poll-option-fill" style="width: ${pct}%;"></div>
+        <div class="live-poll-option-label"><span>${escapeHtml(opt)}</span><span>${pct}%</span></div>
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="live-poll-question">📊 ${escapeHtml(poll.question)}</div>
+    ${optionsHtml}
+    <div class="live-poll-meta"><span>${total} voto${total === 1 ? "" : "s"}</span></div>
+  `;
+}
+
+async function voteOnPoll(containerId, optionIndex) {
+  if (!requireAuth()) return;
+  const state = STATE.livePolls[containerId];
+  if (!state || !state.poll) return;
+
+  try {
+    await DB.voteLivePoll(state.poll.id, optionIndex);
+    // Atualização otimista na hora — a confirmação real chega via realtime
+    // (onPollVote), que busca a contagem certinha do banco.
+    if (state.votes.myVote !== null && state.votes.myVote !== undefined) {
+      state.votes.counts[state.votes.myVote] = Math.max(0, (state.votes.counts[state.votes.myVote] || 1) - 1);
+    } else {
+      state.votes.total++;
+    }
+    state.votes.counts[optionIndex] = (state.votes.counts[optionIndex] || 0) + 1;
+    state.votes.myVote = optionIndex;
+    renderLivePollCard(containerId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível votar agora.");
+  }
+}
+
+async function initLivePollForRoom(containerId, broadcasterHandle) {
+  try {
+    const active = await DB.getActiveLivePoll(broadcasterHandle);
+    STATE.livePolls[containerId] = active ? { poll: active.poll, votes: active.votes } : null;
+    renderLivePollCard(containerId);
+  } catch (err) {
+    console.error("Falha ao carregar enquete ativa:", err);
+  }
+}
+
+function handlePollRealtimeInsert(containerId, poll) {
+  STATE.livePolls[containerId] = { poll, votes: { counts: {}, total: 0, myVote: null } };
+  renderLivePollCard(containerId);
+}
+
+function handlePollRealtimeUpdate(containerId, poll) {
+  const state = STATE.livePolls[containerId];
+  if (state && state.poll && state.poll.id === poll.id) {
+    state.poll = poll;
+    renderLivePollCard(containerId);
+  }
+}
+
+async function handlePollRealtimeVote(containerId, vote) {
+  const state = STATE.livePolls[containerId];
+  if (!state || !state.poll || state.poll.id !== vote.poll_id) return;
+  try {
+    state.votes = await DB.getPollVotes(state.poll.id);
+    renderLivePollCard(containerId);
+  } catch (err) {
+    console.error("Falha ao atualizar votos da enquete:", err);
+  }
+}
+
+function clearLivePoll(containerId) {
+  STATE.livePolls[containerId] = null;
+  const container = document.getElementById(containerId);
+  if (container) { container.style.display = "none"; container.innerHTML = ""; }
+}
+
+// ==========================================================================
+// CO-TRANSMISSÃO (DUAS PESSOAS NA MESMA LIVE)
+// ==========================================================================
+STATE.activeLiveSessionId = null; // id da própria live_sessions ativa (p/ convidar co-transmissor)
+STATE.pendingCohostInviteId = null; // convite aberto no modal de resposta
+STATE.activeCohostInviteId = null; // convite já aceito, em co-transmissão agora
+STATE.cohostLocalStream = null; // MediaStream da própria câmera quando co-transmitindo
+STATE.cohostLiveKitRoom = null; // conexão LiveKit própria quando co-transmitindo
+
+async function openCohostInviteModal() {
+  if (!requireAuth()) return;
+  const container = document.getElementById("cohost-invite-list-container");
+  document.getElementById("modal-cohost-invite").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Carregando...</div>`;
+
+  try {
+    const session = await DB.getMyActiveLiveSession();
+    if (!session) {
+      container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Você precisa estar ao vivo pra convidar um co-transmissor.</div>`;
+      return;
+    }
+    STATE.activeLiveSessionId = session.id;
+
+    if (!STATE.mutualFollowersCache) {
+      STATE.mutualFollowersCache = await DB.getMutualFollowers();
+    }
+    const mutuals = STATE.mutualFollowersCache;
+    if (mutuals.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Ninguém que te segue e você segue de volta ainda.</div>`;
+      return;
+    }
+
+    container.innerHTML = "";
+    mutuals.forEach(p => {
+      const name = escapeHtml(p.display_name || p.username);
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${p.avatar_url || ""}" alt="${name}" style="border-radius:50%;"></div>
+        <div class="inbox-details"><span class="inbox-name">${name}</span><span class="inbox-message">@${escapeHtml(p.username)}</span></div>
+        <div class="inbox-right"><button class="btn-follow-primary" style="height:26px; font-size:0.62rem; padding:0 10px;" onclick="handleInviteCohost('${p.id}', this)">Convidar</button></div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--light-gray);font-size:0.72rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+function closeCohostInviteModal() {
+  document.getElementById("modal-cohost-invite").style.display = "none";
+}
+
+async function handleInviteCohost(userId, btn) {
+  if (!STATE.activeLiveSessionId) return;
+  btn.disabled = true;
+  try {
+    await DB.inviteCohost(STATE.activeLiveSessionId, userId);
+    btn.textContent = "Convidado ✓";
+    showToast("Convite enviado!");
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível convidar agora.");
+  }
+}
+
+// Chamado a partir de handleNotificationClick quando o tipo é 'cohost_invite'.
+function showCohostInviteResponse(notification) {
+  STATE.pendingCohostInviteId = notification.metadata.invite_id;
+  const actorName = notification.actor ? (notification.actor.display_name || notification.actor.username) : "Alguém";
+  document.getElementById("cohost-response-text").textContent = `${actorName} te chamou pra co-transmitir a live! Sua câmera vai aparecer junto com a dele(a) pra quem estiver assistindo.`;
+  document.getElementById("modal-cohost-response").style.display = "flex";
+}
+
+async function declineCohostInvite() {
+  const inviteId = STATE.pendingCohostInviteId;
+  STATE.pendingCohostInviteId = null;
+  document.getElementById("modal-cohost-response").style.display = "none";
+  if (!inviteId) return;
+  try {
+    await DB.respondCohostInvite(inviteId, false);
+  } catch (err) {
+    console.error("Falha ao recusar convite de co-transmissão:", err);
+  }
+}
+
+async function acceptCohostInvite() {
+  const inviteId = STATE.pendingCohostInviteId;
+  STATE.pendingCohostInviteId = null;
+  if (!inviteId) return;
+  document.getElementById("modal-cohost-response").style.display = "none";
+
+  try {
+    const invite = await DB.respondCohostInvite(inviteId, true);
+    const fullInvite = await DB.getCohostInvite(invite.id);
+    await joinAsCohost(fullInvite);
+  } catch (err) {
+    showToast(err.message || "Não foi possível entrar como co-transmissor agora.");
+  }
+}
+
+// Conecta à MESMA sala LiveKit de quem convidou, publicando a própria câmera
+// — diferente de "ir ao vivo" normal, não cria uma live_sessions nova, só
+// entra como segundo publicador na sala já existente do anfitrião.
+async function joinAsCohost(invite) {
+  const roomName = invite.live_session.room_name;
+  showToast("Entrando como co-transmissor...");
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    STATE.cohostLocalStream = stream;
+
+    const token = await DB.createLivekitToken(roomName);
+    const room = new LivekitClient.Room();
+    STATE.cohostLiveKitRoom = room;
+    STATE.activeCohostInviteId = invite.id;
+
+    await room.connect(LIVEKIT_URL, token);
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) await room.localParticipant.publishTrack(videoTrack);
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) await room.localParticipant.publishTrack(audioTrack);
+
+    document.getElementById("cohost-active-banner").style.display = "flex";
+    showToast("Você está co-transmitindo agora!");
+  } catch (err) {
+    console.error("Falha ao entrar como co-transmissor:", err);
+    showToast("Não foi possível ativar sua câmera pra co-transmitir.");
+  }
+}
+
+async function leaveCohost() {
+  document.getElementById("cohost-active-banner").style.display = "none";
+  if (STATE.cohostLocalStream) {
+    STATE.cohostLocalStream.getTracks().forEach(t => t.stop());
+    STATE.cohostLocalStream = null;
+  }
+  if (STATE.cohostLiveKitRoom) {
+    STATE.cohostLiveKitRoom.disconnect();
+    STATE.cohostLiveKitRoom = null;
+  }
+  if (STATE.activeCohostInviteId) {
+    try { await DB.endCohost(STATE.activeCohostInviteId); } catch (err) { console.error(err); }
+    STATE.activeCohostInviteId = null;
+  }
+}
+
+// Anexa o vídeo de um segundo participante (o co-transmissor) num tile
+// menor sobreposto — chamado tanto na tela de quem assiste quanto na do
+// próprio anfitrião, cada um com o id do próprio elemento de vídeo PiP.
+function attachCohostTrack(track, videoElementId) {
+  const el = document.getElementById(videoElementId);
+  if (!el) return;
+  track.attach(el);
+  el.style.display = "block";
+}
+
+function detachCohostTile(videoElementId) {
+  const el = document.getElementById(videoElementId);
+  if (el) { el.style.display = "none"; el.srcObject = null; }
+}
+
+let leaderboardActiveTab = "supporters";
+
+async function openLeaderboardModal() {
+  document.getElementById("modal-leaderboard").style.display = "flex";
+  await renderLeaderboard();
+}
+
+function closeLeaderboardModal() {
+  document.getElementById("modal-leaderboard").style.display = "none";
+}
+
+async function setLeaderboardTab(tab) {
+  leaderboardActiveTab = tab;
+  document.getElementById("btn-leaderboard-tab-supporters").classList.toggle("active", tab === "supporters");
+  document.getElementById("btn-leaderboard-tab-creators").classList.toggle("active", tab === "creators");
+  await renderLeaderboard();
+}
+
+async function renderLeaderboard() {
+  const container = document.getElementById("leaderboard-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const rows = leaderboardActiveTab === "supporters"
+      ? await DB.getTopSupporters(20)
+      : await DB.getTopCreators(20);
+
+    container.innerHTML = "";
+    if (rows.length === 0) {
+      container.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">🏆</div>
+          <h3>Ninguém no ranking ainda</h3>
+          <p>Assim que houver atividade nos últimos 30 dias, aparece aqui.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const medals = ["🥇", "🥈", "🥉"];
+    rows.forEach((r, index) => {
+      const name = escapeHtml(r.display_name || r.username);
+      const total = leaderboardActiveTab === "supporters" ? r.total_spent : r.total_earned;
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <span style="font-size: 0.9rem; width: 26px; text-align: center;">${medals[index] || (index + 1)}</span>
+        <div class="inbox-avatar" style="width: 40px; height: 40px;">
+          <img src="${r.avatar_url}" alt="${name}" style="border-radius: 50%;">
+        </div>
+        <div class="inbox-details" style="margin-left: 10px;">
+          <span class="inbox-name">${name}</span>
+          <span class="inbox-message">@${escapeHtml(r.username)}</span>
+        </div>
+        <div class="inbox-right">
+          <span style="font-size: 0.78rem; font-weight: 800; color: var(--secondary);">🪙 ${total}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar o ranking agora.</p>`;
+  }
+}
+
 function renderProfileSearchResults(container, profiles) {
   container.innerHTML = "";
   profiles.forEach(p => {
@@ -3777,6 +4224,11 @@ function performProfileSearch() {
     return;
   }
 
+  if (query.startsWith("#")) {
+    searchDebounceTimer = setTimeout(() => performHashtagSearch(query, container), 300);
+    return;
+  }
+
   // Busca real na tabela profiles (com um pequeno atraso pra não bater no
   // banco a cada tecla digitada).
   searchDebounceTimer = setTimeout(async () => {
@@ -3809,6 +4261,78 @@ function performProfileSearch() {
 
     renderProfileSearchResults(container, matches);
   }, 300);
+}
+
+// Escapa primeiro (defesa contra XSS na legenda, que é texto livre do
+// usuário) e só DEPOIS troca #hashtag por um link clicável — a ordem
+// importa, senão o link viraria alvo de escape também.
+function renderCaptionWithHashtags(text) {
+  const escaped = escapeHtml(text || "");
+  return escaped.replace(/#([\wÀ-ÿ]{2,50})/g, (match, tag) => {
+    return `<span style="color: var(--primary); cursor: pointer;" onclick="event.stopPropagation(); jumpToHashtagSearch('${tag}');">#${tag}</span>`;
+  });
+}
+
+function jumpToHashtagSearch(tag) {
+  closePostLightbox();
+  openSearchOverlay();
+  const input = document.getElementById("search-profile-input");
+  input.value = "#" + tag;
+  performProfileSearch();
+}
+
+// Digitar "#algo" na busca troca de "achar pessoas" pra "achar posts com
+// essa hashtag" — reaproveita o mesmo campo/overlay, sem uma tela nova.
+async function performHashtagSearch(query, container) {
+  const tag = query.replace(/^#/, "").trim();
+  if (!tag) return;
+
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.72rem;">Buscando #${escapeHtml(tag)}...</div>`;
+
+  let posts;
+  try {
+    posts = await DB.searchPostsByHashtag(tag, 40);
+  } catch (err) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">⚠️</div>
+        <h3>Não foi possível buscar agora</h3>
+      </div>
+    `;
+    return;
+  }
+
+  if (posts.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">#️⃣</div>
+        <h3>Nenhum post com #${escapeHtml(tag)}</h3>
+      </div>
+    `;
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "profile-posts-grid";
+  posts.forEach(post => {
+    const authorName = post.author ? (post.author.display_name || post.author.username) : "";
+    const item = document.createElement("div");
+    item.className = "post-grid-item";
+    item.title = authorName;
+    item.style.cursor = "pointer";
+    item.innerHTML = post.media_type === "image"
+      ? `<img src="${post.media_url}" alt="Post com #${escapeHtml(tag)}">`
+      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+    item.onclick = () => {
+      if (post.author) {
+        closeSearchOverlay();
+        openPrivateChat(post.author.id, authorName, post.author.avatar_url);
+      }
+    };
+    grid.appendChild(item);
+  });
+  container.innerHTML = "";
+  container.appendChild(grid);
 }
 
 // ==========================================================================
@@ -3891,6 +4415,28 @@ function requireAgeVerificationIfNeeded(profile) {
   document.getElementById("age-verification-error").textContent = "";
   modal.style.display = "flex";
   return true;
+}
+
+// Só entra em jogo quando idade/termos JÁ foram aceitos alguma vez, mas numa
+// versão antiga do texto (CURRENT_TERMS_VERSION subiu depois disso).
+function requireTermsReacceptIfNeeded(profile) {
+  if (!profile.terms_accepted_at) return false; // quem nunca aceitou cai no gate de idade, não nesse
+  const acceptedVersion = profile.terms_accepted_version ?? 1;
+  if (acceptedVersion >= CURRENT_TERMS_VERSION) return false;
+  document.getElementById("modal-terms-reaccept").style.display = "flex";
+  return true;
+}
+
+async function submitTermsReaccept() {
+  try {
+    const profile = await DB.acceptTermsVersion(CURRENT_TERMS_VERSION);
+    document.getElementById("modal-terms-reaccept").style.display = "none";
+    closeTermsModal();
+    await applyProfileToUI(profile);
+    showToast("Obrigado por confirmar!");
+  } catch (err) {
+    showToast(err.message || "Não foi possível confirmar agora.");
+  }
 }
 
 async function submitAgeVerification() {
@@ -4085,7 +4631,8 @@ async function applyProfileToUI(profile) {
   // usa o retorno pra NÃO abrir o assistente de onboarding por cima ao mesmo
   // tempo (os dois são modais bloqueantes sem botão de fechar — abrir os
   // dois juntos deixava um empilhado sobre o outro).
-  return requireAgeVerificationIfNeeded(profile);
+  if (requireAgeVerificationIfNeeded(profile)) return true;
+  return requireTermsReacceptIfNeeded(profile);
 }
 
 async function handleAuthSubmit() {
