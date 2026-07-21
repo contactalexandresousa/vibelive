@@ -1229,7 +1229,7 @@ function copyPixCode() {
 }
 
 
-// 14. TRANSMITIR AO VIVO (GO LIVE - WEBCAM SIMULATOR)
+// 14. TRANSMITIR AO VIVO (GO LIVE)
 function initiateCameraStream() {
   const constraints = { video: { facingMode: "user" }, audio: false };
   const fallback = DOM.goLive.querySelector(".camera-fallback-msg");
@@ -1238,19 +1238,14 @@ function initiateCameraStream() {
     .then(stream => {
       STATE.localStream = stream;
       DOM.goLiveVideo.srcObject = stream;
-      DOM.goLiveVideo.src = "";
       if (fallback) fallback.style.display = "none";
     })
     .catch(err => {
-      console.log("Erro ao acessar câmera física, usando simulada: ", err);
-      showToast("Câmera simulada ativa (Demo) 🎥");
-      
-      DOM.goLiveVideo.srcObject = null;
-      DOM.goLiveVideo.src = "https://assets.mixkit.co/videos/preview/mixkit-woman-filming-herself-with-a-smartphone-41436-large.mp4";
-      DOM.goLiveVideo.loop = true;
-      DOM.goLiveVideo.play().catch(e => console.log(e));
-      
-      if (fallback) fallback.style.display = "none";
+      console.log("Erro ao acessar câmera:", err);
+      STATE.localStream = null;
+      // Sem câmera real, não dá pra transmitir — mantém a mensagem de permissão
+      // visível em vez de fingir uma transmissão com vídeo de estoque.
+      if (fallback) fallback.style.display = "flex";
     });
 }
 
@@ -1271,6 +1266,14 @@ function applyFilter(btn, filterClass) {
 
 function startOwnLiveStream() {
   if (!requireAuth()) return;
+
+  // Sem câmera real conectada, não deixa a live entrar no ar — antes disso
+  // a sessão era criada mesmo assim e ficava listada pra todo mundo sem
+  // nenhum vídeo de verdade publicado.
+  if (!STATE.localStream) {
+    showToast("Permita o acesso à câmera para transmitir ao vivo.");
+    return;
+  }
 
   // Fechar painel de setup
   DOM.goLiveSetup.style.display = "none";
