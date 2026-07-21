@@ -1318,7 +1318,7 @@ async function openAdminReportsPanel() {
   modal.style.display = "flex";
 
   try {
-    STATE.adminReports = await DB.getAllReports();
+    STATE.adminReports = sortReportsByPriority(await DB.getAllReports());
   } catch (err) {
     console.error("Falha ao carregar denúncias:", err);
     STATE.adminReports = [];
@@ -1328,6 +1328,26 @@ async function openAdminReportsPanel() {
 
 function closeAdminReportsPanel() {
   document.getElementById("modal-admin-reports").style.display = "none";
+}
+
+// Não revisadas sempre primeiro; dentro delas, contas com mais denúncias
+// pendentes acumuladas sobem na fila — antes a lista era só cronológica,
+// então uma conta com 5 denúncias diferentes não se destacava de uma com 1.
+function sortReportsByPriority(reports) {
+  const pendingCountByTarget = {};
+  reports.forEach(r => {
+    if (!r.reviewed_at) {
+      pendingCountByTarget[r.reported_id] = (pendingCountByTarget[r.reported_id] || 0) + 1;
+    }
+  });
+
+  return [...reports].sort((a, b) => {
+    if (!!a.reviewed_at !== !!b.reviewed_at) return a.reviewed_at ? 1 : -1;
+    const countA = pendingCountByTarget[a.reported_id] || 0;
+    const countB = pendingCountByTarget[b.reported_id] || 0;
+    if (countA !== countB) return countB - countA;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
 }
 
 function renderAdminReportsList() {
@@ -1346,9 +1366,15 @@ function renderAdminReportsList() {
     return;
   }
 
+  const pendingCountByTarget = {};
+  STATE.adminReports.forEach(r => {
+    if (!r.reviewed_at) pendingCountByTarget[r.reported_id] = (pendingCountByTarget[r.reported_id] || 0) + 1;
+  });
+
   STATE.adminReports.forEach((r, index) => {
     const reporterName = escapeHtml(r.reporter ? (r.reporter.display_name || r.reporter.username) : "Usuário removido");
     const reportedName = escapeHtml(r.reported ? (r.reported.display_name || r.reported.username) : "Usuário removido");
+    const pendingCount = pendingCountByTarget[r.reported_id] || 0;
 
     const item = document.createElement("div");
     item.className = r.reviewed_at ? "inbox-item" : "inbox-item unread";
@@ -1359,7 +1385,7 @@ function renderAdminReportsList() {
     item.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
-          <span class="inbox-name" style="display:block;">${reporterName} denunciou ${reportedName}</span>
+          <span class="inbox-name" style="display:block;">${reporterName} denunciou ${reportedName}${!r.reviewed_at && pendingCount > 1 ? ` <span style="font-size:0.58rem; font-weight:800; color:var(--danger); background:rgba(241,85,76,0.12); padding:2px 7px; border-radius:8px; vertical-align:middle;">${pendingCount} denúncias pendentes</span>` : ""}</span>
           <span class="inbox-message" style="display:block; margin-top:4px; white-space:normal;">${escapeHtml(r.reason)}</span>
           <span class="inbox-time" style="display:block; margin-top:4px;">${formatMessageTime(r.created_at)}</span>
         </div>
@@ -1647,6 +1673,61 @@ async function togglePushNotifications() {
   }
 }
 
+const PUSH_PREFERENCE_LABELS = {
+  new_follower: "Novo seguidor",
+  went_live: "Quem você segue foi ao vivo",
+  live_invite: "Convite pra live privada",
+  direct_message: "Mensagem direta",
+  withdrawal_reviewed: "Status do meu saque",
+  subscription_expired: "Minha assinatura expirou",
+};
+
+async function openPushPreferencesModal() {
+  if (!requireAuth()) return;
+  const container = document.getElementById("push-preferences-list");
+  document.getElementById("modal-push-preferences").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const prefs = await DB.getMyPushPreferences();
+    container.innerHTML = "";
+    Object.keys(PUSH_PREFERENCE_LABELS).forEach(key => {
+      const checked = prefs[key] !== false;
+      const label = document.createElement("label");
+      label.className = "privacy-option";
+      label.style.marginBottom = "8px";
+      label.innerHTML = `
+        <input type="checkbox" data-pref-key="${key}" ${checked ? "checked" : ""} onchange="handlePushPreferenceChange(this)">
+        <div><span style="font-size: 0.75rem;">${PUSH_PREFERENCE_LABELS[key]}</span></div>
+      `;
+      container.appendChild(label);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar suas preferências agora.</p>`;
+  }
+}
+
+function closePushPreferencesModal() {
+  document.getElementById("modal-push-preferences").style.display = "none";
+}
+
+async function handlePushPreferenceChange(checkbox) {
+  const key = checkbox.dataset.prefKey;
+  const value = checkbox.checked;
+  checkbox.disabled = true;
+  try {
+    const user = await Auth.getUser();
+    const currentPrefs = await DB.getMyPushPreferences();
+    const newPrefs = { ...currentPrefs, [key]: value };
+    await DB.updatePushPreferences(user.id, newPrefs);
+  } catch (err) {
+    checkbox.checked = !value; // desfaz visualmente se não salvou
+    showToast(err.message || "Não foi possível salvar essa preferência agora.");
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
 async function handleReviewWithdrawal(index, newStatus) {
   const request = STATE.adminWithdrawals[index];
   if (!request) return;
@@ -1834,6 +1915,64 @@ async function openAdminErrorsPanel() {
 
 function closeAdminErrorsPanel() {
   document.getElementById("modal-admin-errors").style.display = "none";
+}
+
+const ADMIN_AUDIT_ACTION_LABELS = {
+  suspend_user: "suspendeu",
+  unsuspend_user: "reativou",
+  verify_user: "verificou",
+  unverify_user: "removeu o selo de",
+  review_withdrawal: "revisou um saque de",
+  review_report: "revisou uma denúncia sobre",
+};
+
+async function openAdminAuditLogPanel() {
+  if (!STATE.isAdmin) return;
+  const container = document.getElementById("admin-audit-list-container");
+  document.getElementById("modal-admin-audit").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const rows = await DB.getAdminAuditLog(50);
+    container.innerHTML = "";
+    if (rows.length === 0) {
+      container.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">📋</div>
+          <h3>Nenhuma ação registrada ainda</h3>
+        </div>
+      `;
+      return;
+    }
+    rows.forEach(r => {
+      const adminName = escapeHtml(r.admin ? (r.admin.display_name || r.admin.username) : "Admin removido");
+      const targetName = r.target ? escapeHtml(r.target.display_name || r.target.username) : null;
+      const actionLabel = ADMIN_AUDIT_ACTION_LABELS[r.action] || r.action;
+      let extra = "";
+      if (r.action === "suspend_user" && r.details && r.details.reason) {
+        extra = ` — motivo: ${escapeHtml(r.details.reason)}`;
+      }
+      if (r.action === "review_withdrawal" && r.details) {
+        extra = ` (🪙${r.details.coins_amount}, status: ${escapeHtml(r.details.status || "")})`;
+      }
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-details">
+          <span class="inbox-name">${adminName} ${actionLabel}${targetName ? " @" + targetName : ""}</span>
+          <span class="inbox-message" style="white-space:normal;">${extra}</span>
+          <span class="inbox-time">${formatMessageTime(r.created_at)}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar o log agora.</p>`;
+  }
+}
+
+function closeAdminAuditLogPanel() {
+  document.getElementById("modal-admin-audit").style.display = "none";
 }
 
 // 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
@@ -2870,6 +3009,56 @@ function handlePostFileSelected(event) {
   }
 }
 
+// Redimensiona pro lado maior caber em maxDimension e reencoda como JPEG —
+// sem isso, uma foto direto da câmera do celular (4000px+, vários MB) subia
+// exatamente do tamanho que foi tirada, gastando armazenamento e carregando
+// mais devagar pra quem consome. Só imagem: compressão de vídeo client-side
+// exigiria uma dependência pesada (ffmpeg.wasm) fora de proporção pro ganho.
+function compressImageFile(file, maxDimension = 1600, quality = 0.82) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round(height * (maxDimension / width));
+          width = maxDimension;
+        } else {
+          width = Math.round(width * (maxDimension / height));
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob((blob) => {
+        if (!blob || blob.size >= file.size) {
+          resolve(file); // compressão não ajudou (ou falhou) — usa o original
+          return;
+        }
+        const compressed = new File(
+          [blob],
+          file.name.replace(/\.\w+$/, "") + ".jpg",
+          { type: "image/jpeg" }
+        );
+        resolve(compressed);
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file); // não é uma imagem decodificável — deixa o upload original seguir e falhar lá se for o caso
+    };
+    img.src = url;
+  });
+}
+
 async function publishNewPost() {
   if (!requireAuth()) return;
   const caption = document.getElementById("post-caption-input").value.trim();
@@ -2889,8 +3078,9 @@ async function publishNewPost() {
   if (btn) { btn.disabled = true; btn.textContent = "Publicando..."; }
 
   try {
+    const fileToUpload = STATE.currentPostType === "image" ? await compressImageFile(file) : file;
     const user = await Auth.getUser();
-    const mediaUrl = await DB.uploadPostMedia(user.id, file);
+    const mediaUrl = await DB.uploadPostMedia(user.id, fileToUpload);
     await DB.createPost(mediaUrl, STATE.currentPostType, caption || "Sem legenda.", isPrivate);
     await renderProfilePosts();
     closeNewPostModal();
@@ -3388,8 +3578,9 @@ async function handleAvatarFileSelected(event) {
   preview.style.opacity = "0.5";
 
   try {
+    const compressed = await compressImageFile(file, 800, 0.85); // avatar é sempre pequeno na tela — 800px já sobra
     const user = await Auth.getUser();
-    const newUrl = await DB.uploadAvatar(user.id, file);
+    const newUrl = await DB.uploadAvatar(user.id, compressed);
     await DB.updateProfile(user.id, { avatar_url: newUrl });
 
     STATE.myAvatarUrl = newUrl;
@@ -3852,6 +4043,8 @@ async function applyProfileToUI(profile) {
   if (adminStatsBtn) adminStatsBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminErrorsBtn = document.getElementById("btn-admin-errors");
   if (adminErrorsBtn) adminErrorsBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminAuditBtn = document.getElementById("btn-admin-audit");
+  if (adminAuditBtn) adminAuditBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();

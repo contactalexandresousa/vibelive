@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721k">
+  <link rel="stylesheet" href="styles.css?v=20260721l">
 </head>
 <body>
 
@@ -933,6 +933,10 @@
                 🔔 Ativar Notificações
               </button>
 
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openPushPreferencesModal()">
+                🔕 Preferências de Notificação
+              </button>
+
               <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openReferralModal()">
                 🎁 Convide Amigos
               </button>
@@ -984,6 +988,10 @@
 
               <button class="btn-publish-post" id="btn-admin-errors" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminErrorsPanel()">
                 🐞 Erros em Produção (Admin)
+              </button>
+
+              <button class="btn-publish-post" id="btn-admin-audit" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminAuditLogPanel()">
+                📋 Log de Auditoria (Admin)
               </button>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
@@ -1246,6 +1254,34 @@
             <div class="search-results-scroll">
               <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Agrupado por mensagem, últimos 7 dias.</p>
               <div class="inbox-list" id="admin-errors-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Log de Auditoria -->
+        <div class="new-post-modal" id="modal-admin-audit" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminAuditLogPanel()"></div>
+          <div class="new-post-content" style="height: 80%; align-items: stretch;">
+            <header class="new-post-header" style="margin-bottom: 12px;">
+              <h3>📋 Log de Auditoria</h3>
+              <button class="btn-close-new-post" onclick="closeAdminAuditLogPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="admin-audit-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Preferências de Notificação Push -->
+        <div class="new-post-modal" id="modal-push-preferences" style="display: none;">
+          <div class="new-post-overlay" onclick="closePushPreferencesModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔕 Preferências de Notificação</h3>
+              <button class="btn-close-new-post" onclick="closePushPreferencesModal()">×</button>
+            </header>
+            <div class="new-post-body" id="push-preferences-list">
+              <!-- Preenchido via JS -->
             </div>
           </div>
         </div>
@@ -1685,9 +1721,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721k"></script>
+  <script src="supabase-client.js?v=20260721l"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721k"></script>
+  <script src="app.js?v=20260721l"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

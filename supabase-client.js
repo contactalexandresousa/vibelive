@@ -398,6 +398,16 @@ const DB = {
     return data;
   },
 
+  async getAdminAuditLog(limit = 50) {
+    const { data, error } = await sb
+      .from("admin_audit_log")
+      .select("*, admin:profiles!admin_audit_log_admin_id_fkey(username, display_name), target:profiles!admin_audit_log_target_user_id_fkey(username, display_name)")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data;
+  },
+
   async logClientError(message, stack, url) {
     const { error } = await sb.from("client_errors").insert({
       message: String(message || "Erro desconhecido").slice(0, 500),
@@ -418,6 +428,20 @@ const DB = {
     const { data, error } = await sb.rpc("get_admin_stats");
     if (error) throw error;
     return data;
+  },
+
+  async getMyPushPreferences() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await sb.from("profiles").select("push_preferences").eq("id", user.id).single();
+    if (error) throw error;
+    return data.push_preferences;
+  },
+
+  async updatePushPreferences(userId, prefs) {
+    const { data, error } = await sb.from("profiles").update({ push_preferences: prefs }).eq("id", userId).select("push_preferences").single();
+    if (error) throw error;
+    return data.push_preferences;
   },
 
   async getMyCpfStatus() {
