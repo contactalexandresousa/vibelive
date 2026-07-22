@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722j">
+  <link rel="stylesheet" href="styles.css?v=20260722k">
 </head>
 <body>
 
@@ -380,6 +380,7 @@
                 <img id="chat-partner-avatar" src="" alt="Avatar">
                 <div class="chat-partner-text">
                   <span id="chat-partner-name">Nome</span>
+                  <span id="chat-partner-status" class="chat-partner-status"></span>
                 </div>
               </div>
               <div class="chat-header-actions">
@@ -403,7 +404,7 @@
               <button class="chat-media-btn" onclick="document.getElementById('private-chat-media-input').click()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
               </button>
-              <input type="text" id="private-chat-input" placeholder="Mensagem..." onkeydown="handlePrivateChatKey(event)">
+              <input type="text" id="private-chat-input" placeholder="Mensagem..." onkeydown="handlePrivateChatKey(event)" oninput="handlePrivateChatTyping()">
               <button class="chat-send-btn" onclick="sendPrivateChatMessage()">
                 Enviar
               </button>
@@ -560,6 +561,9 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Destaques: stories fixados permanentemente (não somem em 24h) -->
+              <div class="profile-highlights-row" id="profile-highlights-row" style="display: none;"></div>
 
               <!-- Tabs de Navegação do Perfil -->
               <div class="profile-tabs">
@@ -957,6 +961,7 @@
           </div>
           <div class="story-viewer-own-actions" id="story-viewer-own-actions" style="display: none;">
             <button onclick="openStoryViewersList()">👁 <span id="story-viewer-views-count">0</span> visualizações</button>
+            <button id="story-viewer-highlight-btn" data-highlighted="false" onclick="toggleCurrentStoryHighlight()">⭐ Destacar</button>
             <button class="danger" onclick="handleDeleteCurrentStory()">🗑️ Excluir</button>
           </div>
           <div class="story-viewer-reply-bar" id="story-viewer-reply-bar" style="display: none;">
@@ -1225,11 +1230,24 @@
           <div class="new-post-overlay" onclick="closeReportModal()"></div>
           <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
             <header class="new-post-header">
-              <h3>Denunciar usuário</h3>
+              <h3 id="report-modal-title">Denunciar usuário</h3>
               <button class="btn-close-new-post" onclick="closeReportModal()">×</button>
             </header>
             <textarea id="report-reason-input" placeholder="Descreva o motivo da denúncia..." style="min-height: 90px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem; margin-top: 10px; resize: none;"></textarea>
             <button class="btn-publish-post" onclick="submitReport()" style="margin-top: 14px;">Enviar Denúncia</button>
+          </div>
+        </div>
+
+        <!-- Modal: Opções de Mensagem (apagar) -->
+        <div class="new-post-modal" id="modal-message-options" style="display: none;">
+          <div class="new-post-overlay" onclick="closeMessageOptions()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header" style="margin-bottom: 4px;">
+              <h3>Apagar mensagem</h3>
+              <button class="btn-close-new-post" onclick="closeMessageOptions()">×</button>
+            </header>
+            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" onclick="confirmDeleteMessage(false)">Apagar para mim</button>
+            <button class="profile-action-btn secondary" id="btn-delete-for-everyone" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger); display: none;" onclick="confirmDeleteMessage(true)">Apagar para todos</button>
           </div>
         </div>
 
@@ -1437,6 +1455,10 @@
             <div class="search-results-scroll">
               <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Uploads recusados pela moderação de conteúdo, mais recentes primeiro. Útil pra pegar falso positivo.</p>
               <div class="inbox-list" id="admin-moderation-list-container"></div>
+
+              <h3 style="margin: 22px 0 4px;">🚩 Denúncias de Posts e Comentários</h3>
+              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Denúncias de conteúdo específico enviadas por usuários, mais recentes primeiro.</p>
+              <div class="inbox-list" id="admin-content-reports-list-container"></div>
             </div>
           </div>
         </div>
@@ -2102,9 +2124,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722j"></script>
+  <script src="supabase-client.js?v=20260722k"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722j"></script>
+  <script src="app.js?v=20260722k"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

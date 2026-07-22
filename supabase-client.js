@@ -1264,14 +1264,17 @@ const DB = {
       .order("created_at", { ascending: false });
     if (error) throw error;
 
-    // Agrupa por "outro participante", mantendo só a mensagem mais recente de cada.
+    // Agrupa por "outro participante", mantendo só a mensagem mais recente de
+    // cada — pulando as que EU apaguei "para mim" (senão o preview da inbox
+    // mostraria de volta um conteúdo que eu escondi de propósito).
     const byPartner = new Map();
     for (const m of messages) {
+      if (m.sender_id === user.id ? m.deleted_by_sender : m.deleted_by_recipient) continue;
       const partnerId = m.sender_id === user.id ? m.recipient_id : m.sender_id;
       if (!byPartner.has(partnerId)) {
         byPartner.set(partnerId, {
           partnerId,
-          lastMessage: m.text || (m.image_url ? "📷 Foto" : ""),
+          lastMessage: m.is_deleted ? "Mensagem apagada" : (m.text || (m.image_url ? "📷 Foto" : "")),
           lastAt: m.created_at,
           unread: m.recipient_id === user.id && !m.read_at
         });
@@ -1299,6 +1302,15 @@ const DB = {
       .or(`and(sender_id.eq.${user.id},recipient_id.eq.${partnerId}),and(sender_id.eq.${partnerId},recipient_id.eq.${user.id})`)
       .order("created_at", { ascending: true });
     if (error) throw error;
+    // "Apagar para mim" só esconde do lado de quem apagou — o outro
+    // participante continua vendo normalmente, então o filtro é local aqui,
+    // não uma linha realmente inacessível pra ambos.
+    return data.filter(m => !(m.sender_id === user.id ? m.deleted_by_sender : m.deleted_by_recipient));
+  },
+
+  async deleteMyMessage(messageId, forEveryone = false) {
+    const { data, error } = await sb.rpc("delete_my_message", { p_message_id: messageId, p_for_everyone: forEveryone });
+    if (error) throw error;
     return data;
   },
 
@@ -1325,6 +1337,16 @@ const DB = {
     const { data } = sb.storage.from("dm-media").getPublicUrl(path);
     await moderateOrRemove("dm-media", path, data.publicUrl, userId, "dm");
     return data.publicUrl;
+  },
+
+  // "Apagar para todos" some com o texto/link no banco (delete_my_message),
+  // mas a foto em si só sai do Storage aqui — mesmo padrão de deletePost.
+  async deleteDmMediaByUrl(mediaUrl) {
+    const marker = "/storage/v1/object/public/dm-media/";
+    const idx = mediaUrl ? mediaUrl.indexOf(marker) : -1;
+    if (idx === -1) return;
+    const path = decodeURIComponent(mediaUrl.slice(idx + marker.length));
+    await sb.storage.from("dm-media").remove([path]);
   },
 
   // Vídeo não passa pela checagem de moderação (só imagem, mesma decisão já
@@ -1381,6 +1403,17 @@ const DB = {
     if (error) throw error;
   },
 
+  async toggleStoryHighlight(storyId, highlighted) {
+    const { error } = await sb.rpc("toggle_story_highlight", { p_story_id: storyId, p_highlighted: highlighted });
+    if (error) throw error;
+  },
+
+  async getUserHighlights(userId) {
+    const { data, error } = await sb.rpc("get_user_highlights", { p_user_id: userId });
+    if (error) throw error;
+    return data;
+  },
+
   async getMyStoryMutesWithProfiles() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return [];
@@ -1420,7 +1453,12 @@ const DB = {
   // onReadReceipt é opcional: dispara quando uma mensagem que EU enviei é
   // marcada como lida (UPDATE em read_at) — é o que liga o indicador de
   // "visto" em tempo real, sem precisar recarregar a conversa.
-  subscribeToDirectMessages(myUserId, onMessage, onReadReceipt) {
+  // onMessageEdited pega UPDATE em mensagens que EU recebi (filter por
+  // recipient_id, ao contrário do onReadReceipt acima que é por sender_id) —
+  // é o que avisa em tempo real quando quem me mandou uma mensagem apaga ela
+  // "para todos" (o texto/imagem somem, is_deleted vira true). onTyping é o
+  // indicador de "digitando…", via Broadcast (não mexe no banco).
+  subscribeToDirectMessages(myUserId, onMessage, onReadReceipt, onMessageEdited, onTyping) {
     const channel = sb.channel(`dm_inbox:${myUserId}`)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "direct_messages",
@@ -1430,8 +1468,40 @@ const DB = {
         event: "UPDATE", schema: "public", table: "direct_messages",
         filter: `sender_id=eq.${myUserId}`
       }, (payload) => { if (onReadReceipt) onReadReceipt(payload.new); })
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "direct_messages",
+        filter: `recipient_id=eq.${myUserId}`
+      }, (payload) => { if (onMessageEdited) onMessageEdited(payload.new); })
+      .on("broadcast", { event: "typing" }, (msg) => {
+        if (onTyping) onTyping(msg.payload.from);
+      })
       .subscribe();
     return channel;
+  },
+
+  // Indicador de "digitando…" — Broadcast puro (não grava nada no banco,
+  // some sozinho se ninguém mais mandar nada). Publica no canal de inbox da
+  // OUTRA pessoa (é lá que ela está escutando), não no meu. Reaproveita o
+  // canal já aberto/inscrito por conversa em vez de inscrever de novo a
+  // cada tecla, que seria lento (subscribe tem round-trip) e desperdiçado.
+  _typingChannels: new Map(),
+  _getTypingChannel(recipientId) {
+    let entry = this._typingChannels.get(recipientId);
+    if (entry) return entry;
+    const channel = sb.channel(`dm_inbox:${recipientId}`);
+    const ready = new Promise((resolve) => {
+      channel.subscribe((status) => { if (status === "SUBSCRIBED") resolve(); });
+    });
+    entry = { channel, ready };
+    this._typingChannels.set(recipientId, entry);
+    return entry;
+  },
+  async sendTypingIndicator(recipientId) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    const entry = this._getTypingChannel(recipientId);
+    await entry.ready;
+    entry.channel.send({ type: "broadcast", event: "typing", payload: { from: user.id } });
   },
 
   // Bloqueio e denúncia — o bloqueio de DM é reforçado no servidor (trigger),
@@ -1476,6 +1546,26 @@ const DB = {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("user_reports").insert({ reporter_id: user.id, reported_id: reportedId, reason });
     if (error) throw error;
+  },
+
+  // Denúncia de conteúdo específico (post ou comentário), diferente de
+  // reportUser acima — aponta pra uma linha exata, não pra conta inteira.
+  async reportPost(postId, reason) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("content_reports").insert({ reporter_id: user.id, post_id: postId, reason });
+    if (error) throw error;
+  },
+
+  async reportComment(commentId, reason) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("content_reports").insert({ reporter_id: user.id, comment_id: commentId, reason });
+    if (error) throw error;
+  },
+
+  async getContentReports(limit = 50) {
+    const { data, error } = await sb.rpc("get_content_reports", { p_limit: limit });
+    if (error) throw error;
+    return data;
   },
 
   // Notificação push real (Web Push/VAPID) — guarda a inscrição do navegador

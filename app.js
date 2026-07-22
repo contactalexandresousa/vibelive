@@ -1302,6 +1302,9 @@ async function openPrivateChat(partnerId, name, avatar) {
   DOM.chatPartnerAvatar.src = avatar;
   DOM.chatPartnerName.textContent = name;
   DOM.privateChatHistory.innerHTML = "";
+  const statusEl = document.getElementById("chat-partner-status");
+  if (statusEl) statusEl.textContent = "";
+  clearTimeout(typingIndicatorTimeout);
 
   navigateTo("private-chat");
 
@@ -1332,29 +1335,62 @@ function appendPrivateChatBubble(msg, myUserId) {
 
   const bubble = document.createElement("div");
   const isMine = msg.sender_id === myUserId;
-  bubble.className = isMine ? "chat-bubble sent" : "chat-bubble received";
-  if (isMine) bubble.dataset.msgId = msg.id;
+  bubble.className = "chat-bubble " + (isMine ? "sent" : "received") + (msg.is_deleted ? " deleted" : "");
+  bubble.dataset.msgId = msg.id;
+  bubble.dataset.senderId = msg.sender_id;
+  bubble.dataset.createdAt = msg.created_at;
 
   let vipSuffix = "";
   if (isMine && STATE.isVIP) {
     vipSuffix = `<span style="font-size: 0.58rem; display: block; color: var(--secondary); font-weight: bold; margin-bottom: 2px;">👑 VIP Ouro</span>`;
   }
 
-  const imageHtml = msg.image_url ? `<img src="${msg.image_url}" alt="Foto" class="chat-bubble-image" onclick="openLightboxImage('${msg.image_url}')">` : "";
-  const textHtml = msg.text ? `<span>${escapeHtml(msg.text)}</span>` : "";
+  const optionsBtn = `<button class="chat-bubble-options-btn" onclick="openMessageOptions('${msg.id}')" title="Opções">⋯</button>`;
+  const bodyHtml = msg.is_deleted
+    ? `<span class="chat-bubble-text">${isMine ? "Você apagou esta mensagem" : "Mensagem apagada"}</span>`
+    : `${msg.image_url ? `<img src="${msg.image_url}" alt="Foto" class="chat-bubble-image" onclick="openLightboxImage('${msg.image_url}')">` : ""}${msg.text ? `<span class="chat-bubble-text">${escapeHtml(msg.text)}</span>` : ""}`;
   const statusHtml = isMine
     ? `<span class="chat-bubble-status${msg.read_at ? " read" : ""}">${msg.read_at ? "Visto" : "Enviado"}</span>`
     : "";
 
   bubble.innerHTML = `
+    ${msg.is_deleted ? "" : optionsBtn}
     ${vipSuffix}
-    ${imageHtml}
-    ${textHtml}
+    ${bodyHtml}
     <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
     ${statusHtml}
   `;
   DOM.privateChatHistory.appendChild(bubble);
   DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
+}
+
+// Chamado quando chega, via Realtime, uma mensagem que EU recebi sendo
+// editada (hoje só acontece pra tombstone de "apagar para todos") — troca o
+// conteúdo na hora, sem precisar recarregar a conversa.
+function handlePrivateChatMessageEdited(row) {
+  if (!row.is_deleted) return;
+  applyDeletedTombstoneToBubble(row.id, "Mensagem apagada");
+}
+
+// Reaproveitado pela edição em tempo real (mensagem recebida) e pelo "apagar
+// para todos" otimista da própria mensagem enviada — a única diferença é o
+// texto ("Mensagem apagada" vs "Você apagou esta mensagem"). Cria o span de
+// texto se a mensagem original era só imagem (não tinha nenhum ainda).
+function applyDeletedTombstoneToBubble(msgId, label) {
+  const bubble = DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!bubble) return;
+  bubble.classList.add("deleted");
+  const optionsBtn = bubble.querySelector(".chat-bubble-options-btn");
+  if (optionsBtn) optionsBtn.remove();
+  const img = bubble.querySelector(".chat-bubble-image");
+  if (img) img.remove();
+  let textSpan = bubble.querySelector(".chat-bubble-text");
+  if (!textSpan) {
+    textSpan = document.createElement("span");
+    textSpan.className = "chat-bubble-text";
+    bubble.insertBefore(textSpan, bubble.querySelector(".chat-bubble-time"));
+  }
+  textSpan.textContent = label;
 }
 
 // Chamado quando chega, via Realtime, a confirmação de que uma mensagem que
@@ -1433,6 +1469,74 @@ function simulatePrivateVideoCall() {
   showToast("Chamada de vídeo ainda não disponível nesta versão.");
 }
 
+// Apagar mensagem: "para mim" sempre disponível (some só do meu lado);
+// "para todos" só pra quem enviou, e só dentro da mesma janela de 15min que
+// o servidor aplica (checado aqui de novo só pra decidir se mostra o botão —
+// quem garante de verdade é a RPC).
+const DM_DELETE_FOR_EVERYONE_WINDOW_MS = 15 * 60 * 1000;
+
+function openMessageOptions(msgId) {
+  const bubble = DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!bubble) return;
+  STATE.messageOptionsTargetId = msgId;
+  const isMine = bubble.classList.contains("sent");
+  const withinWindow = isMine && (Date.now() - new Date(bubble.dataset.createdAt).getTime()) < DM_DELETE_FOR_EVERYONE_WINDOW_MS;
+  document.getElementById("btn-delete-for-everyone").style.display = withinWindow ? "block" : "none";
+  document.getElementById("modal-message-options").style.display = "flex";
+}
+
+function closeMessageOptions() {
+  document.getElementById("modal-message-options").style.display = "none";
+  STATE.messageOptionsTargetId = null;
+}
+
+async function confirmDeleteMessage(forEveryone) {
+  const msgId = STATE.messageOptionsTargetId;
+  if (!msgId) return;
+  const bubble = DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  const imageEl = bubble ? bubble.querySelector(".chat-bubble-image") : null;
+  const imageUrl = imageEl ? imageEl.src : null;
+
+  try {
+    await DB.deleteMyMessage(msgId, forEveryone);
+    closeMessageOptions();
+    if (forEveryone) {
+      applyDeletedTombstoneToBubble(msgId, "Você apagou esta mensagem");
+      if (imageUrl) DB.deleteDmMediaByUrl(imageUrl).catch(() => {});
+    } else if (bubble) {
+      bubble.remove();
+    }
+    renderInboxList();
+  } catch (err) {
+    showToast(err.message || "Não foi possível apagar a mensagem.");
+  }
+}
+
+// Indicador de "digitando…" — manda no máximo 1 vez a cada 2s enquanto a
+// pessoa digita (broadcast é barato, mas não faz sentido mandar por tecla).
+let lastTypingSentAt = 0;
+function handlePrivateChatTyping() {
+  const partnerId = STATE.activeChatPartner;
+  if (!partnerId) return;
+  const now = Date.now();
+  if (now - lastTypingSentAt < 2000) return;
+  lastTypingSentAt = now;
+  DB.sendTypingIndicator(partnerId).catch(() => {});
+}
+
+// Recebido via Realtime quando a OUTRA pessoa está digitando — some sozinho
+// se nenhum novo evento chegar em 3s (não existe evento de "parou de digitar",
+// só o timeout local cobre isso).
+let typingIndicatorTimeout = null;
+function handleIncomingTypingIndicator(fromUserId) {
+  if (STATE.activeScreen !== "private-chat" || STATE.activeChatPartner !== fromUserId) return;
+  const statusEl = document.getElementById("chat-partner-status");
+  if (!statusEl) return;
+  statusEl.textContent = "digitando…";
+  clearTimeout(typingIndicatorTimeout);
+  typingIndicatorTimeout = setTimeout(() => { statusEl.textContent = ""; }, 3000);
+}
+
 
 // 12.1 BLOQUEAR E DENUNCIAR USUÁRIOS
 function openChatPartnerOptions() {
@@ -1494,8 +1598,28 @@ async function handleToggleBlock() {
   }
 }
 
+// Modal de denúncia é reaproveitado pra usuário/post/comentário — só muda o
+// título e qual RPC o submit chama, guardado em STATE.reportTarget.
 function openReportPrompt() {
   closeUserOptionsMenu();
+  STATE.reportTarget = { type: "user", id: STATE.optionsTargetUserId };
+  document.getElementById("report-modal-title").textContent = "Denunciar usuário";
+  document.getElementById("report-reason-input").value = "";
+  document.getElementById("modal-report-user").style.display = "flex";
+}
+
+function openReportPostPrompt(postId) {
+  if (!requireAuth()) return;
+  STATE.reportTarget = { type: "post", id: postId };
+  document.getElementById("report-modal-title").textContent = "Denunciar publicação";
+  document.getElementById("report-reason-input").value = "";
+  document.getElementById("modal-report-user").style.display = "flex";
+}
+
+function openReportCommentPrompt(commentId) {
+  if (!requireAuth()) return;
+  STATE.reportTarget = { type: "comment", id: commentId };
+  document.getElementById("report-modal-title").textContent = "Denunciar comentário";
   document.getElementById("report-reason-input").value = "";
   document.getElementById("modal-report-user").style.display = "flex";
 }
@@ -1510,8 +1634,12 @@ async function submitReport() {
     showToast("Descreva o motivo da denúncia.");
     return;
   }
+  const target = STATE.reportTarget;
+  if (!target) return;
   try {
-    await DB.reportUser(STATE.optionsTargetUserId, reason);
+    if (target.type === "post") await DB.reportPost(target.id, reason);
+    else if (target.type === "comment") await DB.reportComment(target.id, reason);
+    else await DB.reportUser(target.id, reason);
     showToast("Denúncia enviada. Obrigado por ajudar a manter o VibeLive seguro.");
     closeReportModal();
   } catch (err) {
@@ -2202,27 +2330,58 @@ async function openAdminModerationPanel() {
     const blocks = await DB.getModerationBlocks(50);
     if (blocks.length === 0) {
       container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Nenhuma imagem bloqueada ainda.</div>`;
+    } else {
+      container.innerHTML = "";
+      blocks.forEach(b => {
+        const name = escapeHtml(b.display_name || b.username || "Conta removida");
+        const contextLabel = MODERATION_CONTEXT_LABELS[b.context] || b.context;
+        const item = document.createElement("div");
+        item.className = "inbox-item";
+        item.style.alignItems = "flex-start";
+        item.innerHTML = `
+          <div class="inbox-avatar" style="display:flex; align-items:center; justify-content:center; background:rgba(241,85,76,0.1); font-size:1.2rem;">🚫</div>
+          <div class="inbox-details" style="flex: 1;">
+            <span class="inbox-name">${name} <span style="font-weight:400; color:var(--light-gray);">· ${escapeHtml(contextLabel)}</span></span>
+            <span class="inbox-message">Motivo: ${escapeHtml(b.reason)} — imagem removida automaticamente, não fica retida pra revisão.</span>
+            <span class="inbox-time">${formatMessageTime(b.created_at)}</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+
+  const reportsContainer = document.getElementById("admin-content-reports-list-container");
+  reportsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  try {
+    const reports = await DB.getContentReports(50);
+    if (reports.length === 0) {
+      reportsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Nenhuma denúncia de conteúdo ainda.</div>`;
       return;
     }
-    container.innerHTML = "";
-    blocks.forEach(b => {
-      const name = escapeHtml(b.display_name || b.username || "Conta removida");
-      const contextLabel = MODERATION_CONTEXT_LABELS[b.context] || b.context;
+    reportsContainer.innerHTML = "";
+    reports.forEach(r => {
+      const isPost = r.content_type === "post";
+      const authorName = escapeHtml((isPost ? r.post_author_username : r.comment_author_username) || "Conta removida");
+      const snippet = escapeHtml((isPost ? r.post_caption : r.comment_text) || "(sem texto)").slice(0, 140);
       const item = document.createElement("div");
       item.className = "inbox-item";
       item.style.alignItems = "flex-start";
       item.innerHTML = `
-        <div class="inbox-avatar" style="display:flex; align-items:center; justify-content:center; background:rgba(241,85,76,0.1); font-size:1.2rem;">🚫</div>
+        <div class="inbox-avatar" style="display:flex; align-items:center; justify-content:center; background:rgba(241,85,76,0.1); font-size:1.2rem;">${isPost ? "🖼️" : "💬"}</div>
         <div class="inbox-details" style="flex: 1;">
-          <span class="inbox-name">${name} <span style="font-weight:400; color:var(--light-gray);">· ${escapeHtml(contextLabel)}</span></span>
-          <span class="inbox-message">Motivo: ${escapeHtml(b.reason)} — imagem removida automaticamente, não fica retida pra revisão.</span>
-          <span class="inbox-time">${formatMessageTime(b.created_at)}</span>
+          <span class="inbox-name">${isPost ? "Publicação" : "Comentário"} de @${authorName} <span style="font-weight:400; color:var(--light-gray);">· denunciado por @${escapeHtml(r.reporter_username || "")}</span></span>
+          <span class="inbox-message">Motivo: ${escapeHtml(r.reason)}</span>
+          <span class="inbox-message" style="opacity:0.75;">Conteúdo: "${snippet}"</span>
+          <span class="inbox-time">${formatMessageTime(r.created_at)}</span>
         </div>
       `;
-      container.appendChild(item);
+      reportsContainer.appendChild(item);
     });
   } catch (err) {
-    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+    reportsContainer.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
   }
 }
 
@@ -4087,7 +4246,9 @@ function buildCommentItem(c, myUserId) {
         <button onclick="editCommentClick('${c.id}')" title="Editar">✏️</button>
         <button onclick="deleteCommentClick('${c.id}')" title="Excluir">🗑️</button>
       </span>`
-    : "";
+    : `<span class="comment-own-actions">
+        <button onclick="openReportCommentPrompt('${c.id}')" title="Denunciar comentário">🚩</button>
+      </span>`;
   // Resposta a resposta não é permitida (thread de uma camada só) — o botão
   // só aparece em comentários de topo.
   const replyBtn = !c.parent_id
@@ -5645,9 +5806,10 @@ function renderCaptionSearchResults(container, posts) {
     item.className = "post-grid-item";
     item.title = authorName;
     item.style.cursor = "pointer";
-    item.innerHTML = post.media_type === "image"
+    item.innerHTML = (post.media_type === "image"
       ? `<img src="${post.media_url}" alt="Post de ${escapeHtml(authorName)}">`
-      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`)
+      + `<button class="post-grid-report-btn" title="Denunciar publicação" onclick="event.stopPropagation(); openReportPostPrompt('${post.id}')">⋮</button>`;
     item.onclick = () => {
       if (post.author) {
         closeSearchOverlay();
@@ -5745,9 +5907,10 @@ async function performHashtagSearch(query, container) {
     item.className = "post-grid-item";
     item.title = authorName;
     item.style.cursor = "pointer";
-    item.innerHTML = post.media_type === "image"
+    item.innerHTML = (post.media_type === "image"
       ? `<img src="${post.media_url}" alt="Post com #${escapeHtml(tag)}">`
-      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`)
+      + `<button class="post-grid-report-btn" title="Denunciar publicação" onclick="event.stopPropagation(); openReportPostPrompt('${post.id}')">⋮</button>`;
     item.onclick = () => {
       if (post.author) {
         closeSearchOverlay();
@@ -5807,6 +5970,46 @@ async function renderStoriesRail() {
       <span class="story-ring-label">${escapeHtml(f.display_name || f.username)}</span>
     `;
     rail.appendChild(item);
+  });
+}
+
+// Destaques do perfil: mesma coleção de sempre (public.stories), só que
+// filtrada por is_highlighted em vez de expires_at > now() — some do carrossel
+// efêmero (24h) mas fica permanente aqui. Só a própria conta por enquanto —
+// não existe tela de "ver perfil de outra pessoa" nesse app ainda.
+async function renderProfileHighlights() {
+  const row = document.getElementById("profile-highlights-row");
+  if (!row || !STATE.myUserId) return;
+
+  let highlights = [];
+  try {
+    highlights = await DB.getUserHighlights(STATE.myUserId);
+  } catch (err) {
+    console.error("Falha ao carregar destaques:", err);
+  }
+
+  if (highlights.length === 0) {
+    row.style.display = "none";
+    row.innerHTML = "";
+    return;
+  }
+
+  row.style.display = "flex";
+  row.innerHTML = "";
+  highlights.forEach((s, i) => {
+    const item = document.createElement("div");
+    item.className = "highlight-ring-item";
+    item.onclick = () => openHighlightsViewer(STATE.myUserId, i);
+    // Vídeo mostra o próprio primeiro frame como miniatura (mesmo truque do
+    // grid de posts) em vez de tentar gerar uma imagem estática à parte.
+    const thumbHtml = s.media_type === "image"
+      ? `<img src="${s.media_url}" class="highlight-ring-thumb" alt="Destaque">`
+      : `<video src="${s.media_url}" class="highlight-ring-thumb" muted playsinline></video>`;
+    item.innerHTML = `
+      <div class="highlight-ring">${thumbHtml}</div>
+      <span class="highlight-ring-label">${formatMessageTime(s.created_at)}</span>
+    `;
+    row.appendChild(item);
   });
 }
 
@@ -5881,12 +6084,15 @@ function showCurrentStory() {
     }
   });
 
-  const isMine = STATE.storiesFeed[STATE.storyViewerAuthorIndex]?.user_id === STATE.myUserId;
+  const isMine = STATE.storyViewerIsHighlightsMode || STATE.storiesFeed[STATE.storyViewerAuthorIndex]?.user_id === STATE.myUserId;
   document.getElementById("story-viewer-own-actions").style.display = isMine ? "flex" : "none";
   if (isMine) {
     DB.getStoryViewers(story.id)
       .then(views => { document.getElementById("story-viewer-views-count").textContent = views.length; })
       .catch(() => {});
+    const highlightBtn = document.getElementById("story-viewer-highlight-btn");
+    highlightBtn.dataset.highlighted = String(!!story.is_highlighted);
+    highlightBtn.textContent = story.is_highlighted ? "✓ Destacado" : "⭐ Destacar";
   }
   // Silenciar e responder só fazem sentido pro story de outra pessoa — o
   // próprio autor já vê "quem viu"/"excluir" no lugar dessas ações.
@@ -5940,6 +6146,8 @@ function storyViewerNext() {
   if (STATE.storyViewerIndex < STATE.storyViewerStories.length - 1) {
     STATE.storyViewerIndex += 1;
     showCurrentStory();
+  } else if (STATE.storyViewerIsHighlightsMode) {
+    closeStoryViewer();
   } else {
     storyViewerAdvanceAuthor(1);
   }
@@ -5949,7 +6157,7 @@ function storyViewerPrev() {
   if (STATE.storyViewerIndex > 0) {
     STATE.storyViewerIndex -= 1;
     showCurrentStory();
-  } else {
+  } else if (!STATE.storyViewerIsHighlightsMode) {
     storyViewerAdvanceAuthor(-1);
   }
 }
@@ -5963,13 +6171,43 @@ function storyViewerAdvanceAuthor(direction) {
   openStoryViewer(nextIndex);
 }
 
+// Abre o mesmo visualizador em cima da lista de Destaques do perfil, em vez
+// do feed efêmero de 24h — sem "próximo autor" (é uma coleção de uma pessoa
+// só), então só fecha ao chegar no fim em vez de avançar pra outro autor.
+async function openHighlightsViewer(userId, startIndex = 0) {
+  STATE.storyViewerIsHighlightsMode = true;
+  STATE.storyViewerAuthorIndex = -1;
+
+  try {
+    STATE.storyViewerStories = await DB.getUserHighlights(userId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar os destaques agora.");
+    STATE.storyViewerIsHighlightsMode = false;
+    return;
+  }
+  if (STATE.storyViewerStories.length === 0) { STATE.storyViewerIsHighlightsMode = false; return; }
+
+  STATE.storyViewerIndex = Math.min(startIndex, STATE.storyViewerStories.length - 1);
+  document.getElementById("modal-story-viewer").style.display = "flex";
+  document.getElementById("story-viewer-avatar").src = STATE.myAvatarUrl || DEFAULT_AVATAR_DATA_URI;
+  document.getElementById("story-viewer-username").textContent = STATE.profileName || STATE.myUsername || "";
+
+  const progressRow = document.getElementById("story-viewer-progress-row");
+  progressRow.innerHTML = STATE.storyViewerStories.map(() => `<div class="segment"><div class="fill"></div></div>`).join("");
+
+  showCurrentStory();
+}
+
 function closeStoryViewer() {
   clearStoryTimer();
   document.getElementById("story-viewer-video").pause();
   document.getElementById("modal-story-viewer").style.display = "none";
   STATE.storyViewerAuthorIndex = -1;
   STATE.storyViewerStories = [];
-  renderStoriesRail();
+  const wasHighlightsMode = STATE.storyViewerIsHighlightsMode;
+  STATE.storyViewerIsHighlightsMode = false;
+  if (wasHighlightsMode) renderProfileHighlights();
+  else renderStoriesRail();
 }
 
 async function openStoryViewersList() {
@@ -6023,7 +6261,8 @@ async function handleDeleteCurrentStory() {
     await DB.deleteStory(story.id);
     STATE.storyViewerStories.splice(STATE.storyViewerIndex, 1);
     if (STATE.storyViewerStories.length === 0) {
-      storyViewerAdvanceAuthor(1);
+      if (STATE.storyViewerIsHighlightsMode) closeStoryViewer();
+      else storyViewerAdvanceAuthor(1);
     } else {
       if (STATE.storyViewerIndex >= STATE.storyViewerStories.length) STATE.storyViewerIndex = STATE.storyViewerStories.length - 1;
       const progressRow = document.getElementById("story-viewer-progress-row");
@@ -6032,6 +6271,23 @@ async function handleDeleteCurrentStory() {
     }
   } catch (err) {
     showToast(err.message || "Não foi possível excluir o story agora.");
+  }
+}
+
+async function toggleCurrentStoryHighlight() {
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  if (!story) return;
+  const btn = document.getElementById("story-viewer-highlight-btn");
+  const newHighlighted = btn.dataset.highlighted !== "true";
+
+  try {
+    await DB.toggleStoryHighlight(story.id, newHighlighted);
+    story.is_highlighted = newHighlighted;
+    btn.dataset.highlighted = String(newHighlighted);
+    btn.textContent = newHighlighted ? "✓ Destacado" : "⭐ Destacar";
+    showToast(newHighlighted ? "Adicionado aos destaques." : "Removido dos destaques.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
   }
 }
 
@@ -6350,6 +6606,7 @@ async function applyProfileToUI(profile) {
   renderCoins();
   updateXPProgressUI();
   refreshProfileStats(profile.id, profile.username);
+  renderProfileHighlights();
 
   // Inscreve no canal global de DMs recebidas (uma vez por sessão, não a cada
   // chamada — applyProfileToUI roda depois de toda ação de carteira) e carrega
@@ -6365,7 +6622,12 @@ async function applyProfileToUI(profile) {
       if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.recipient_id) {
         updateChatBubbleReadStatus(row.id, row.read_at);
       }
-    });
+    }, (row) => {
+      if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.sender_id) {
+        handlePrivateChatMessageEdited(row);
+      }
+      renderInboxList();
+    }, (fromUserId) => handleIncomingTypingIndicator(fromUserId));
     renderInboxList();
   }
 

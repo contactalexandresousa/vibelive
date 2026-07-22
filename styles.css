@@ -3045,6 +3045,28 @@ input:-webkit-autofill:focus {
   opacity: 1;
 }
 
+.post-grid-report-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  color: #fff;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.post-grid-report-btn:hover {
+  background: rgba(241, 85, 76, 0.85);
+}
+
 /* Métricas Tab */
 .profile-metrics-panel {
   padding: 16px;
@@ -4552,6 +4574,12 @@ input:-webkit-autofill:focus {
   color: var(--success);
 }
 
+.chat-partner-status {
+  font-size: 0.58rem;
+  color: var(--primary);
+  min-height: 12px;
+}
+
 .chat-header-actions {
   display: flex;
   gap: 12px;
@@ -4638,6 +4666,42 @@ input:-webkit-autofill:focus {
   border-radius: 12px;
   cursor: pointer;
   object-fit: cover;
+}
+
+.chat-bubble.deleted span:not(.chat-bubble-time) {
+  font-style: italic;
+  opacity: 0.65;
+}
+
+.chat-bubble-options-btn {
+  position: absolute;
+  top: -6px;
+  background: var(--overlay-10);
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.chat-bubble:hover .chat-bubble-options-btn {
+  opacity: 0.85;
+}
+
+.chat-bubble.sent .chat-bubble-options-btn {
+  left: -6px;
+}
+
+.chat-bubble.received .chat-bubble-options-btn {
+  right: -6px;
 }
 
 /* Barra inferior de escrita */
@@ -5240,6 +5304,51 @@ input:-webkit-autofill:focus {
 }
 
 .story-ring-label {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Destaques do perfil — mesma linguagem visual do carrossel de stories
+   (.story-ring-item), mas sem anel gradiente de "não visto" (destaque não
+   tem esse conceito) e mostrando a miniatura em vez do avatar. */
+.profile-highlights-row {
+  display: flex;
+  gap: 12px;
+  padding: 4px 4px 14px;
+  overflow-x: auto;
+}
+
+.highlight-ring-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 60px;
+}
+
+.highlight-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  padding: 2px;
+  background: var(--overlay-10);
+  border: 1px solid var(--glass-border);
+}
+
+.highlight-ring-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.highlight-ring-label {
   font-size: 0.6rem;
   color: var(--text-secondary);
   max-width: 60px;
