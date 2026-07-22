@@ -69,6 +69,20 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Chamada de vídeo 1:1 (call-<id>): publica quem for chamador OU chamado
+  // de uma chamada já aceita — os dois lados publicam a própria câmera na
+  // mesma sala, diferente da live (onde só o anfitrião publica por padrão).
+  if (!canPublish && roomName.startsWith("call-")) {
+    const { data: call } = await supabase
+      .from("call_invites")
+      .select("id")
+      .eq("room_name", roomName)
+      .eq("status", "accepted")
+      .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
+      .maybeSingle();
+    canPublish = !!call;
+  }
+
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
     name: displayName,

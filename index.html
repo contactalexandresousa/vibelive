@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721o">
+  <link rel="stylesheet" href="styles.css?v=20260721p">
 </head>
 <body>
 
@@ -418,7 +418,7 @@
                 </div>
               </div>
               <div class="chat-header-actions">
-                <button class="chat-action-btn" onclick="simulatePrivateVideoCall()">
+                <button class="chat-action-btn" onclick="startVideoCall()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
                 </button>
                 <button class="chat-action-btn" onclick="openChatPartnerOptions()">
@@ -849,6 +849,25 @@
           <button onclick="leaveCohost()">Sair</button>
         </div>
 
+        <!-- Chamada de Vídeo 1:1 — aparece em qualquer tela (chegar uma ligação
+             não depende de estar na conversa certa), cobre estados de toque
+             (chamando/recebendo) e conectado. -->
+        <div class="call-overlay" id="call-overlay" style="display: none;">
+          <div class="call-ringing-state" id="call-ringing-state">
+            <img id="call-partner-avatar" class="call-avatar" src="" alt="">
+            <h2 id="call-partner-name"></h2>
+            <p id="call-status-text">Chamando...</p>
+            <div class="call-ringing-actions" id="call-ringing-actions"></div>
+          </div>
+          <div class="call-connected-state" id="call-connected-state" style="display: none;">
+            <video id="call-remote-video" autoplay playsinline></video>
+            <video id="call-local-video" autoplay playsinline muted class="call-local-pip"></video>
+            <button class="call-hangup-btn" onclick="hangUpCall()" aria-label="Encerrar chamada">
+              <svg viewBox="0 0 24 24" width="26" height="26"><path fill="#fff" d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 3.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" transform="rotate(135 12 12)"/></svg>
+            </button>
+          </div>
+        </div>
+
         <!-- Modal Criar Nova Publicação (Perfil) -->
         <div class="new-post-modal" id="modal-new-post" style="display: none;">
           <div class="new-post-overlay" onclick="closeNewPostModal()"></div>
@@ -1005,6 +1024,14 @@
 
               <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="exportMyData()">
                 ⬇️ Baixar Meus Dados
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openBlockedUsersPanel()">
+                🚫 Contas Bloqueadas
+              </button>
+
+              <button class="btn-publish-post" id="btn-toggle-theme" style="margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="toggleTheme()">
+                🌙 Modo Escuro
               </button>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 16px 0 10px; padding-top: 14px;"></div>
@@ -1342,6 +1369,20 @@
             </div>
             <div class="search-results-scroll">
               <div class="inbox-list" id="banned-words-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Contas Bloqueadas -->
+        <div class="new-post-modal" id="modal-blocked-users" style="display: none;">
+          <div class="new-post-overlay" onclick="closeBlockedUsersPanel()"></div>
+          <div class="new-post-content" style="height: 70%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🚫 Contas Bloqueadas</h3>
+              <button class="btn-close-new-post" onclick="closeBlockedUsersPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="blocked-users-list-container"></div>
             </div>
           </div>
         </div>
@@ -1893,9 +1934,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721o"></script>
+  <script src="supabase-client.js?v=20260721p"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721o"></script>
+  <script src="app.js?v=20260721p"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

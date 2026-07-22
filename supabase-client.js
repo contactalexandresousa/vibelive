@@ -729,12 +729,35 @@ const DB = {
     return this.getPostLikeState(postId);
   },
 
-  async getComments(postId) {
+  async getComments(postId, offset = 0, limit = 30) {
     const { data, error } = await sb
       .from("post_comments")
       .select("*, profiles(username, display_name)")
       .eq("post_id", postId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return data;
+  },
+
+  // Contagem separada da busca paginada acima — o badge "💬 N" da grade e do
+  // lightbox precisa do TOTAL, não só do tamanho da página carregada.
+  async getCommentsCount(postId) {
+    const { count, error } = await sb
+      .from("post_comments")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", postId);
+    if (error) throw error;
+    return count || 0;
+  },
+
+  async deleteComment(commentId) {
+    const { error } = await sb.from("post_comments").delete().eq("id", commentId);
+    if (error) throw error;
+  },
+
+  async updateComment(commentId, text) {
+    const { data, error } = await sb.from("post_comments").update({ text }).eq("id", commentId).select().single();
     if (error) throw error;
     return data;
   },
@@ -1202,6 +1225,22 @@ const DB = {
     return data.map(r => r.blocked_id);
   },
 
+  // Mesma lista de cima, mas com o perfil de cada bloqueado — pra tela de
+  // gerenciar contas bloqueadas. profiles!blocked_users_blocked_id_fkey
+  // desambigua pro PostgREST (a tabela tem dois caminhos até profiles:
+  // blocker_id e blocked_id).
+  async getBlockedUsersWithProfiles() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("blocked_users")
+      .select("blocked_id, profiles!blocked_users_blocked_id_fkey(id, username, display_name, avatar_url)")
+      .eq("blocker_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data.map(r => r.profiles).filter(Boolean);
+  },
+
   async reportUser(reportedId, reason) {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("user_reports").insert({ reporter_id: user.id, reported_id: reportedId, reason });
@@ -1282,6 +1321,70 @@ const DB = {
         event: "INSERT", schema: "public", table: "notifications",
         filter: `user_id=eq.${myUserId}`
       }, (payload) => onNotification(payload.new))
+      .subscribe();
+    return channel;
+  },
+
+  // Chamada de vídeo 1:1 — sinalização real (não é RPC porque não mexe em
+  // moedas/economia, insert/update direto com RLS já basta, mesmo raciocínio
+  // de live_session_invites).
+  async startCall(calleeId) {
+    const { data: { user } } = await sb.auth.getUser();
+    const roomName = `call-${crypto.randomUUID()}`;
+    const { data, error } = await sb
+      .from("call_invites")
+      .insert({ caller_id: user.id, callee_id: calleeId, room_name: roomName })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async respondToCall(inviteId, accept) {
+    const { data, error } = await sb
+      .from("call_invites")
+      .update({ status: accept ? "accepted" : "declined", responded_at: new Date().toISOString() })
+      .eq("id", inviteId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async endCall(inviteId) {
+    const { error } = await sb
+      .from("call_invites")
+      .update({ status: "ended", responded_at: new Date().toISOString() })
+      .eq("id", inviteId)
+      .eq("status", "accepted");
+    if (error) throw error;
+  },
+
+  // Sinalização de chamada perdida/cancelada — chamador desiste antes da
+  // resposta, ou o toque expira sem ninguém atender.
+  async cancelCall(inviteId) {
+    const { error } = await sb
+      .from("call_invites")
+      .update({ status: "missed", responded_at: new Date().toISOString() })
+      .eq("id", inviteId)
+      .eq("status", "ringing");
+    if (error) throw error;
+  },
+
+  subscribeToCallInvites(myUserId, handlers) {
+    const channel = sb.channel(`call_invites:${myUserId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "call_invites",
+        filter: `callee_id=eq.${myUserId}`
+      }, (payload) => handlers.onIncomingCall(payload.new))
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "call_invites",
+        filter: `caller_id=eq.${myUserId}`
+      }, (payload) => handlers.onCallUpdate(payload.new))
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "call_invites",
+        filter: `callee_id=eq.${myUserId}`
+      }, (payload) => handlers.onCallUpdate(payload.new))
       .subscribe();
     return channel;
   }

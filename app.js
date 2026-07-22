@@ -223,6 +223,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // 4. INICIALIZAÇÃO DO APP
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(localStorage.getItem("vibelive_theme") || "dark");
   renderCoins();
   renderInboxList();
   initRealLiveSessionsFeed();
@@ -256,6 +257,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 2500);
 });
+
+// Tema claro/escuro — persiste em localStorage (não depende de conta logada,
+// já que dá pra escolher antes de entrar). "dark" é o padrão implícito: sem
+// atributo nenhum no <html>, o CSS já é o tema escuro original.
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("vibelive_theme", theme);
+  const btn = document.getElementById("btn-toggle-theme");
+  if (btn) btn.textContent = theme === "light" ? "☀️ Modo Claro" : "🌙 Modo Escuro";
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  applyTheme(current === "light" ? "dark" : "light");
+}
 
 // Usado no início de qualquer ação que grava dado real no banco. Se não houver
 // sessão, manda para a tela de login em vez de deixar a chamada ao Supabase falhar.
@@ -2132,6 +2148,55 @@ async function removeBannedWordClick(word, btn) {
   }
 }
 
+async function openBlockedUsersPanel() {
+  if (!requireAuth()) return;
+  document.getElementById("modal-blocked-users").style.display = "flex";
+  await renderBlockedUsersList();
+}
+
+function closeBlockedUsersPanel() {
+  document.getElementById("modal-blocked-users").style.display = "none";
+}
+
+async function renderBlockedUsersList() {
+  const container = document.getElementById("blocked-users-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  try {
+    const users = await DB.getBlockedUsersWithProfiles();
+    if (users.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Você não bloqueou ninguém ainda.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    users.forEach(p => {
+      const name = escapeHtml(p.display_name || p.username);
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}" style="border-radius:50%;"></div>
+        <div class="inbox-details"><span class="inbox-name">${name}</span><span class="inbox-message">@${escapeHtml(p.username)}</span></div>
+        <div class="inbox-right"><button class="btn-follow-primary" style="height:26px; font-size:0.62rem; padding:0 10px;" onclick="unblockUserFromList('${p.id}', this)">Desbloquear</button></div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+async function unblockUserFromList(userId, btn) {
+  btn.disabled = true;
+  try {
+    await DB.unblockUser(userId);
+    STATE.blockedUsers = STATE.blockedUsers.filter(id => id !== userId);
+    await renderBlockedUsersList();
+    showToast("Usuário desbloqueado.");
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível desbloquear agora.");
+  }
+}
+
 // 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
 const TRANSACTION_TYPE_INFO = {
   gift: { label: "Presente enviado", icon: "🎁" },
@@ -3163,9 +3228,9 @@ function appendPostsToProfileGrid(posts, container) {
       const el = item.querySelector(".post-likes-count");
       if (el) el.textContent = state.likesCount;
     }).catch(() => {});
-    DB.getComments(post.id).then(comments => {
+    DB.getCommentsCount(post.id).then(count => {
       const el = item.querySelector(".post-comments-count");
-      if (el) el.textContent = comments.length;
+      if (el) el.textContent = count;
     }).catch(() => {});
   });
 }
@@ -3435,15 +3500,21 @@ async function openPostLightbox(postId) {
     video.play().catch(e => console.log(e));
   }
 
+  STATE.lightboxCommentsOffset = 0;
+  STATE.lightboxCommentsHasMore = true;
+
   try {
-    const [likeState, comments] = await Promise.all([
+    const [likeState, comments, user] = await Promise.all([
       DB.getPostLikeState(postId),
-      DB.getComments(postId)
+      DB.getComments(postId, 0, LIGHTBOX_COMMENTS_PAGE_SIZE),
+      Auth.getUser()
     ]);
     STATE.activeLightboxLikeState = likeState;
     likes.textContent = `${likeState.likesCount} curtidas`;
     if (likeState.likedByMe) likeBtn.classList.add("active");
-    renderLightboxComments(comments);
+    STATE.lightboxCommentsOffset = comments.length;
+    STATE.lightboxCommentsHasMore = comments.length === LIGHTBOX_COMMENTS_PAGE_SIZE;
+    renderLightboxComments(comments, user ? user.id : null);
   } catch (err) {
     console.error("Falha ao carregar curtidas/comentários:", err);
   }
@@ -3515,7 +3586,24 @@ async function deleteLightboxPost() {
   }
 }
 
-function renderLightboxComments(comments) {
+const LIGHTBOX_COMMENTS_PAGE_SIZE = 30;
+
+function buildCommentItem(c, myUserId) {
+  const item = document.createElement("div");
+  item.className = "lightbox-comment-item";
+  item.dataset.commentId = c.id;
+  const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
+  const ownActions = c.user_id === myUserId
+    ? `<span class="comment-own-actions">
+        <button onclick="editCommentClick('${c.id}')" title="Editar">✏️</button>
+        <button onclick="deleteCommentClick('${c.id}')" title="Excluir">🗑️</button>
+      </span>`
+    : "";
+  item.innerHTML = `<strong>${escapeHtml(authorName)}</strong> <span class="comment-text">${escapeHtml(c.text)}</span>${ownActions}`;
+  return item;
+}
+
+function renderLightboxComments(comments, myUserId) {
   const list = document.getElementById("lightbox-comments-list");
   list.innerHTML = "";
 
@@ -3524,13 +3612,77 @@ function renderLightboxComments(comments) {
     return;
   }
 
-  comments.forEach(c => {
-    const item = document.createElement("div");
-    item.className = "lightbox-comment-item";
-    const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
-    item.innerHTML = `<strong>${escapeHtml(authorName)}</strong> ${escapeHtml(c.text)}`;
-    list.appendChild(item);
-  });
+  comments.forEach(c => list.appendChild(buildCommentItem(c, myUserId)));
+  renderLoadMoreCommentsButton();
+}
+
+function renderLoadMoreCommentsButton() {
+  const list = document.getElementById("lightbox-comments-list");
+  const existing = document.getElementById("lightbox-comments-load-more");
+  if (existing) existing.remove();
+  if (!STATE.lightboxCommentsHasMore) return;
+
+  const btn = document.createElement("button");
+  btn.id = "lightbox-comments-load-more";
+  btn.className = "lightbox-load-more-comments-btn";
+  btn.textContent = "Carregar mais comentários";
+  btn.onclick = loadMoreLightboxComments;
+  list.appendChild(btn);
+}
+
+async function loadMoreLightboxComments() {
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
+  const btn = document.getElementById("lightbox-comments-load-more");
+  if (btn) { btn.disabled = true; btn.textContent = "Carregando..."; }
+
+  try {
+    const user = await Auth.getUser();
+    const comments = await DB.getComments(postId, STATE.lightboxCommentsOffset, LIGHTBOX_COMMENTS_PAGE_SIZE);
+    STATE.lightboxCommentsOffset += comments.length;
+    STATE.lightboxCommentsHasMore = comments.length === LIGHTBOX_COMMENTS_PAGE_SIZE;
+
+    const list = document.getElementById("lightbox-comments-list");
+    if (btn) btn.remove();
+    comments.forEach(c => list.appendChild(buildCommentItem(c, user ? user.id : null)));
+    renderLoadMoreCommentsButton();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Carregar mais comentários"; }
+    showToast("Não foi possível carregar mais comentários agora.");
+  }
+}
+
+async function deleteCommentClick(commentId) {
+  if (!confirm("Excluir este comentário?")) return;
+  const postId = STATE.activeLightboxPostId;
+  try {
+    await DB.deleteComment(commentId);
+    document.querySelector(`.lightbox-comment-item[data-comment-id="${commentId}"]`)?.remove();
+    STATE.lightboxCommentsOffset = Math.max(0, STATE.lightboxCommentsOffset - 1);
+    if (postId) {
+      const count = await DB.getCommentsCount(postId);
+      const gridCounter = document.querySelector(`.post-comments-count[data-post="${postId}"]`);
+      if (gridCounter) gridCounter.textContent = count;
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível excluir o comentário agora.");
+  }
+}
+
+async function editCommentClick(commentId) {
+  const item = document.querySelector(`.lightbox-comment-item[data-comment-id="${commentId}"] .comment-text`);
+  const current = item ? item.textContent : "";
+  const newText = prompt("Editar comentário:", current);
+  if (newText === null) return; // cancelado
+  const trimmed = newText.trim();
+  if (!trimmed || trimmed === current) return;
+
+  try {
+    const updated = await DB.updateComment(commentId, trimmed);
+    if (item) item.textContent = updated.text;
+  } catch (err) {
+    showToast(err.message || "Não foi possível editar o comentário agora.");
+  }
 }
 
 async function likeLightboxPost() {
@@ -3564,16 +3716,23 @@ async function addLightboxComment() {
   if (!postId) return;
 
   try {
-    await DB.addComment(postId, text); // xp é concedido atomicamente pela RPC
+    const newComment = await DB.addComment(postId, text); // xp é concedido atomicamente pela RPC
     input.value = "";
 
-    const comments = await DB.getComments(postId);
-    renderLightboxComments(comments);
-
-    const gridCounter = document.querySelector(`.post-comments-count[data-post="${postId}"]`);
-    if (gridCounter) gridCounter.textContent = comments.length;
-
     const user = await Auth.getUser();
+    const list = document.getElementById("lightbox-comments-list");
+    const emptyHint = list.querySelector("div");
+    if (emptyHint && list.children.length === 1) emptyHint.remove();
+    const loadMoreBtn = document.getElementById("lightbox-comments-load-more");
+    const enrichedComment = { ...newComment, profiles: { username: STATE.myUsername, display_name: STATE.profileName } };
+    const item = buildCommentItem(enrichedComment, user.id);
+    if (loadMoreBtn) list.insertBefore(item, loadMoreBtn); else list.appendChild(item);
+    STATE.lightboxCommentsOffset += 1;
+
+    const count = await DB.getCommentsCount(postId);
+    const gridCounter = document.querySelector(`.post-comments-count[data-post="${postId}"]`);
+    if (gridCounter) gridCounter.textContent = count;
+
     const profile = await DB.getProfile(user.id);
     await applyProfileToUI(profile);
   } catch (err) {
@@ -4302,6 +4461,165 @@ function detachCohostTile(videoElementId) {
   if (el) { el.style.display = "none"; el.srcObject = null; }
 }
 
+// ==========================================================================
+// CHAMADA DE VÍDEO 1:1 (MENSAGENS DIRETAS)
+// ==========================================================================
+STATE.activeCallInvite = null; // linha atual de call_invites, chamando ou conectado
+STATE.callLocalStream = null;
+STATE.callLiveKitRoom = null;
+STATE.callInvitesChannel = null; // canal Realtime global de sinalização de chamada
+
+// Chamador: cria o convite e mostra "Chamando..." — a conexão de verdade só
+// acontece quando handleCallUpdate() vir um status 'accepted' (o callee que
+// decide, não dá pra assumir aceite no cliente).
+async function startVideoCall() {
+  if (!requireAuth()) return;
+  const partnerId = STATE.activeChatPartner;
+  if (!partnerId) return;
+  if (STATE.activeCallInvite) { showToast("Você já está em uma chamada."); return; }
+
+  try {
+    const invite = await DB.startCall(partnerId);
+    STATE.activeCallInvite = invite;
+    showCallRingingUI({
+      name: DOM.chatPartnerName ? DOM.chatPartnerName.textContent : "Alguém",
+      avatar_url: DOM.chatPartnerAvatar ? DOM.chatPartnerAvatar.src : ""
+    }, false);
+  } catch (err) {
+    showToast(err.message || "Não foi possível iniciar a chamada agora.");
+  }
+}
+
+// Callee: chamado pela assinatura Realtime global (call_invites INSERT) —
+// pode disparar em qualquer tela, não só dentro da conversa certa.
+async function handleIncomingCall(invite) {
+  if (STATE.activeCallInvite) return; // já em outra chamada — ignora silenciosamente
+  STATE.activeCallInvite = invite;
+  try {
+    const caller = await DB.getProfile(invite.caller_id);
+    showCallRingingUI(caller, true);
+  } catch (err) {
+    console.error("Falha ao carregar dados de quem está ligando:", err);
+    STATE.activeCallInvite = null;
+  }
+}
+
+// Reage a mudanças de status de uma chamada em que eu sou uma das partes —
+// tanto o lado que ligou (soube que foi aceita/recusada) quanto quem recebeu
+// (soube que a outra pessoa desligou).
+async function handleCallUpdate(invite) {
+  if (!STATE.activeCallInvite || STATE.activeCallInvite.id !== invite.id) return;
+  STATE.activeCallInvite = invite;
+
+  if (invite.status === "accepted" && !STATE.callLiveKitRoom) {
+    await connectToCallRoom(invite);
+  } else if (["declined", "ended", "missed"].includes(invite.status)) {
+    const wasConnected = !!STATE.callLiveKitRoom;
+    closeCallOverlay();
+    if (invite.status === "declined") showToast("Chamada recusada.");
+    else if (wasConnected) showToast("Chamada encerrada.");
+  }
+}
+
+function showCallRingingUI(partner, isIncoming) {
+  document.getElementById("call-overlay").style.display = "flex";
+  document.getElementById("call-connected-state").style.display = "none";
+  document.getElementById("call-ringing-state").style.display = "flex";
+  document.getElementById("call-partner-avatar").src = partner.avatar_url || DEFAULT_AVATAR_DATA_URI;
+  document.getElementById("call-partner-name").textContent = partner.display_name || partner.name || partner.username || "Alguém";
+  document.getElementById("call-status-text").textContent = isIncoming ? "Chamando você..." : "Chamando...";
+
+  const actions = document.getElementById("call-ringing-actions");
+  actions.innerHTML = isIncoming
+    ? `<button class="call-action-circle decline" onclick="declineIncomingCall()" aria-label="Recusar">✕</button>
+       <button class="call-action-circle accept" onclick="acceptIncomingCall()" aria-label="Aceitar">✓</button>`
+    : `<button class="call-action-circle decline" onclick="cancelOutgoingCall()" aria-label="Cancelar">✕</button>`;
+}
+
+async function acceptIncomingCall() {
+  const invite = STATE.activeCallInvite;
+  if (!invite) return;
+  try {
+    const updated = await DB.respondToCall(invite.id, true);
+    STATE.activeCallInvite = updated;
+    await connectToCallRoom(updated);
+  } catch (err) {
+    showToast(err.message || "Não foi possível atender agora.");
+    closeCallOverlay();
+  }
+}
+
+async function declineIncomingCall() {
+  const invite = STATE.activeCallInvite;
+  closeCallOverlay();
+  if (!invite) return;
+  try { await DB.respondToCall(invite.id, false); } catch (err) { console.error(err); }
+}
+
+async function cancelOutgoingCall() {
+  const invite = STATE.activeCallInvite;
+  closeCallOverlay();
+  if (!invite) return;
+  try { await DB.cancelCall(invite.id); } catch (err) { console.error(err); }
+}
+
+async function connectToCallRoom(invite) {
+  document.getElementById("call-status-text").textContent = "Conectando...";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    STATE.callLocalStream = stream;
+    document.getElementById("call-local-video").srcObject = stream;
+
+    const token = await DB.createLivekitToken(invite.room_name);
+    const room = new LivekitClient.Room();
+    STATE.callLiveKitRoom = room;
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      track.attach(document.getElementById("call-remote-video"));
+    });
+
+    await room.connect(LIVEKIT_URL, token);
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) await room.localParticipant.publishTrack(videoTrack);
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) await room.localParticipant.publishTrack(audioTrack);
+
+    document.getElementById("call-ringing-state").style.display = "none";
+    document.getElementById("call-connected-state").style.display = "block";
+  } catch (err) {
+    console.error("Falha ao conectar na chamada:", err);
+    showToast("Não foi possível ativar câmera/microfone pra chamada.");
+    if (STATE.activeCallInvite) {
+      try { await DB.endCall(STATE.activeCallInvite.id); } catch (e) { console.error(e); }
+    }
+    closeCallOverlay();
+  }
+}
+
+async function hangUpCall() {
+  const invite = STATE.activeCallInvite;
+  const wasConnected = !!STATE.callLiveKitRoom;
+  closeCallOverlay();
+  if (invite && wasConnected) {
+    try { await DB.endCall(invite.id); } catch (err) { console.error(err); }
+  }
+}
+
+function closeCallOverlay() {
+  document.getElementById("call-overlay").style.display = "none";
+  if (STATE.callLocalStream) {
+    STATE.callLocalStream.getTracks().forEach(t => t.stop());
+    STATE.callLocalStream = null;
+  }
+  if (STATE.callLiveKitRoom) {
+    STATE.callLiveKitRoom.disconnect();
+    STATE.callLiveKitRoom = null;
+  }
+  document.getElementById("call-remote-video").srcObject = null;
+  document.getElementById("call-local-video").srcObject = null;
+  STATE.activeCallInvite = null;
+}
+
 let leaderboardActiveTab = "supporters";
 
 async function openLeaderboardModal() {
@@ -4845,6 +5163,15 @@ async function applyProfileToUI(profile) {
     refreshNotificationBadge();
   }
 
+  // Idem para chamada de vídeo — precisa tocar em qualquer tela, não só
+  // dentro da conversa com quem está ligando.
+  if (!STATE.callInvitesChannel) {
+    STATE.callInvitesChannel = DB.subscribeToCallInvites(profile.id, {
+      onIncomingCall: handleIncomingCall,
+      onCallUpdate: handleCallUpdate
+    });
+  }
+
   // O servidor decide o XP/nível (nunca o cliente) — anuncia o level-up comparando
   // com o nível anterior, já que a RPC só devolve o estado final.
   if (previousLevel && profile.level > previousLevel) {
@@ -4985,6 +5312,11 @@ async function handleLogout() {
     sb.removeChannel(STATE.notificationsChannel);
     STATE.notificationsChannel = null;
   }
+  if (STATE.callInvitesChannel) {
+    sb.removeChannel(STATE.callInvitesChannel);
+    STATE.callInvitesChannel = null;
+  }
+  if (STATE.activeCallInvite) closeCallOverlay();
   STATE.dmsList = [];
   STATE.notifications = [];
   STATE.unreadNotificationCount = 0;
