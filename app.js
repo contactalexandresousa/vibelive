@@ -7108,6 +7108,8 @@ async function sendStoryReply() {
 
 function toggleAuthTab(mode) {
   STATE.authMode = mode;
+  const authErrorEl = document.getElementById("auth-form-error");
+  if (authErrorEl) authErrorEl.textContent = "";
   const tabLogin = document.getElementById("btn-tab-login");
   const tabRegister = document.getElementById("btn-tab-register");
   const submitBtn = document.getElementById("btn-auth-submit");
@@ -7469,6 +7471,8 @@ async function applyProfileToUI(profile) {
 async function handleAuthSubmit() {
   const email = document.getElementById("auth-username").value.trim();
   const password = document.getElementById("auth-password").value.trim();
+  const errorEl = document.getElementById("auth-form-error");
+  if (errorEl) errorEl.textContent = "";
 
   if (!email || !password) {
     showToast("Por favor, preencha as credenciais!");
@@ -7502,6 +7506,17 @@ async function handleAuthSubmit() {
   showToast("Autenticando...");
 
   try {
+    // Bug real relatado por usuário: logar com uma conta, fechar a aba sem
+    // sair, e reabrir mostrando uma conta ANTERIOR ainda guardada (provável
+    // sessão anterior nunca substituída porque uma tentativa de login
+    // anterior falhou silenciosamente e ninguém percebeu o toast de erro).
+    // Sair explicitamente antes de qualquer tentativa nova garante que, se
+    // ESSA tentativa também falhar, a pessoa fica deslogada (óbvio) em vez
+    // de continuar em cima de uma sessão antiga e diferente sem perceber.
+    await Auth.signOut().catch(() => {});
+    STATE.isLoggedIn = false;
+    STATE.isAdmin = false;
+
     const data = STATE.authMode === "login"
       ? await Auth.signIn(email, password)
       : await Auth.signUp(email, password, birthDate, referredByUsername);
@@ -7535,8 +7550,16 @@ async function handleAuthSubmit() {
 
     await finishLoginAfterAuth(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
   } catch (err) {
-    if (err.suspendedUsername) openSuspendedAccountModal(err.suspendedUsername, err.message);
-    else showToast(translateAuthError(err));
+    if (err.suspendedUsername) {
+      openSuspendedAccountModal(err.suspendedUsername, err.message);
+    } else {
+      const message = translateAuthError(err);
+      showToast(message);
+      // Mensagem fixa na tela (não só o toast, que passa rápido e é fácil
+      // de não ver, principalmente no celular) — fica visível até a próxima
+      // tentativa, pra nunca ficar ambíguo se o login realmente aconteceu.
+      if (errorEl) errorEl.textContent = message;
+    }
   } finally {
     if (btn) btn.disabled = false;
   }

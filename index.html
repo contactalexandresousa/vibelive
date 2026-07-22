@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722q">
+  <link rel="stylesheet" href="styles.css?v=20260722r">
 </head>
 <body>
 
@@ -94,6 +94,7 @@
                     <input type="checkbox" id="auth-terms-checkbox">
                     <div><span style="font-size: 0.68rem;">Tenho 18 anos ou mais e li e aceito os <a href="#" onclick="event.preventDefault(); openTermsModal();" style="color: var(--primary);">Termos de Uso e Política de Privacidade</a></span></div>
                   </label>
+                  <span class="onboarding-error" id="auth-form-error" style="display: block; min-height: 14px; margin-bottom: 6px;"></span>
                   <button class="btn-auth-submit" id="btn-auth-submit" onclick="handleAuthSubmit()">Entrar</button>
                   <button type="button" id="btn-forgot-password" onclick="openForgotPasswordModal()" style="display: block; margin: 10px auto 0; background: none; border: none; color: var(--light-gray); font-size: 0.68rem; text-decoration: underline; cursor: pointer;">Esqueci minha senha</button>
                 </div>
@@ -2299,9 +2300,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722q"></script>
+  <script src="supabase-client.js?v=20260722r"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722q"></script>
+  <script src="app.js?v=20260722r"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
