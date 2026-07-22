@@ -37,6 +37,25 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "room_name obrigatório" }), { status: 400, headers: corsHeaders });
   }
 
+  // Quem foi removido dessa live pelo anfitrião (moderate-live-room, ação
+  // "ban") não pode nem entrar de novo — o kick imediato via LiveKit só
+  // cobre quem já tava conectado; sem essa checagem, dava pra só recarregar
+  // a página e voltar.
+  if (roomName.startsWith("live-")) {
+    const broadcasterId = roomName.slice("live-".length);
+    if (broadcasterId !== user.id) {
+      const { data: ban } = await supabase
+        .from("live_room_bans")
+        .select("broadcaster_id")
+        .eq("broadcaster_id", broadcasterId)
+        .eq("banned_user_id", user.id)
+        .maybeSingle();
+      if (ban) {
+        return new Response(JSON.stringify({ error: "Você foi removido dessa live pelo anfitrião." }), { status: 403, headers: corsHeaders });
+      }
+    }
+  }
+
   const { data: profile } = await supabase.from("profiles").select("display_name, username").eq("id", user.id).maybeSingle();
   const displayName = profile?.display_name || profile?.username || "Visitante";
 

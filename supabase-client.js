@@ -915,15 +915,82 @@ const DB = {
     return this.getPostLikeState(postId);
   },
 
+  // "Salvo" é sempre privado — sem contagem pública nem "quem salvou",
+  // diferente de curtida. isPostSavedByMe alimenta o ícone do lightbox.
+  async isPostSavedByMe(postId) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return false;
+    const { data, error } = await sb.from("saved_posts").select("post_id").eq("post_id", postId).eq("user_id", user.id).maybeSingle();
+    if (error) throw error;
+    return !!data;
+  },
+
+  async toggleSavePost(postId, currentlySaved) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (currentlySaved) {
+      const { error } = await sb.from("saved_posts").delete().eq("post_id", postId).eq("user_id", user.id);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from("saved_posts").insert({ post_id: postId, user_id: user.id });
+      if (error) throw error;
+    }
+  },
+
+  // Post mais recente salvo primeiro — join simples, sem paginação (uso
+  // pessoal, não é uma grade que cresce sem limite como o feed geral).
+  async getMySavedPosts() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("saved_posts")
+      .select("created_at, posts(*)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return data.map(r => r.posts).filter(Boolean);
+  },
+
   async getComments(postId, offset = 0, limit = 30) {
+    // comment_likes (0107) criou um segundo caminho possível até profiles
+    // (via comment_likes), então o embed implícito "profiles(...)" ficou
+    // ambíguo pro PostgREST — precisa apontar a FK exata.
     const { data, error } = await sb
       .from("post_comments")
-      .select("*, profiles(username, display_name)")
+      .select("*, profiles!post_comments_user_id_fkey(username, display_name)")
       .eq("post_id", postId)
       .order("created_at", { ascending: true })
       .range(offset, offset + limit - 1);
     if (error) throw error;
-    return data;
+    if (data.length === 0) return data;
+
+    // Contagem/estado de curtida por comentário — uma consulta batched pra
+    // página inteira em vez de N+1, igual todo lugar desse app que resolve
+    // "curtido por mim" em lote.
+    const { data: { user } } = await sb.auth.getUser();
+    const commentIds = data.map(c => c.id);
+    const { data: likes, error: likesErr } = await sb
+      .from("comment_likes")
+      .select("comment_id, user_id")
+      .in("comment_id", commentIds);
+    if (likesErr) throw likesErr;
+
+    return data.map(c => ({
+      ...c,
+      likes_count: likes.filter(l => l.comment_id === c.id).length,
+      liked_by_me: !!(user && likes.some(l => l.comment_id === c.id && l.user_id === user.id))
+    }));
+  },
+
+  async toggleCommentLike(commentId, currentlyLiked) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (currentlyLiked) {
+      const { error } = await sb.from("comment_likes").delete().eq("comment_id", commentId).eq("user_id", user.id);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from("comment_likes").insert({ comment_id: commentId, user_id: user.id });
+      if (error) throw error;
+    }
   },
 
   // Contagem separada da busca paginada acima — o badge "💬 N" da grade e do
@@ -1047,6 +1114,47 @@ const DB = {
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || "Não foi possível conectar ao vídeo");
     return body.token;
+  },
+
+  // Moderação da própria live (banir/desbanir, silenciar/dessilenciar chat)
+  // — roda numa função de borda porque "banir" também desconecta na hora
+  // via LiveKit Server SDK (moderate-live-room), não é só um insert/delete
+  // de tabela.
+  async moderateLiveRoom(action, targetUserId, roomName) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/moderate-live-room`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ action, target_user_id: targetUserId, room_name: roomName })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Não foi possível concluir a ação");
+    return body;
+  },
+
+  async getMyLiveRoomBans() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("live_room_bans")
+      .select("banned_user_id, profiles!live_room_bans_banned_user_id_fkey(id, username, display_name, avatar_url)")
+      .eq("broadcaster_id", user.id);
+    if (error) throw error;
+    return data.map(r => r.profiles).filter(Boolean);
+  },
+
+  async getMyLiveChatMutes() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("live_chat_mutes")
+      .select("muted_user_id, profiles!live_chat_mutes_muted_user_id_fkey(id, username, display_name, avatar_url)")
+      .eq("broadcaster_id", user.id);
+    if (error) throw error;
+    return data.map(r => r.profiles).filter(Boolean);
   },
 
   // Exclusão real de conta (Auth Admin API, via Edge Function). Sempre exclui
@@ -1590,6 +1698,28 @@ const DB = {
     const { data, error } = await sb.from("blocked_users").select("blocked_id").eq("blocker_id", user.id);
     if (error) throw error;
     return data.map(r => r.blocked_id);
+  },
+
+  // Silenciar conversa de DM — diferente de bloquear: a pessoa continua
+  // podendo mandar mensagem normalmente, só o push de "direct_message" some
+  // (checado em _push_on_direct_message, 0105). Mesmo padrão de toggleStoryMute.
+  async toggleDmMute(userId, muted) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (muted) {
+      const { error } = await sb.from("dm_mutes").insert({ muter_id: user.id, muted_user_id: userId });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from("dm_mutes").delete().eq("muter_id", user.id).eq("muted_user_id", userId);
+      if (error) throw error;
+    }
+  },
+
+  async getMyDmMutes() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb.from("dm_mutes").select("muted_user_id").eq("muter_id", user.id);
+    if (error) throw error;
+    return data.map(r => r.muted_user_id);
   },
 
   // Mesma lista de cima, mas com o perfil de cada bloqueado — pra tela de

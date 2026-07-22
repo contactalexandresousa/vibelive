@@ -1791,7 +1791,25 @@ function openUserOptionsMenu(userId, userName) {
   document.getElementById("user-options-title").textContent = userName;
   const isBlocked = STATE.blockedUsers.includes(userId);
   document.getElementById("btn-toggle-block").textContent = isBlocked ? "Desbloquear" : "Bloquear";
+  const isMuted = (STATE.dmMutedUsers || []).includes(userId);
+  document.getElementById("btn-toggle-dm-mute").textContent = isMuted ? "Reativar notificações de DM" : "Silenciar notificações de DM";
   document.getElementById("modal-user-options").style.display = "flex";
+}
+
+async function handleToggleDmMute() {
+  const userId = STATE.optionsTargetUserId;
+  if (!userId) return;
+  const wasMuted = (STATE.dmMutedUsers || []).includes(userId);
+  try {
+    await DB.toggleDmMute(userId, !wasMuted);
+    STATE.dmMutedUsers = wasMuted
+      ? STATE.dmMutedUsers.filter(id => id !== userId)
+      : [...(STATE.dmMutedUsers || []), userId];
+    document.getElementById("btn-toggle-dm-mute").textContent = wasMuted ? "Silenciar notificações de DM" : "Reativar notificações de DM";
+    showToast(wasMuted ? "Notificações de DM reativadas." : "Notificações de DM silenciadas.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
 }
 
 function closeUserOptionsMenu() {
@@ -3769,20 +3787,28 @@ async function launchBroadcastingSession() {
     if (STATE.myUsername) {
       STATE.myLiveGiftsChannel = DB.subscribeToLiveRoom(STATE.myUsername, {
         onMessage: async (msg) => {
-          if (msg.type !== "gift") return;
-          addMyLiveComment(msg.username, msg.text.replace(/^enviou /, ""), false, true);
-          try {
-            const profile = await DB.getProfile(user.id);
-            const delta = profile.coins - STATE.myCoins;
-            if (delta > 0) {
-              STATE.myLiveDiamonds += delta;
-              DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
+          if (msg.type === "gift") {
+            addMyLiveComment(msg.username, msg.text.replace(/^enviou /, ""), false, true);
+            try {
+              const profile = await DB.getProfile(user.id);
+              const delta = profile.coins - STATE.myCoins;
+              if (delta > 0) {
+                STATE.myLiveDiamonds += delta;
+                DOM.myLiveDiamonds.textContent = `💎 ${STATE.myLiveDiamonds} acumulados`;
+              }
+              STATE.myCoins = profile.coins;
+              renderCoins();
+            } catch (err) {
+              console.error("Falha ao atualizar saldo após presente recebido:", err);
             }
-            STATE.myCoins = profile.coins;
-            renderCoins();
-          } catch (err) {
-            console.error("Falha ao atualizar saldo após presente recebido:", err);
+            return;
           }
+          // Chat normal — antes só o dono via presentes na própria live, o
+          // texto de quem assiste nunca aparecia aqui. Precisa disso pra
+          // moderar (clicar no nome só faz sentido se der pra ver quem
+          // escreveu o quê).
+          if (msg.user_id && STATE.blockedUsers.includes(msg.user_id)) return;
+          addMyLiveComment(msg.username, msg.text, false, false, msg.user_id, roomName);
         },
         onViewerCountChange: (count) => {
           // Desconta a própria presença de quem transmite (não é espectador de si mesmo).
@@ -3851,7 +3877,7 @@ async function stopOwnLiveStream() {
   }
 }
 
-function addMyLiveComment(author, content, isSystem = false, isGift = false) {
+function addMyLiveComment(author, content, isSystem = false, isGift = false, authorUserId = null, roomName = null) {
   const msgEl = document.createElement("div");
   const safeAuthor = escapeHtml(author);
   const safeContent = escapeHtml(content);
@@ -3863,10 +3889,89 @@ function addMyLiveComment(author, content, isSystem = false, isGift = false) {
     msgEl.innerHTML = `<span class="msg-author">${safeAuthor}</span> <span class="msg-content">${safeContent}</span>`;
   } else {
     msgEl.className = "chat-msg";
-    msgEl.innerHTML = `<span class="msg-author">${safeAuthor}:</span> <span class="msg-content">${safeContent}</span>`;
+    // Nome clicável só quando dá pra moderar (tenho o user_id de quem
+    // escreveu e a sala é a minha própria live) — abre o menu de remover/
+    // silenciar em vez de qualquer outra ação.
+    const authorHtml = authorUserId && roomName
+      ? `<span class="msg-author" style="cursor:pointer;" onclick="openLiveChatModerationMenu('${authorUserId}', '${safeAuthor.replace(/'/g, "\\'")}', '${roomName}')">${safeAuthor}:</span>`
+      : `<span class="msg-author">${safeAuthor}:</span>`;
+    msgEl.innerHTML = `${authorHtml} <span class="msg-content">${safeContent}</span>`;
   }
   DOM.myLiveChatMessages.appendChild(msgEl);
   DOM.myLiveChatMessages.scrollTop = DOM.myLiveChatMessages.scrollHeight;
+}
+
+function openLiveChatModerationMenu(userId, username, roomName) {
+  STATE.liveModerationTarget = { userId, username, roomName };
+  document.getElementById("live-chat-moderation-title").textContent = username;
+  document.getElementById("modal-live-chat-moderation").style.display = "flex";
+}
+
+function closeLiveChatModerationMenu() {
+  document.getElementById("modal-live-chat-moderation").style.display = "none";
+}
+
+async function confirmLiveChatModeration(action) {
+  const target = STATE.liveModerationTarget;
+  if (!target) return;
+  closeLiveChatModerationMenu();
+  try {
+    await DB.moderateLiveRoom(action, target.userId, target.roomName);
+    showToast(action === "ban" ? `${target.username} foi removido da live.` : `${target.username} foi silenciado no chat.`);
+  } catch (err) {
+    showToast(err.message || "Não foi possível concluir a ação.");
+  }
+}
+
+// Lista de gerenciamento (desfazer remoção/silenciamento) — sem isso, uma
+// remoção por engano seria permanente sem nenhum jeito de reverter.
+async function openLiveModerationListPanel() {
+  document.getElementById("modal-live-moderation-list").style.display = "flex";
+  const bannedList = document.getElementById("live-moderation-banned-list");
+  const mutedList = document.getElementById("live-moderation-muted-list");
+  bannedList.innerHTML = `<div style="text-align:center;padding:12px;color:var(--light-gray);font-size:0.75rem;">Carregando...</div>`;
+  mutedList.innerHTML = "";
+
+  const roomName = STATE.myUserId ? `live-${STATE.myUserId}` : null;
+  try {
+    const [banned, muted] = await Promise.all([DB.getMyLiveRoomBans(), DB.getMyLiveChatMutes()]);
+    renderLiveModerationList(bannedList, banned, "unban", roomName);
+    renderLiveModerationList(mutedList, muted, "unmute", roomName);
+  } catch (err) {
+    bannedList.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar agora.</p>`;
+  }
+}
+
+function renderLiveModerationList(container, profiles, undoAction, roomName) {
+  if (profiles.length === 0) {
+    container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);padding:6px 0;">Ninguém aqui.</p>`;
+    return;
+  }
+  container.innerHTML = "";
+  profiles.forEach(p => {
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.innerHTML = `
+      <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${escapeHtml(p.username)}"></div>
+      <div class="inbox-details"><span class="inbox-name">${escapeHtml(p.display_name || p.username)}</span></div>
+      <button class="profile-action-btn secondary" style="padding: 4px 10px; height: auto;" onclick="undoLiveModeration('${undoAction}', '${p.id}', '${roomName}')">${undoAction === "unban" ? "Readmitir" : "Dessilenciar"}</button>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function undoLiveModeration(action, targetUserId, roomName) {
+  try {
+    await DB.moderateLiveRoom(action, targetUserId, roomName);
+    showToast("Atualizado.");
+    openLiveModerationListPanel();
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+function closeLiveModerationListPanel() {
+  document.getElementById("modal-live-moderation-list").style.display = "none";
 }
 
 // ==========================================================================
@@ -3883,23 +3988,47 @@ function toggleCoinShop() {
 }
 
 function switchProfileTab(tabName) {
-  const btnPosts = document.getElementById("profile-tab-posts-btn");
-  const btnStats = document.getElementById("profile-tab-stats-btn");
-  const panePosts = document.getElementById("profile-tab-posts");
-  const paneStats = document.getElementById("profile-tab-stats");
+  const tabs = { posts: "flex", stats: "block", saved: "flex" };
+  Object.keys(tabs).forEach(name => {
+    document.getElementById(`profile-tab-${name}-btn`).classList.toggle("active", name === tabName);
+    document.getElementById(`profile-tab-${name}`).style.display = name === tabName ? tabs[name] : "none";
+  });
 
-  if (tabName === "posts") {
-    btnPosts.classList.add("active");
-    btnStats.classList.remove("active");
-    panePosts.style.display = "flex";
-    paneStats.style.display = "none";
-  } else {
-    btnPosts.classList.remove("active");
-    btnStats.classList.add("active");
-    panePosts.style.display = "none";
-    paneStats.style.display = "block";
-    refreshProfileMetrics();
+  if (tabName === "stats") refreshProfileMetrics();
+  else if (tabName === "saved") renderSavedPostsGrid();
+}
+
+async function renderSavedPostsGrid() {
+  const grid = document.getElementById("profile-saved-grid-container");
+  const emptyState = document.getElementById("profile-saved-empty-state");
+  if (!grid) return;
+
+  let posts = [];
+  try {
+    posts = await DB.getMySavedPosts();
+  } catch (err) {
+    console.error("Falha ao carregar posts salvos:", err);
   }
+
+  grid.innerHTML = "";
+  if (posts.length === 0) {
+    grid.style.display = "none";
+    if (emptyState) emptyState.style.display = "flex";
+    return;
+  }
+  grid.style.display = "grid";
+  if (emptyState) emptyState.style.display = "none";
+  posts.forEach(post => {
+    const item = document.createElement("div");
+    item.className = "post-grid-item";
+    item.onclick = () => openPostLightbox(post.id);
+    const isCarousel = post.media_urls && post.media_urls.length > 1;
+    item.innerHTML = post.media_type === "image"
+      ? `<img src="${post.media_url}" alt="Post salvo">`
+      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+    if (isCarousel) item.innerHTML += `<div class="post-video-indicator" style="left:8px; right:auto;">🖼️ ${post.media_urls.length}</div>`;
+    grid.appendChild(item);
+  });
 }
 
 async function refreshProfileMetrics() {
@@ -4364,10 +4493,11 @@ async function openPostLightbox(postId) {
   STATE.lightboxCommentsHasMore = true;
 
   try {
-    const [likeState, comments, user] = await Promise.all([
+    const [likeState, comments, user, isSaved] = await Promise.all([
       DB.getPostLikeState(postId),
       DB.getComments(postId, 0, LIGHTBOX_COMMENTS_PAGE_SIZE),
-      Auth.getUser()
+      Auth.getUser(),
+      DB.isPostSavedByMe(postId)
     ]);
     STATE.activeLightboxLikeState = likeState;
     likes.textContent = `${likeState.likesCount} curtidas`;
@@ -4375,8 +4505,32 @@ async function openPostLightbox(postId) {
     STATE.lightboxCommentsOffset = comments.length;
     STATE.lightboxCommentsHasMore = comments.length === LIGHTBOX_COMMENTS_PAGE_SIZE;
     renderLightboxComments(comments, user ? user.id : null);
+    STATE.activeLightboxIsSaved = isSaved;
+    updateLightboxSaveButtonUI();
   } catch (err) {
     console.error("Falha ao carregar curtidas/comentários:", err);
+  }
+}
+
+function updateLightboxSaveButtonUI() {
+  const btn = document.getElementById("lightbox-save-btn");
+  if (!btn) return;
+  btn.textContent = STATE.activeLightboxIsSaved ? "✓ Salvo" : "🔖 Salvar";
+}
+
+async function toggleLightboxPostSave() {
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
+  const wasSaved = STATE.activeLightboxIsSaved;
+  try {
+    await DB.toggleSavePost(postId, wasSaved);
+    STATE.activeLightboxIsSaved = !wasSaved;
+    updateLightboxSaveButtonUI();
+    showToast(wasSaved ? "Post removido dos salvos." : "Post salvo!");
+    const savedTabActive = document.getElementById("profile-tab-saved-btn")?.classList.contains("active");
+    if (wasSaved && savedTabActive) renderSavedPostsGrid();
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
   }
 }
 
@@ -4541,11 +4695,37 @@ function buildCommentItem(c, myUserId) {
   const replyBtn = !c.parent_id
     ? `<button class="btn-reply-comment" onclick="startReplyToComment('${c.id}')">Responder</button>`
     : "";
+  const likeBtn = `<button class="btn-comment-like${c.liked_by_me ? " active" : ""}" data-comment-like-btn onclick="toggleCommentLikeClick('${c.id}')">${c.liked_by_me ? "❤️" : "🤍"} <span data-comment-like-count>${c.likes_count > 0 ? c.likes_count : ""}</span></button>`;
   item.innerHTML = `
     ${c.parent_id ? '<span class="reply-arrow">↳</span> ' : ""}<strong style="cursor:pointer;" onclick="openUserProfile('${c.user_id}')">${escapeHtml(authorName)}</strong> <span class="comment-text">${linkifyMentions(escapeHtml(c.text))}</span>${ownActions}
-    ${replyBtn ? `<div class="comment-actions-row">${replyBtn}</div>` : ""}
+    <div class="comment-actions-row">${likeBtn}${replyBtn}</div>
   `;
   return item;
+}
+
+async function toggleCommentLikeClick(commentId) {
+  const item = document.querySelector(`.lightbox-comment-item[data-comment-id="${commentId}"]`);
+  if (!item) return;
+  const btn = item.querySelector("[data-comment-like-btn]");
+  const countEl = item.querySelector("[data-comment-like-count]");
+  const wasLiked = btn.classList.contains("active");
+  const currentCount = parseInt(countEl.textContent, 10) || 0;
+
+  // Otimista: atualiza a tela na hora, sem esperar o round-trip — reverte
+  // se o servidor rejeitar (mesmo padrão de likeLightboxPost).
+  btn.classList.toggle("active", !wasLiked);
+  btn.firstChild.textContent = wasLiked ? "🤍 " : "❤️ ";
+  const newCount = wasLiked ? currentCount - 1 : currentCount + 1;
+  countEl.textContent = newCount > 0 ? newCount : "";
+
+  try {
+    await DB.toggleCommentLike(commentId, wasLiked);
+  } catch (err) {
+    btn.classList.toggle("active", wasLiked);
+    btn.firstChild.textContent = wasLiked ? "❤️ " : "🤍 ";
+    countEl.textContent = currentCount > 0 ? currentCount : "";
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
 }
 
 // Estado de "respondendo a X" — guarda só o id, o nome é lido de volta do
@@ -6882,6 +7062,12 @@ async function applyProfileToUI(profile) {
     STATE.blockedUsers = await DB.getBlockedUsers();
   } catch (err) {
     console.error("Falha ao carregar lista de bloqueios:", err);
+  }
+
+  try {
+    STATE.dmMutedUsers = await DB.getMyDmMutes();
+  } catch (err) {
+    console.error("Falha ao carregar conversas silenciadas:", err);
   }
 
   STATE.myCoins = profile.coins;

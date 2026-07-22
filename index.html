@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722m">
+  <link rel="stylesheet" href="styles.css?v=20260722n">
 </head>
 <body>
 
@@ -644,6 +644,10 @@
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                   <span>Métricas</span>
                 </button>
+                <button class="profile-tab-header-btn" id="profile-tab-saved-btn" onclick="switchProfileTab('saved')">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
+                  <span>Salvos</span>
+                </button>
               </div>
 
               <!-- Conteúdo das Tabs -->
@@ -673,6 +677,16 @@
                       <span>Total de lives:</span>
                       <strong id="metric-total-lives">—</strong>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Tab Salvos (privada, só eu vejo) -->
+                <div class="tab-pane" id="profile-tab-saved" style="display: none;">
+                  <div class="profile-posts-grid" id="profile-saved-grid-container"></div>
+                  <div class="discover-empty-state" id="profile-saved-empty-state" style="display: none;">
+                    <div class="discover-empty-icon">🔖</div>
+                    <h3>Nenhum post salvo ainda</h3>
+                    <p>Toque em "Salvar" num post pra guardar aqui — só você vê essa lista.</p>
                   </div>
                 </div>
               </div>
@@ -827,6 +841,7 @@
                   <button class="btn-live-control" onclick="toggleCameraFacing()" title="Trocar câmera">
                     <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm5.6-9.5L14.5 9.6l1.1-1.1 3.1 3.1-3.1 3.1-1.1-1.1 2.1-2.1H12v-1.5h4.6z"/></svg>
                   </button>
+                  <button class="btn-live-control" onclick="openLiveModerationListPanel()" title="Espectadores moderados">🚫</button>
                   <button class="btn-stop-my-live" onclick="stopOwnLiveStream(); navigateTo('discover');">ENCERRAR</button>
                 </div>
               </div>
@@ -997,6 +1012,7 @@
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                   <span id="lightbox-likes-count">42 curtidas</span>
                 </button>
+                <button class="btn-lightbox-like" id="lightbox-save-btn" style="margin-left: 8px;" onclick="toggleLightboxPostSave()">🔖 Salvar</button>
                 <button class="btn-lightbox-like" style="margin-left: 8px;" onclick="shareLightboxPost()">🔗 Compartilhar</button>
                 <button class="btn-lightbox-like" id="lightbox-report-btn" style="margin-left: 8px; color: var(--danger); display: none;" onclick="openReportPostPrompt(STATE.activeLightboxPostId)">🚩 Denunciar</button>
                 <button class="btn-lightbox-like" id="lightbox-edit-btn" style="margin-left: 8px;" onclick="editLightboxPost()">✏️ Editar</button>
@@ -1294,7 +1310,8 @@
               <h3 id="user-options-title">Opções</h3>
               <button class="btn-close-new-post" onclick="closeUserOptionsMenu()">×</button>
             </header>
-            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" id="btn-toggle-block" onclick="handleToggleBlock()">Bloquear</button>
+            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" id="btn-toggle-dm-mute" onclick="handleToggleDmMute()">Silenciar notificações de DM</button>
+            <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%;" id="btn-toggle-block" onclick="handleToggleBlock()">Bloquear</button>
             <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger);" onclick="openReportPrompt()">Denunciar</button>
           </div>
         </div>
@@ -1722,6 +1739,36 @@
               </div>
 
               <button class="btn-follow-primary" style="margin-top: 18px; width: 100%;" onclick="closeLivePrivacyModal()">Salvar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: moderar espectador do chat da minha live -->
+        <div class="new-post-modal" id="modal-live-chat-moderation" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLiveChatModerationMenu()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header" style="margin-bottom: 4px;">
+              <h3 id="live-chat-moderation-title">Opções</h3>
+              <button class="btn-close-new-post" onclick="closeLiveChatModerationMenu()">×</button>
+            </header>
+            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" onclick="confirmLiveChatModeration('mute')">🔇 Silenciar no chat</button>
+            <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger);" onclick="confirmLiveChatModeration('ban')">🚫 Remover da live</button>
+          </div>
+        </div>
+
+        <!-- Modal: lista de espectadores banidos/silenciados (gerenciar) -->
+        <div class="new-post-modal" id="modal-live-moderation-list" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLiveModerationListPanel()"></div>
+          <div class="new-post-content" style="height: 65%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>Espectadores moderados</h3>
+              <button class="btn-close-new-post" onclick="closeLiveModerationListPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <h3 style="margin: 4px 0;">🚫 Removidos</h3>
+              <div class="inbox-list" id="live-moderation-banned-list"></div>
+              <h3 style="margin: 18px 0 4px;">🔇 Silenciados no chat</h3>
+              <div class="inbox-list" id="live-moderation-muted-list"></div>
             </div>
           </div>
         </div>
@@ -2211,9 +2258,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722m"></script>
+  <script src="supabase-client.js?v=20260722n"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722m"></script>
+  <script src="app.js?v=20260722n"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

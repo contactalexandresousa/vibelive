@@ -3566,6 +3566,23 @@ input:-webkit-autofill:focus {
   color: var(--primary);
 }
 
+.btn-comment-like {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btn-comment-like.active {
+  color: var(--primary);
+}
+
 .lightbox-replying-to {
   display: flex;
   align-items: center;
