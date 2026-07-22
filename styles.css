@@ -2,52 +2,79 @@
    VibeLive - Design System & Stylesheet (Vanilla CSS)
    ========================================================================== */
 
-/* 1. VARIÁVEIS GLOBAIS (DESIGN SYSTEM) */
+/* 1. VARIÁVEIS GLOBAIS (DESIGN SYSTEM) — atualizado numa passada de refresh
+   visual (mantém TODO nome de variável já usado nas ~6 mil linhas deste
+   arquivo e nos estilos inline do index.html; só refina valores + acrescenta
+   escalas novas de espaçamento/raio/tipografia pra aplicar de forma
+   progressiva nos componentes mais compartilhados, sem quebrar nada que já
+   referencia os tokens antigos). Undertone violeta-quente em vez de preto
+   chapado, sombra de "glow" contida a 1-2 lugares por tela em vez de
+   espalhada, raio de borda consolidado numa escala só. */
 :root {
-  --bg-deep: #0a0a0d;
-  --bg-card: rgba(22, 22, 27, 0.72);
-  --bg-input: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.07);
-  --glass-highlight: rgba(255, 255, 255, 0.12);
+  --bg-deep: #0a0910;
+  --bg-card: rgba(21, 19, 28, 0.74);
+  --bg-input: rgba(255, 255, 255, 0.055);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.13);
 
   /* Cores Temáticas — paleta reduzida a 1 cor de marca + dourado (moeda) */
-  --primary: #ff4d6d;        /* Coral refinado — marca / ações */
-  --primary-dark: #b9294a;   /* Tom escuro da marca — gradientes, pressed */
-  --primary-soft: rgba(255, 77, 109, 0.12);
-  --secondary: #f0b23d;      /* Dourado — reservado para moedas/VIP */
-  --secondary-dark: #c98a22;
-  --info: #4e9eff;           /* Azul discreto — uso pontual (time PK, verificado) */
+  --primary: #ff4568;        /* Coral refinado — marca / ações */
+  --primary-dark: #c22d50;   /* Tom escuro da marca — gradientes, pressed */
+  --primary-soft: rgba(255, 69, 104, 0.14);
+  --secondary: #ffb238;      /* Dourado — reservado para moedas/VIP */
+  --secondary-dark: #d68f1e;
+  --info: #4ea1ff;           /* Azul discreto — uso pontual (time PK, verificado) */
   --info-dark: #2c6fcc;
-  --success: #34d399;
-  --danger: #f1554c;
-  --dark-gray: #1c1c22;
-  --light-gray: #8b8b93;
-  --text-primary: #f5f5f7;
-  --text-secondary: #c6c6cc;
+  --success: #2fd4a8;
+  --danger: #ff5a6b;
+  --dark-gray: #1a1822;
+  --light-gray: #928da3;
+  --text-primary: #f7f6fa;
+  --text-secondary: #a29fb3;
 
   /* Fontes */
   --font-display: 'Outfit', sans-serif;
   --font-body: 'Inter', sans-serif;
 
-  /* Efeitos — sombras suaves de elevação, sem halo neon */
-  --shadow-premium: 0 20px 40px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 8px 20px rgba(255, 77, 109, 0.22);
-  --shadow-glow-gold: 0 8px 20px rgba(240, 178, 61, 0.2);
+  /* Escala de espaçamento e raio — novas, pensadas pra consolidar a mistura
+     de valores ad-hoc (8/10/12/14/16/18/20/24px) acumulada rodada a rodada.
+     Aplicadas progressivamente: componentes tocados a partir de agora usam
+     essa escala; o restante continua com os valores próprios até uma
+     passada dedicada por tela. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+
+  /* Efeitos — sombras suaves de elevação; glow reservado pro que é
+     realmente "ao vivo/em destaque" (badge AO VIVO, CTA principal), não
+     decoração espalhada em todo card. */
+  --shadow-premium: 0 20px 44px rgba(0, 0, 0, 0.5);
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.28);
+  --shadow-2: 0 16px 36px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 8px 22px rgba(255, 69, 104, 0.24);
+  --shadow-glow-gold: 0 8px 20px rgba(255, 178, 56, 0.2);
   --blur-glass: blur(20px);
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 
   /* Fundo da página fora do "telefone" (visível em telas largas) e tokens
      auxiliares usados no tema claro abaixo — no escuro só repetem o que já
      existia hardcoded, pra não mudar nada do visual atual por padrão. */
-  --page-bg: #12131a;
+  --page-bg: #100e17;
   --overlay-04: rgba(255, 255, 255, 0.04);
   --overlay-06: rgba(255, 255, 255, 0.06);
   --overlay-10: rgba(255, 255, 255, 0.1);
   --shadow-soft: rgba(0, 0, 0, 0.35);
-  --screen-gradient-start: #131318;
-  --screen-gradient-end: #08090d;
-  --glass-dark-rgb: 8, 9, 13;
-  --nav-bar-bg: rgba(18, 20, 29, 0.85);
+  --screen-gradient-start: #14121b;
+  --screen-gradient-end: #08070d;
+  --glass-dark-rgb: 8, 7, 13;
+  --nav-bar-bg: rgba(17, 16, 26, 0.85);
 }
 
 /* Tema claro: aplicado quando o usuário escolhe manualmente (toggleTheme em
@@ -55,25 +82,32 @@
    (Discover, Perfil, Live, Mensagens, modais de pagamento/lightbox) e os
    componentes compartilhados entre elas (cards, modais, itens de lista).
    Áreas menos acessadas podem ainda manter tons do tema escuro até uma
-   passada futura dedicada ao arquivo inteiro. */
+   passada futura dedicada ao arquivo inteiro. Branco quente (não estampado)
+   com o mesmo coral, ajustado pra manter contraste AA em fundo claro. */
 :root[data-theme="light"] {
-  --bg-deep: #f4f3f1;
-  --bg-card: rgba(255, 255, 255, 0.86);
-  --bg-input: rgba(20, 20, 30, 0.05);
-  --glass-border: rgba(20, 20, 30, 0.1);
-  --glass-highlight: rgba(20, 20, 30, 0.06);
-  --dark-gray: #ece9e6;
-  --light-gray: #6f6f78;
-  --text-primary: #17171c;
-  --text-secondary: #4a4a52;
-  --page-bg: #e7e5e1;
-  --overlay-04: rgba(20, 20, 30, 0.04);
-  --overlay-06: rgba(20, 20, 30, 0.06);
-  --overlay-10: rgba(20, 20, 30, 0.09);
-  --shadow-soft: rgba(20, 20, 30, 0.14);
-  --shadow-premium: 0 20px 40px rgba(20, 20, 30, 0.16);
+  --bg-deep: #faf8f6;
+  --bg-card: rgba(255, 255, 255, 0.88);
+  --bg-input: rgba(20, 18, 30, 0.05);
+  --glass-border: rgba(20, 18, 30, 0.1);
+  --glass-highlight: rgba(20, 18, 30, 0.06);
+  --primary: #e8355c;
+  --primary-dark: #b3203f;
+  --primary-soft: rgba(232, 53, 92, 0.1);
+  --secondary-dark: #b5760f;
+  --dark-gray: #eeebe7;
+  --light-gray: #6f6b7a;
+  --text-primary: #17151d;
+  --text-secondary: #4c4856;
+  --page-bg: #ece8e3;
+  --overlay-04: rgba(20, 18, 30, 0.04);
+  --overlay-06: rgba(20, 18, 30, 0.06);
+  --overlay-10: rgba(20, 18, 30, 0.09);
+  --shadow-soft: rgba(20, 18, 30, 0.14);
+  --shadow-premium: 0 20px 40px rgba(20, 18, 30, 0.16);
+  --shadow-1: 0 2px 8px rgba(20, 18, 30, 0.08);
+  --shadow-2: 0 14px 30px rgba(20, 18, 30, 0.14);
   --screen-gradient-start: #ffffff;
-  --screen-gradient-end: #ece9e6;
+  --screen-gradient-end: #eeebe7;
   --glass-dark-rgb: 255, 255, 255;
   --nav-bar-bg: rgba(255, 255, 255, 0.85);
 }
