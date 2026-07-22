@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722i">
+  <link rel="stylesheet" href="styles.css?v=20260722j">
 </head>
 <body>
 
@@ -946,6 +946,7 @@
             <img id="story-viewer-avatar" class="story-viewer-avatar" src="" alt="">
             <span id="story-viewer-username" class="story-viewer-username"></span>
             <span id="story-viewer-time" class="story-viewer-time"></span>
+            <button id="story-viewer-mute-btn" class="story-viewer-mute-btn" data-muted="false" onclick="toggleCurrentStoryMute()" style="display: none;" title="Silenciar stories dessa pessoa">🔔</button>
             <button class="story-viewer-close" onclick="closeStoryViewer()">×</button>
           </div>
           <div class="story-viewer-media-wrapper" id="story-viewer-media-wrapper">
@@ -957,6 +958,10 @@
           <div class="story-viewer-own-actions" id="story-viewer-own-actions" style="display: none;">
             <button onclick="openStoryViewersList()">👁 <span id="story-viewer-views-count">0</span> visualizações</button>
             <button class="danger" onclick="handleDeleteCurrentStory()">🗑️ Excluir</button>
+          </div>
+          <div class="story-viewer-reply-bar" id="story-viewer-reply-bar" style="display: none;">
+            <input type="text" id="story-reply-input" placeholder="Responder..." onkeydown="if(event.key==='Enter')sendStoryReply()">
+            <button onclick="sendStoryReply()">➤</button>
           </div>
         </div>
 
@@ -1047,6 +1052,10 @@
 
               <button class="btn-publish-post" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openBlockedUsersPanel()">
                 🚫 Contas Bloqueadas
+              </button>
+
+              <button class="btn-publish-post" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openMutedStoriesPanel()">
+                🔕 Stories Silenciados
               </button>
 
               <button class="btn-publish-post" id="btn-toggle-theme" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="toggleTheme()">
@@ -1442,6 +1451,20 @@
             </header>
             <div class="search-results-scroll">
               <div class="inbox-list" id="blocked-users-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Stories Silenciados -->
+        <div class="new-post-modal" id="modal-muted-stories" style="display: none;">
+          <div class="new-post-overlay" onclick="closeMutedStoriesPanel()"></div>
+          <div class="new-post-content" style="height: 70%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔕 Stories Silenciados</h3>
+              <button class="btn-close-new-post" onclick="closeMutedStoriesPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="muted-stories-list-container"></div>
             </div>
           </div>
         </div>
@@ -2079,9 +2102,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722i"></script>
+  <script src="supabase-client.js?v=20260722j"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722i"></script>
+  <script src="app.js?v=20260722j"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

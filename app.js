@@ -2248,6 +2248,7 @@ async function openAdminStatsPanel() {
       { label: "Assinaturas ativas", value: stats.active_subscriptions, icon: "⭐" },
       { label: "Saques pendentes", value: `${stats.pending_withdrawals} (🪙 ${stats.pending_withdrawals_coins})`, icon: "💸" },
       { label: "Denúncias pendentes", value: stats.pending_reports, icon: "🛡️" },
+      { label: "Recursos pendentes (suspensão + 2FA)", value: stats.pending_appeals, icon: "📋" },
       { label: "Bloqueios de rate limit hoje", value: stats.rate_limit_blocks_today, icon: "⛔" },
       { label: "Imagens bloqueadas por moderação hoje", value: stats.moderation_blocks_today, icon: "🖼️" },
       { label: "Receita total (PIX + cartão aprovados)", value: `R$ ${brl}`, icon: "📈", highlight: true },
@@ -2466,6 +2467,54 @@ async function renderBlockedUsersList() {
     });
   } catch (err) {
     container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+async function openMutedStoriesPanel() {
+  if (!requireAuth()) return;
+  document.getElementById("modal-muted-stories").style.display = "flex";
+  await renderMutedStoriesList();
+}
+
+function closeMutedStoriesPanel() {
+  document.getElementById("modal-muted-stories").style.display = "none";
+}
+
+async function renderMutedStoriesList() {
+  const container = document.getElementById("muted-stories-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  try {
+    const users = await DB.getMyStoryMutesWithProfiles();
+    if (users.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Você não silenciou stories de ninguém.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    users.forEach(p => {
+      const name = escapeHtml(p.display_name || p.username);
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}" style="border-radius:50%;"></div>
+        <div class="inbox-details"><span class="inbox-name">${name}</span><span class="inbox-message">@${escapeHtml(p.username)}</span></div>
+        <div class="inbox-right"><button class="btn-follow-primary" style="height:26px; font-size:0.62rem; padding:0 10px;" onclick="unmuteStoryFromList('${p.id}', this)">Dessilenciar</button></div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+async function unmuteStoryFromList(userId, btn) {
+  btn.disabled = true;
+  try {
+    await DB.toggleStoryMute(userId, false);
+    await renderMutedStoriesList();
+    showToast("Stories dessa pessoa não estão mais silenciados.");
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível atualizar agora.");
   }
 }
 
@@ -5839,6 +5888,14 @@ function showCurrentStory() {
       .then(views => { document.getElementById("story-viewer-views-count").textContent = views.length; })
       .catch(() => {});
   }
+  // Silenciar e responder só fazem sentido pro story de outra pessoa — o
+  // próprio autor já vê "quem viu"/"excluir" no lugar dessas ações.
+  const muteBtn = document.getElementById("story-viewer-mute-btn");
+  muteBtn.style.display = isMine ? "none" : "flex";
+  muteBtn.dataset.muted = "false";
+  muteBtn.textContent = "🔔";
+  document.getElementById("story-viewer-reply-bar").style.display = isMine ? "none" : "flex";
+  document.getElementById("story-reply-input").value = "";
 
   DB.markStoryViewed(story.id).catch(() => {});
 
@@ -5975,6 +6032,50 @@ async function handleDeleteCurrentStory() {
     }
   } catch (err) {
     showToast(err.message || "Não foi possível excluir o story agora.");
+  }
+}
+
+async function toggleCurrentStoryMute() {
+  const author = STATE.storiesFeed[STATE.storyViewerAuthorIndex];
+  if (!author) return;
+  const btn = document.getElementById("story-viewer-mute-btn");
+  const newMuted = btn.dataset.muted !== "true";
+
+  try {
+    await DB.toggleStoryMute(author.user_id, newMuted);
+    btn.dataset.muted = String(newMuted);
+    btn.textContent = newMuted ? "🔕" : "🔔";
+    showToast(newMuted ? "Stories dessa pessoa silenciados." : "Stories dessa pessoa não estão mais silenciados.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+// Resposta a story vira DM de verdade — pra story de foto, anexa a própria
+// imagem do story na mensagem (dá contexto visual, como qualquer app de
+// story faz); vídeo não tem como virar miniatura sem processamento extra,
+// então só prefixa o texto.
+async function sendStoryReply() {
+  if (!requireAuth()) return;
+  const input = document.getElementById("story-reply-input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  const author = STATE.storiesFeed[STATE.storyViewerAuthorIndex];
+  if (!story || !author) return;
+
+  input.disabled = true;
+  try {
+    const imageUrl = story.media_type === "image" ? story.media_url : null;
+    const messageText = story.media_type === "image" ? text : `📹 Respondendo ao story: ${text}`;
+    await DB.sendDirectMessage(author.user_id, messageText, imageUrl);
+    input.value = "";
+    showToast("Resposta enviada!");
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar a resposta agora.");
+  } finally {
+    input.disabled = false;
   }
 }
 

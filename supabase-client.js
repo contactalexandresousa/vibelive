@@ -1376,6 +1376,23 @@ const DB = {
     if (error) throw error;
   },
 
+  async toggleStoryMute(userId, muted) {
+    const { error } = await sb.rpc("toggle_story_mute", { p_user_id: userId, p_muted: muted });
+    if (error) throw error;
+  },
+
+  async getMyStoryMutesWithProfiles() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from("story_mutes")
+      .select("muted_user_id, profiles!story_mutes_muted_user_id_fkey(id, username, display_name, avatar_url)")
+      .eq("muter_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data.map(r => r.profiles).filter(Boolean);
+  },
+
   async getStoryViewers(storyId) {
     const { data, error } = await sb
       .from("story_views")
