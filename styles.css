@@ -1256,7 +1256,7 @@ body {
   flex: 1;
   background: none;
   border: none;
-  color: #fff;
+  color: var(--text-primary);
   outline: none;
   font-size: 0.85rem;
 }
@@ -1442,7 +1442,7 @@ body {
 
 /* 11. TELA DE CHAT PRIVADO (ver seção completa mais abaixo) */
 .private-chat-input-bar input::placeholder {
-  color: rgba(255,255,255,0.4);
+  color: var(--light-gray);
 }
 
 /* 12. TELA DE PERFIL E MOEDAS (WALLET) */
@@ -1995,7 +1995,7 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   padding: 0 16px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.85rem;
   outline: none;
 }
@@ -2876,9 +2876,9 @@ input:-webkit-autofill:focus {
 }
 
 .profile-action-btn.secondary {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .profile-action-btn.secondary .coin-badge {
@@ -3070,7 +3070,7 @@ input:-webkit-autofill:focus {
 
 .metric-row strong {
   font-size: 0.78rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .btn-logout-profile {
@@ -3191,18 +3191,18 @@ input:-webkit-autofill:focus {
 }
 
 .type-toggle-btn.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--overlay-10);
+  color: var(--text-primary);
 }
 
 .form-group-post select,
 .form-group-post textarea,
 .form-group-post input {
-  background: rgba(0,0,0,0.3);
+  background: var(--bg-input);
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   padding: 10px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.78rem;
 }
 
@@ -3527,11 +3527,11 @@ input:-webkit-autofill:focus {
 .lightbox-comment-input-row input {
   flex: 1;
   height: 32px;
-  background: rgba(0,0,0,0.3);
+  background: var(--bg-input);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 0 10px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.72rem;
 }
 
@@ -4553,8 +4553,8 @@ input:-webkit-autofill:focus {
 
 .chat-bubble.received {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: var(--overlay-04);
+  color: var(--text-primary);
   border-bottom-left-radius: 4px;
   border: 1px solid var(--glass-border);
 }
@@ -4612,12 +4612,12 @@ input:-webkit-autofill:focus {
 
 .private-chat-input-bar input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   height: 36px;
   border-radius: 18px;
   padding: 0 14px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.72rem;
 }
 
@@ -5435,11 +5435,11 @@ input:-webkit-autofill:focus {
 
 .onboarding-input {
   width: 100%;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-input);
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   padding: 12px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.85rem;
   font-family: var(--font-body);
 }

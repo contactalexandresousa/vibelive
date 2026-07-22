@@ -473,6 +473,10 @@ function renderNotificationsList() {
       const preview = escapeHtml((n.metadata && n.metadata.text) || "");
       text = `${actorName} comentou: "${preview}"`;
       icon = "💬";
+    } else if (n.type === "gift_received") {
+      const giftLabel = GIFT_LABELS_BY_CODE[n.metadata && n.metadata.gift_code] || "uma Rosa";
+      text = `${actorName} te enviou ${giftLabel}`;
+      icon = "🎁";
     } else {
       text = `${actorName} está ao vivo agora!`;
       icon = "🔴";
@@ -534,7 +538,7 @@ async function handleNotificationClick(index) {
   if (!n.actor) return;
   if (n.type === "went_live" || n.type === "live_invite") {
     enterRealLiveRoom(n.actor_id);
-  } else if (n.type === "new_follower" || n.type === "missed_call") {
+  } else if (n.type === "new_follower" || n.type === "missed_call" || n.type === "gift_received") {
     openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
   } else if (n.type === "cohost_invite" && n.metadata && n.metadata.invite_id) {
     showCohostInviteResponse(n);
@@ -1096,6 +1100,15 @@ const GIFT_CODES = {
   "Coroa VIP": "coroa_vip",
   "Super Carro": "super_carro",
   "Castelo": "castelo"
+};
+
+const GIFT_LABELS_BY_CODE = {
+  rosa: "uma Rosa 🌹",
+  chocolate: "um Chocolate 🍫",
+  diamante: "um Diamante 💎",
+  coroa_vip: "uma Coroa VIP 👑",
+  super_carro: "um Super Carro 🚗",
+  castelo: "um Castelo 🏰"
 };
 
 async function sendSelectedGift() {
@@ -1874,6 +1887,7 @@ const PUSH_PREFERENCE_LABELS = {
   subscription_expired: "Minha assinatura expirou",
   post_like: "Curtida no meu post",
   post_comment: "Comentário no meu post",
+  gift_received: "Presente recebido",
 };
 
 async function openPushPreferencesModal() {
