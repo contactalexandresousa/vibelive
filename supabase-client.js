@@ -119,6 +119,20 @@ const DB = {
     return data;
   },
 
+  async getProfileByUsername(username) {
+    const { data, error } = await sb.from("profiles").select("*").eq("username", username).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  // Usado só pra resolver um link de post compartilhado (share-preview) até
+  // o autor — RLS de posts já barra retornar post privado/de conta suspensa.
+  async getPost(postId) {
+    const { data, error } = await sb.from("posts").select("*").eq("id", postId).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
   // Contadores reais do perfil (seguindo/seguidores/curtidas) — antes eram
   // números fixos e falsos no HTML.
   async getProfileStats(userId, username) {
@@ -479,6 +493,21 @@ const DB = {
 
   async searchPostsByHashtag(tag, limit = 40) {
     const { data, error } = await sb.rpc("search_posts_by_hashtag", { p_tag: tag.replace(/^#/, ""), p_limit: limit });
+    if (error) throw error;
+    if (data.length === 0) return [];
+
+    const userIds = [...new Set(data.map(p => p.user_id))];
+    const { data: profiles, error: profErr } = await sb.from("profiles").select("id, username, display_name, avatar_url").in("id", userIds);
+    if (profErr) throw profErr;
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+    return data.map(p => ({ ...p, author: profileMap.get(p.user_id) }));
+  },
+
+  // Busca livre na legenda (diferente da hashtag, que é exata) — RLS de
+  // posts já filtra suspenso/privado sozinha, então é uma consulta direta,
+  // sem precisar de RPC.
+  async searchPostsByCaption(query, limit = 30) {
+    const { data, error } = await sb.from("posts").select("*").ilike("caption", `%${query}%`).order("created_at", { ascending: false }).limit(limit);
     if (error) throw error;
     if (data.length === 0) return [];
 

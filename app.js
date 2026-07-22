@@ -253,7 +253,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!ageGatePending && profile && !profile.onboarding_completed) {
       openOnboardingWizard();
     } else {
-      navigateTo("discover");
+      const openedSharedLink = await handleSharedDeepLink();
+      if (!openedSharedLink) navigateTo("discover");
     }
   }, 2500);
 });
@@ -459,6 +460,9 @@ function renderNotificationsList() {
     } else if (n.type === "cohost_invite") {
       text = `${actorName} te chamou pra co-transmitir`;
       icon = "👥";
+    } else if (n.type === "missed_call") {
+      text = `Chamada perdida de ${actorName}`;
+      icon = "📞";
     } else {
       text = `${actorName} está ao vivo agora!`;
       icon = "🔴";
@@ -486,7 +490,7 @@ function handleNotificationClick(index) {
   closeNotificationPanel();
   if (n.type === "went_live" || n.type === "live_invite") {
     enterRealLiveRoom(n.actor_id);
-  } else if (n.type === "new_follower") {
+  } else if (n.type === "new_follower" || n.type === "missed_call") {
     openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
   } else if (n.type === "cohost_invite" && n.metadata && n.metadata.invite_id) {
     showCohostInviteResponse(n);
@@ -3586,6 +3590,75 @@ async function deleteLightboxPost() {
   }
 }
 
+// Compartilhamento de perfil/post — o link compartilhado aponta pra Edge
+// Function share-preview (não pro app direto), que devolve OG tags corretas
+// pra bot de rede social e redireciona gente de verdade pro deep link real
+// (index.html?profile=... ou ?post=..., lido em handleSharedDeepLink no boot).
+async function shareLink(previewUrl, title, text) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url: previewUrl });
+      return;
+    } catch (err) {
+      if (err.name === "AbortError") return; // usuário cancelou o share nativo
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(previewUrl);
+    showToast("Link copiado!");
+  } catch (err) {
+    showToast("Não foi possível copiar o link agora.");
+  }
+}
+
+function shareMyProfile() {
+  if (!STATE.myUsername) return;
+  const url = `${SUPABASE_URL}/functions/v1/share-preview?type=profile&username=${encodeURIComponent(STATE.myUsername)}`;
+  shareLink(url, `${STATE.profileName || STATE.myUsername} no VibeLive`, "Dá uma olhada no meu perfil no VibeLive!");
+}
+
+function shareLightboxPost() {
+  const postId = STATE.activeLightboxPostId;
+  if (!postId) return;
+  const url = `${SUPABASE_URL}/functions/v1/share-preview?type=post&id=${encodeURIComponent(postId)}`;
+  shareLink(url, "Post no VibeLive", "Dá uma olhada nesse post no VibeLive!");
+}
+
+// Chamado no boot (DOMContentLoaded) — se a URL trouxe ?profile=... ou
+// ?post=..., é porque veio de um link compartilhado (share-preview
+// redireciona pra cá); navega direto pro destino em vez de cair no Discover.
+async function handleSharedDeepLink() {
+  const params = new URLSearchParams(location.search);
+  const username = params.get("profile");
+  const postId = params.get("post");
+  if (!username && !postId) return false;
+
+  history.replaceState(null, "", location.pathname); // limpa a query da URL sem recarregar
+
+  // Não existe uma tela dedicada de "ver perfil/post de outra pessoa" no app
+  // hoje — em todo lugar que se clica num perfil alheio (busca, hashtag) o
+  // destino já é abrir uma conversa direta com quem publicou, então o link
+  // compartilhado segue o mesmo caminho em vez de inventar uma tela nova de
+  // visualização (que também evita o bug de mostrar botão de editar/excluir
+  // pra quem abrir o link de um post que não é seu).
+  try {
+    let profile = null;
+    if (postId) {
+      const post = await DB.getPost(postId);
+      if (post) profile = await DB.getProfile(post.user_id);
+    } else if (username) {
+      profile = await DB.getProfileByUsername(username);
+    }
+    if (!profile) return false;
+    if (!STATE.isLoggedIn) { requireAuth(); return true; }
+    openPrivateChat(profile.id, profile.display_name || profile.username, profile.avatar_url);
+    return true;
+  } catch (err) {
+    console.error("Falha ao abrir link compartilhado:", err);
+    return false;
+  }
+}
+
 const LIGHTBOX_COMMENTS_PAGE_SIZE = 30;
 
 function buildCommentItem(c, myUserId) {
@@ -4468,6 +4541,7 @@ STATE.activeCallInvite = null; // linha atual de call_invites, chamando ou conec
 STATE.callLocalStream = null;
 STATE.callLiveKitRoom = null;
 STATE.callInvitesChannel = null; // canal Realtime global de sinalização de chamada
+STATE.callRingTimeout = null; // desiste sozinho depois de 30s tocando sem resposta
 
 // Chamador: cria o convite e mostra "Chamando..." — a conexão de verdade só
 // acontece quando handleCallUpdate() vir um status 'accepted' (o callee que
@@ -4485,6 +4559,15 @@ async function startVideoCall() {
       name: DOM.chatPartnerName ? DOM.chatPartnerName.textContent : "Alguém",
       avatar_url: DOM.chatPartnerAvatar ? DOM.chatPartnerAvatar.src : ""
     }, false);
+
+    // Ninguém atende pra sempre — depois de 30s sem resposta, desiste sozinho
+    // (isso é o que faz o destinatário receber "chamada perdida" quando só
+    // ignorou o toque, não só quando o chamador cancela na mão).
+    STATE.callRingTimeout = setTimeout(() => {
+      if (STATE.activeCallInvite && STATE.activeCallInvite.id === invite.id) {
+        cancelOutgoingCall();
+      }
+    }, 30000);
   } catch (err) {
     showToast(err.message || "Não foi possível iniciar a chamada agora.");
   }
@@ -4517,6 +4600,7 @@ async function handleCallUpdate(invite) {
     const wasConnected = !!STATE.callLiveKitRoom;
     closeCallOverlay();
     if (invite.status === "declined") showToast("Chamada recusada.");
+    else if (invite.status === "missed") showToast("Chamada perdida.");
     else if (wasConnected) showToast("Chamada encerrada.");
   }
 }
@@ -4586,6 +4670,8 @@ async function connectToCallRoom(invite) {
 
     document.getElementById("call-ringing-state").style.display = "none";
     document.getElementById("call-connected-state").style.display = "block";
+    document.getElementById("call-btn-mic").classList.remove("off");
+    document.getElementById("call-btn-camera").classList.remove("off");
   } catch (err) {
     console.error("Falha ao conectar na chamada:", err);
     showToast("Não foi possível ativar câmera/microfone pra chamada.");
@@ -4605,7 +4691,30 @@ async function hangUpCall() {
   }
 }
 
+// Muda/câmera durante a chamada — desativa o MediaStreamTrack local em vez de
+// parar de publicar: a outra pessoa continua recebendo a faixa (só que muda/
+// preta), sem precisar renegociar a publicação no LiveKit no meio da ligação.
+function toggleCallMic() {
+  if (!STATE.callLocalStream) return;
+  const track = STATE.callLocalStream.getAudioTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  document.getElementById("call-btn-mic").classList.toggle("off", !track.enabled);
+}
+
+function toggleCallCamera() {
+  if (!STATE.callLocalStream) return;
+  const track = STATE.callLocalStream.getVideoTracks()[0];
+  if (!track) return;
+  track.enabled = !track.enabled;
+  document.getElementById("call-btn-camera").classList.toggle("off", !track.enabled);
+}
+
 function closeCallOverlay() {
+  if (STATE.callRingTimeout) {
+    clearTimeout(STATE.callRingTimeout);
+    STATE.callRingTimeout = null;
+  }
   document.getElementById("call-overlay").style.display = "none";
   if (STATE.callLocalStream) {
     STATE.callLocalStream.getTracks().forEach(t => t.stop());
@@ -4772,12 +4881,18 @@ function performProfileSearch() {
     return;
   }
 
-  // Busca real na tabela profiles (com um pequeno atraso pra não bater no
-  // banco a cada tecla digitada).
+  // Busca real (perfis + legenda de posts em paralelo, com um pequeno atraso
+  // pra não bater no banco a cada tecla digitada).
   searchDebounceTimer = setTimeout(async () => {
-    let matches;
+    let matches = [];
+    let postMatches = [];
     try {
-      matches = (await DB.searchProfiles(query)).filter(p => !STATE.blockedUsers.includes(p.id));
+      const [profileResults, postResults] = await Promise.all([
+        DB.searchProfiles(query),
+        query.length >= 2 ? DB.searchPostsByCaption(query) : Promise.resolve([])
+      ]);
+      matches = profileResults.filter(p => !STATE.blockedUsers.includes(p.id));
+      postMatches = postResults.filter(p => !p.author || !STATE.blockedUsers.includes(p.author.id));
     } catch (err) {
       container.innerHTML = `
         <div class="discover-empty-state" style="display: flex;">
@@ -4789,21 +4904,59 @@ function performProfileSearch() {
       return;
     }
 
-    if (matches.length === 0) {
+    if (matches.length === 0 && postMatches.length === 0) {
       container.innerHTML = "";
       const empty = document.createElement("div");
       empty.className = "discover-empty-state";
       empty.style.display = "flex";
-      empty.innerHTML = `<div class="discover-empty-icon">🔍</div><h3>Nenhum perfil encontrado</h3>`;
+      empty.innerHTML = `<div class="discover-empty-icon">🔍</div><h3>Nada encontrado</h3>`;
       const p = document.createElement("p");
-      p.textContent = `Não encontramos ninguém para "${query}".`;
+      p.textContent = `Não encontramos perfis nem posts para "${query}".`;
       empty.appendChild(p);
       container.appendChild(empty);
       return;
     }
 
-    renderProfileSearchResults(container, matches);
+    if (matches.length > 0) {
+      renderProfileSearchResults(container, matches);
+    } else {
+      container.innerHTML = "";
+    }
+    if (postMatches.length > 0) {
+      renderCaptionSearchResults(container, postMatches);
+    }
   }, 300);
+}
+
+// Resultado de busca livre na legenda — mesmo grid usado na busca de
+// hashtag (jumpToHashtagSearch), só que anexado embaixo dos perfis em vez de
+// substituir o container inteiro.
+function renderCaptionSearchResults(container, posts) {
+  const label = document.createElement("p");
+  label.textContent = "Posts";
+  label.style.cssText = "font-size:0.65rem;color:var(--light-gray);text-transform:uppercase;letter-spacing:0.3px;margin:14px 0 6px;";
+  container.appendChild(label);
+
+  const grid = document.createElement("div");
+  grid.className = "profile-posts-grid";
+  posts.forEach(post => {
+    const authorName = post.author ? (post.author.display_name || post.author.username) : "";
+    const item = document.createElement("div");
+    item.className = "post-grid-item";
+    item.title = authorName;
+    item.style.cursor = "pointer";
+    item.innerHTML = post.media_type === "image"
+      ? `<img src="${post.media_url}" alt="Post de ${escapeHtml(authorName)}">`
+      : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+    item.onclick = () => {
+      if (post.author) {
+        closeSearchOverlay();
+        openPrivateChat(post.author.id, authorName, post.author.avatar_url);
+      }
+    };
+    grid.appendChild(item);
+  });
+  container.appendChild(grid);
 }
 
 // Escapa primeiro (defesa contra XSS na legenda, que é texto livre do

@@ -3845,11 +3845,17 @@ input:-webkit-autofill:focus {
   background: #000;
 }
 
-.call-hangup-btn {
+.call-controls-row {
   position: absolute;
   bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.call-hangup-btn {
   width: 60px;
   height: 60px;
   border-radius: 50%;
@@ -3860,6 +3866,27 @@ input:-webkit-autofill:focus {
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 8px 20px rgba(241, 85, 76, 0.4);
+}
+
+.call-control-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.call-control-btn.off {
+  background: #fff;
+}
+
+.call-control-btn.off svg path {
+  fill: #17171c;
 }
 
 .live-poll-card {
