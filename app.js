@@ -94,6 +94,7 @@ const DOM = {
     "live-room": document.getElementById("screen-live-room"),
     messages: document.getElementById("screen-messages"),
     "private-chat": document.getElementById("screen-private-chat"),
+    "user-profile": document.getElementById("screen-user-profile"),
     profile: document.getElementById("screen-profile"),
     "go-live": document.getElementById("screen-go-live"),
     auth: document.getElementById("screen-auth")
@@ -316,7 +317,7 @@ function navigateTo(screenId) {
   STATE.activeScreen = screenId;
 
   // Gerenciamento da navegação inferior
-  const hideNavScreens = ["splash", "live-room", "private-chat", "auth", "go-live"];
+  const hideNavScreens = ["splash", "live-room", "private-chat", "user-profile", "auth", "go-live"];
   if (hideNavScreens.includes(screenId)) {
     DOM.bottomNav.style.display = "none";
   } else {
@@ -355,8 +356,11 @@ function navigateTo(screenId) {
     STATE.livePrivacyPassword = "";
     STATE.liveInviteeIds = [];
     STATE.mutualFollowersCache = null;
+    STATE.selectedLiveCategory = null;
     const privacyIcon = document.getElementById("setup-privacy-icon");
     if (privacyIcon) privacyIcon.textContent = "🌐";
+    const categoryIcon = document.getElementById("setup-category-icon");
+    if (categoryIcon) categoryIcon.textContent = "🏷️";
   }
 }
 
@@ -474,6 +478,10 @@ function renderNotificationsList() {
       const preview = escapeHtml((n.metadata && n.metadata.text) || "");
       text = `${actorName} comentou: "${preview}"`;
       icon = "💬";
+    } else if (n.type === "mention") {
+      const preview = escapeHtml((n.metadata && n.metadata.text) || "");
+      text = `${actorName} mencionou você: "${preview}"`;
+      icon = "📣";
     } else if (n.type === "gift_received") {
       const giftLabel = GIFT_LABELS_BY_CODE[n.metadata && n.metadata.gift_code] || "uma Rosa";
       text = `${actorName} te enviou ${giftLabel}`;
@@ -537,16 +545,21 @@ async function handleNotificationClick(index) {
   const n = STATE.notifications[index];
   if (!n) return;
   closeNotificationPanel();
-  if ((n.type === "post_like" || n.type === "post_comment") && n.metadata && n.metadata.post_id) {
-    navigateTo("profile");
-    if (!STATE.myPosts.some(p => p.id === n.metadata.post_id)) await renderProfilePosts();
+  if ((n.type === "post_like" || n.type === "post_comment" || n.type === "mention") && n.metadata && n.metadata.post_id) {
+    // post_comment pode ser notificação pro dono do post OU pro autor do
+    // comentário-pai (respostas, 0091) — nem sempre é um post meu, então o
+    // lightbox generalizado (busca o post certo sozinho) decide isso, não
+    // aqui; "discover" é só o pano de fundo válido pra qualquer um dos casos.
+    navigateTo("discover");
     openPostLightbox(n.metadata.post_id);
     return;
   }
   if (!n.actor) return;
   if (n.type === "went_live" || n.type === "live_invite") {
     enterRealLiveRoom(n.actor_id);
-  } else if (n.type === "new_follower" || n.type === "missed_call" || n.type === "gift_received") {
+  } else if (n.type === "new_follower") {
+    openUserProfile(n.actor_id);
+  } else if (n.type === "missed_call" || n.type === "gift_received") {
     openPrivateChat(n.actor_id, n.actor.display_name || n.actor.username, n.actor.avatar_url);
   } else if (n.type === "cohost_invite" && n.metadata && n.metadata.invite_id) {
     showCohostInviteResponse(n);
@@ -559,6 +572,7 @@ async function handleNotificationClick(index) {
 // carrega o estado inicial e mantém atualizado via Realtime, pra qualquer um
 // que estiver no app (logado ou não) ver quem está ao vivo de verdade.
 async function initRealLiveSessionsFeed() {
+  renderLiveCategoryChips();
   try {
     const sessions = await DB.getActiveLiveSessions();
     renderRealLiveSessions(sessions);
@@ -586,6 +600,19 @@ const DISCOVER_CATEGORIES = {
   privada: { icon: "🔒", label: "Vibe Privada", emptyIcon: "🔒", emptyTitle: "Nenhuma live privada agora", emptyText: "Lives com senha ou só para convidados aparecem aqui." },
 };
 
+// Categoria de CONTEÚDO (assunto da live) — dimensão separada e independente
+// do filtro "Vibe" acima (que é sobre engajamento/conta, não sobre assunto).
+// Os dois se combinam (E lógico) na hora de montar a grade.
+const LIVE_CATEGORIES = {
+  chat: { icon: "💬", label: "Bate-papo" },
+  musica: { icon: "🎵", label: "Música" },
+  games: { icon: "🎮", label: "Games" },
+  culinaria: { icon: "🍳", label: "Culinária" },
+  esporte: { icon: "⚽", label: "Esporte" },
+  arte: { icon: "🎨", label: "Arte" },
+  outros: { icon: "✨", label: "Outros" },
+};
+
 function setDiscoverFilter(mode) {
   STATE.discoverFilter = mode;
   document.querySelectorAll(".vibe-category-card").forEach(el => {
@@ -594,15 +621,44 @@ function setDiscoverFilter(mode) {
   renderRealLiveSessions(STATE.realLiveSessions);
 }
 
+// Chip de categoria de conteúdo — clicar de novo no já ativo volta pra
+// "Todos" (toggle), igual busca por hashtag que já tem esse padrão.
+function setDiscoverCategoryFilter(category) {
+  STATE.discoverCategoryFilter = STATE.discoverCategoryFilter === category ? null : category;
+  document.querySelectorAll(".live-category-chip").forEach(el => {
+    el.classList.toggle("active", el.dataset.category === STATE.discoverCategoryFilter);
+  });
+  renderRealLiveSessions(STATE.realLiveSessions);
+}
+
+function renderLiveCategoryChips() {
+  const row = document.getElementById("live-category-chips-row");
+  if (!row || row.dataset.rendered) return;
+  row.dataset.rendered = "true";
+  Object.entries(LIVE_CATEGORIES).forEach(([key, cat]) => {
+    const chip = document.createElement("button");
+    chip.className = "live-category-chip";
+    chip.dataset.category = key;
+    chip.textContent = `${cat.icon} ${cat.label}`;
+    chip.onclick = () => setDiscoverCategoryFilter(key);
+    row.appendChild(chip);
+  });
+}
+
 function applyDiscoverFilter(sessions, mode) {
+  let filtered = sessions;
   if (mode === "nova") {
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return sessions.filter(s => s.profiles && s.profiles.created_at && new Date(s.profiles.created_at).getTime() > weekAgo);
+    filtered = filtered.filter(s => s.profiles && s.profiles.created_at && new Date(s.profiles.created_at).getTime() > weekAgo);
+  } else if (mode === "privada") {
+    filtered = filtered.filter(s => s.invite_only || s.has_password);
+  } else {
+    filtered = [...filtered].sort((a, b) => (b.viewer_count || 0) - (a.viewer_count || 0));
   }
-  if (mode === "privada") {
-    return sessions.filter(s => s.invite_only || s.has_password);
+  if (STATE.discoverCategoryFilter) {
+    filtered = filtered.filter(s => s.category === STATE.discoverCategoryFilter);
   }
-  return [...sessions].sort((a, b) => (b.viewer_count || 0) - (a.viewer_count || 0));
+  return filtered;
 }
 
 function renderRealLiveSessions(allSessions) {
@@ -646,6 +702,8 @@ function createRealLiveCardElement(session) {
     : session.has_password
       ? `<span class="card-restricted-badge">🔒 Com senha</span>`
       : "";
+  const categoryInfo = session.category && LIVE_CATEGORIES[session.category];
+  const categoryBadge = categoryInfo ? `<span class="card-category-inline-badge">${categoryInfo.icon} ${categoryInfo.label}</span>` : "";
   const viewerCount = session.viewer_count || 0;
 
   const card = document.createElement("div");
@@ -663,6 +721,7 @@ function createRealLiveCardElement(session) {
     <div class="card-details">
       <span class="card-name">${name}</span>
       ${titleHtml}
+      ${categoryBadge}
     </div>
     <button class="card-btn-call" onclick="event.stopPropagation(); enterRealLiveRoom('${session.user_id}');">
       <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
@@ -1269,9 +1328,11 @@ async function renderInboxList() {
     item.onclick = () => openPrivateChat(chat.partnerId, chat.name, chat.avatar);
 
     const safeName = escapeHtml(chat.name);
+    const isOnline = STATE.onlineUserIds && STATE.onlineUserIds.has(chat.partnerId);
     item.innerHTML = `
       <div class="inbox-avatar">
         <img src="${chat.avatar}" alt="${safeName}">
+        ${isOnline ? '<div class="online-indicator"></div>' : ''}
       </div>
       <div class="inbox-details">
         <span class="inbox-name">${safeName}</span>
@@ -1299,14 +1360,19 @@ async function openPrivateChat(partnerId, name, avatar) {
   if (!requireAuth()) return;
 
   STATE.activeChatPartner = partnerId;
+  STATE.activeChatPartnerLastSeen = null;
   DOM.chatPartnerAvatar.src = avatar;
   DOM.chatPartnerName.textContent = name;
   DOM.privateChatHistory.innerHTML = "";
-  const statusEl = document.getElementById("chat-partner-status");
-  if (statusEl) statusEl.textContent = "";
   clearTimeout(typingIndicatorTimeout);
+  renderChatPartnerStatus();
 
   navigateTo("private-chat");
+
+  DB.getProfile(partnerId).then(p => {
+    STATE.activeChatPartnerLastSeen = p ? p.last_seen_at : null;
+    if (STATE.activeChatPartner === partnerId) renderChatPartnerStatus();
+  }).catch(() => {});
 
   try {
     const user = await Auth.getUser();
@@ -1534,9 +1600,178 @@ function handleIncomingTypingIndicator(fromUserId) {
   if (!statusEl) return;
   statusEl.textContent = "digitando…";
   clearTimeout(typingIndicatorTimeout);
-  typingIndicatorTimeout = setTimeout(() => { statusEl.textContent = ""; }, 3000);
+  // Some depois de 3s sem novo evento, voltando pro status normal (online
+  // agora / visto por último) em vez de deixar a linha vazia.
+  typingIndicatorTimeout = setTimeout(() => renderChatPartnerStatus(), 3000);
 }
 
+// Online agora (Presence) ou "visto por último" (coluna last_seen_at) —
+// chamado ao abrir a conversa e de novo sempre que o Presence sincroniza,
+// pra refletir em tempo real quando a outra pessoa entra/sai. Não sobrepõe
+// o indicador de "digitando…" (esse tem seu próprio timeout que chama de
+// volta aqui quando termina).
+function renderChatPartnerStatus() {
+  const statusEl = document.getElementById("chat-partner-status");
+  if (!statusEl) return;
+  if (STATE.activeScreen !== "private-chat" || !STATE.activeChatPartner) {
+    statusEl.textContent = "";
+    return;
+  }
+  if (STATE.onlineUserIds && STATE.onlineUserIds.has(STATE.activeChatPartner)) {
+    statusEl.textContent = "online agora";
+  } else if (STATE.activeChatPartnerLastSeen) {
+    statusEl.textContent = `visto por último ${formatMessageTime(STATE.activeChatPartnerLastSeen)}`;
+  } else {
+    statusEl.textContent = "";
+  }
+}
+
+
+// 11.5 PERFIL DE OUTRA PESSOA (somente-leitura)
+// Antes, todo clique num perfil alheio (busca, hashtag, notificação) só
+// abria uma conversa direta — não existia nenhuma tela pra ver bio, grade
+// de posts ou destaques de quem não é você. STATE.userProfileReturnScreen
+// guarda de onde a pessoa veio (Discover, busca etc.) pra o botão "voltar"
+// não sempre cair no Discover.
+const USER_PROFILE_POSTS_PAGE_SIZE = 24;
+
+async function openUserProfile(userId) {
+  if (!requireAuth()) return;
+  if (userId === STATE.myUserId) { navigateTo("profile"); return; }
+
+  if (STATE.activeScreen !== "user-profile") STATE.userProfileReturnScreen = STATE.activeScreen;
+
+  let profile;
+  try {
+    profile = await DB.getProfile(userId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar esse perfil.");
+    return;
+  }
+  if (!profile) { showToast("Esse perfil não existe mais."); return; }
+
+  STATE.viewedUserProfile = profile;
+  navigateTo("user-profile");
+
+  document.getElementById("user-profile-header-name").textContent = profile.display_name || profile.username;
+  document.getElementById("user-profile-avatar-img").src = profile.avatar_url || DEFAULT_AVATAR_DATA_URI;
+  document.getElementById("user-profile-display-name").innerHTML =
+    `${escapeHtml(profile.display_name || profile.username)} ${profile.is_verified ? '<span class="premium-verified">✓</span>' : ""}`;
+  document.getElementById("user-profile-handle").textContent = "@" + profile.username;
+  document.getElementById("user-profile-bio-text").textContent = profile.bio || "";
+
+  const isFollowing = STATE.followedStreamers.includes(profile.username);
+  const followBtn = document.getElementById("user-profile-follow-btn");
+  followBtn.querySelector("span").textContent = isFollowing ? "Seguindo" : "+ Seguir";
+  followBtn.classList.toggle("followed", isFollowing);
+
+  refreshUserProfileStats(profile.id, profile.username);
+  renderUserProfileHighlights(profile.id);
+
+  STATE.userProfilePostsOffset = 0;
+  const grid = document.getElementById("user-profile-posts-grid");
+  grid.innerHTML = "";
+  try {
+    const posts = await DB.getUserPosts(profile.id, 0, USER_PROFILE_POSTS_PAGE_SIZE);
+    STATE.userProfilePostsOffset = posts.length;
+    document.getElementById("user-profile-posts-empty").style.display = posts.length === 0 ? "flex" : "none";
+    posts.forEach(post => appendPostToUserProfileGrid(post, grid));
+  } catch (err) {
+    console.error("Falha ao carregar posts do perfil:", err);
+  }
+}
+
+function appendPostToUserProfileGrid(post, grid) {
+  const item = document.createElement("div");
+  item.className = "post-grid-item";
+  item.onclick = () => openPostLightbox(post.id);
+  const isCarousel = post.media_urls && post.media_urls.length > 1;
+  item.innerHTML = post.media_type === "image"
+    ? `<img src="${post.media_url}" alt="Post"${isCarousel ? '' : ''}>`
+    : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
+  if (isCarousel) item.innerHTML += `<div class="post-video-indicator" style="left:8px; right:auto;">🖼️ ${post.media_urls.length}</div>`;
+  grid.appendChild(item);
+}
+
+async function refreshUserProfileStats(userId, username) {
+  try {
+    const stats = await DB.getProfileStats(userId, username);
+    document.getElementById("user-profile-stat-following").textContent = formatCompactCount(stats.followingCount);
+    document.getElementById("user-profile-stat-followers").textContent = formatCompactCount(stats.followersCount);
+    document.getElementById("user-profile-stat-likes").textContent = formatCompactCount(stats.likesCount);
+  } catch (err) {
+    console.error("Falha ao carregar estatísticas do perfil:", err);
+  }
+}
+
+async function renderUserProfileHighlights(userId) {
+  const row = document.getElementById("user-profile-highlights-row");
+  let highlights = [];
+  try {
+    highlights = await DB.getUserHighlights(userId);
+  } catch (err) {
+    // Sem permissão (não segue) ou sem destaque nenhum — some a fileira, sem erro visível.
+    row.style.display = "none";
+    row.innerHTML = "";
+    return;
+  }
+  if (highlights.length === 0) {
+    row.style.display = "none";
+    row.innerHTML = "";
+    return;
+  }
+  row.style.display = "flex";
+  row.innerHTML = "";
+  const profile = STATE.viewedUserProfile;
+  highlights.forEach((s, i) => {
+    const item = document.createElement("div");
+    item.className = "highlight-ring-item";
+    item.onclick = () => openHighlightsViewer(userId, i);
+    const thumbHtml = s.media_type === "image"
+      ? `<img src="${s.media_url}" class="highlight-ring-thumb" alt="Destaque">`
+      : `<video src="${s.media_url}" class="highlight-ring-thumb" muted playsinline></video>`;
+    item.innerHTML = `<div class="highlight-ring">${thumbHtml}</div><span class="highlight-ring-label">${escapeHtml((profile && (profile.display_name || profile.username)) || "")}</span>`;
+    row.appendChild(item);
+  });
+}
+
+async function toggleUserProfileFollow() {
+  const profile = STATE.viewedUserProfile;
+  if (!profile) return;
+  const btn = document.getElementById("user-profile-follow-btn");
+  const isFollowing = STATE.followedStreamers.includes(profile.username);
+
+  try {
+    if (isFollowing) {
+      await DB.unfollow(profile.username);
+      STATE.followedStreamers = STATE.followedStreamers.filter(h => h !== profile.username);
+      btn.querySelector("span").textContent = "+ Seguir";
+      btn.classList.remove("followed");
+      showToast(`Deixou de seguir ${profile.display_name || profile.username}`);
+    } else {
+      await DB.follow(profile.username);
+      STATE.followedStreamers.push(profile.username);
+      btn.querySelector("span").textContent = "Seguindo";
+      btn.classList.add("followed");
+      showToast(`Seguindo ${profile.display_name || profile.username}!`);
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar. Tente novamente.");
+  }
+  refreshUserProfileStats(profile.id, profile.username);
+}
+
+function messageUserProfile() {
+  const profile = STATE.viewedUserProfile;
+  if (!profile) return;
+  openPrivateChat(profile.id, profile.display_name || profile.username, profile.avatar_url);
+}
+
+function openUserProfileOptions() {
+  const profile = STATE.viewedUserProfile;
+  if (!profile) return;
+  openUserOptionsMenu(profile.id, profile.display_name || profile.username);
+}
 
 // 12.1 BLOQUEAR E DENUNCIAR USUÁRIOS
 function openChatPartnerOptions() {
@@ -1593,6 +1828,9 @@ async function handleToggleBlock() {
     }
     if (STATE.activeScreen === "live-room" && STATE.currentLiveBroadcaster && STATE.currentLiveBroadcaster.id === userId) {
       closeLiveRoom();
+      navigateTo("discover");
+    }
+    if (STATE.activeScreen === "user-profile" && STATE.viewedUserProfile && STATE.viewedUserProfile.id === userId) {
       navigateTo("discover");
     }
   }
@@ -2047,6 +2285,7 @@ const PUSH_PREFERENCE_LABELS = {
   post_comment: "Comentário no meu post",
   gift_received: "Presente recebido",
   subscription_renewing_soon: "Assinatura renovando em breve",
+  mention: "Menção (@você) em post ou comentário",
 };
 
 async function openPushPreferencesModal() {
@@ -3156,6 +3395,25 @@ function closeLivePrivacyModal() {
   document.getElementById("modal-live-privacy").style.display = "none";
 }
 
+function openLiveCategoryModal() {
+  const list = document.getElementById("live-category-picker-list");
+  list.innerHTML = Object.entries(LIVE_CATEGORIES).map(([key, cat]) => `
+    <button class="live-category-chip${STATE.selectedLiveCategory === key ? " active" : ""}" onclick="selectLiveCategory('${key}')">${cat.icon} ${cat.label}</button>
+  `).join("");
+  document.getElementById("modal-live-category").style.display = "flex";
+}
+
+function closeLiveCategoryModal() {
+  document.getElementById("modal-live-category").style.display = "none";
+}
+
+function selectLiveCategory(key) {
+  STATE.selectedLiveCategory = STATE.selectedLiveCategory === key ? null : key;
+  const icon = document.getElementById("setup-category-icon");
+  if (icon) icon.textContent = STATE.selectedLiveCategory ? LIVE_CATEGORIES[STATE.selectedLiveCategory].icon : "🏷️";
+  closeLiveCategoryModal();
+}
+
 async function updateLivePrivacyUI() {
   const mode = document.querySelector('input[name="live-privacy"]:checked')?.value || "public";
   document.getElementById("live-privacy-password-group").style.display = mode === "password" ? "block" : "none";
@@ -3474,7 +3732,7 @@ async function launchBroadcastingSession() {
 
     const titleInput = document.getElementById("live-title-input");
     const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
-    await DB.startLiveSession(roomName, title);
+    await DB.startLiveSession(roomName, title, STATE.selectedLiveCategory || null);
 
     // Aplica a privacidade escolhida (pública por padrão) — feito depois de
     // criar a sessão porque as funções de senha/convite trabalham em cima da
@@ -4022,10 +4280,30 @@ async function publishNewPost() {
 
 // Lightbox
 async function openPostLightbox(postId) {
-  const post = STATE.myPosts.find(p => p.id === postId);
-  if (!post) return;
+  let post = STATE.myPosts.find(p => p.id === postId);
+  let author = post
+    ? { id: STATE.myUserId, username: STATE.myUsername, display_name: STATE.profileName, avatar_url: STATE.myAvatarUrl }
+    : null;
 
+  // Não é um dos meus posts (ex: clicou num resultado de busca, numa notificação
+  // de curtida/comentário, ou na grade do perfil de outra pessoa) — busca o
+  // post + autor reais antes de abrir, RLS de posts barra privado/suspenso.
+  if (!post) {
+    try {
+      const fetched = await DB.getPostWithAuthor(postId);
+      if (!fetched) { showToast("Esse post não existe mais."); return; }
+      post = fetched;
+      author = fetched.author;
+    } catch (err) {
+      showToast(err.message || "Não foi possível carregar esse post.");
+      return;
+    }
+  }
+
+  const isMine = author && author.id === STATE.myUserId;
   STATE.activeLightboxPostId = postId;
+  STATE.activeLightboxPostIsMine = isMine;
+  STATE.activeLightboxAuthorId = author ? author.id : null;
 
   const modal = document.getElementById("modal-post-lightbox");
   const img = document.getElementById("lightbox-img");
@@ -4039,12 +4317,16 @@ async function openPostLightbox(postId) {
   likes.textContent = "carregando…";
   likeBtn.classList.remove("active");
 
+  document.getElementById("lightbox-edit-btn").style.display = isMine ? "inline-flex" : "none";
+  document.getElementById("lightbox-delete-btn").style.display = isMine ? "inline-flex" : "none";
+  document.getElementById("lightbox-report-btn").style.display = isMine ? "none" : "inline-flex";
+
   const authorAvatar = document.getElementById("lightbox-author-avatar");
   const authorName = document.getElementById("lightbox-author-name");
   const authorHandle = document.getElementById("lightbox-author-handle");
-  if (authorAvatar) authorAvatar.src = STATE.myAvatarUrl || "";
-  if (authorName) authorName.textContent = STATE.profileName || "";
-  if (authorHandle) authorHandle.textContent = "@" + (STATE.myUsername || "");
+  if (authorAvatar) authorAvatar.src = (author && author.avatar_url) || DEFAULT_AVATAR_DATA_URI;
+  if (authorName) authorName.textContent = (author && (author.display_name || author.username)) || "Usuário";
+  if (authorHandle) authorHandle.textContent = "@" + ((author && author.username) || "");
 
   const carousel = document.getElementById("lightbox-carousel");
   const dots = document.getElementById("lightbox-carousel-dots");
@@ -4096,6 +4378,14 @@ async function openPostLightbox(postId) {
   } catch (err) {
     console.error("Falha ao carregar curtidas/comentários:", err);
   }
+}
+
+function openLightboxAuthorProfile() {
+  const authorId = STATE.activeLightboxAuthorId;
+  if (!authorId) return;
+  closePostLightbox();
+  if (authorId === STATE.myUserId) navigateTo("profile");
+  else openUserProfile(authorId);
 }
 
 function closePostLightbox() {
@@ -4210,24 +4500,21 @@ async function handleSharedDeepLink() {
 
   history.replaceState(null, "", location.pathname); // limpa a query da URL sem recarregar
 
-  // Não existe uma tela dedicada de "ver perfil/post de outra pessoa" no app
-  // hoje — em todo lugar que se clica num perfil alheio (busca, hashtag) o
-  // destino já é abrir uma conversa direta com quem publicou, então o link
-  // compartilhado segue o mesmo caminho em vez de inventar uma tela nova de
-  // visualização (que também evita o bug de mostrar botão de editar/excluir
-  // pra quem abrir o link de um post que não é seu).
   try {
-    let profile = null;
     if (postId) {
-      const post = await DB.getPost(postId);
-      if (post) profile = await DB.getProfile(post.user_id);
-    } else if (username) {
-      profile = await DB.getProfileByUsername(username);
+      if (!STATE.isLoggedIn) { requireAuth(); return true; }
+      navigateTo("discover"); // a lightbox é um modal por cima — precisa de uma tela base atrás
+      await openPostLightbox(postId);
+      return true;
     }
-    if (!profile) return false;
-    if (!STATE.isLoggedIn) { requireAuth(); return true; }
-    openPrivateChat(profile.id, profile.display_name || profile.username, profile.avatar_url);
-    return true;
+    if (username) {
+      const profile = await DB.getProfileByUsername(username);
+      if (!profile) return false;
+      if (!STATE.isLoggedIn) { requireAuth(); return true; }
+      await openUserProfile(profile.id);
+      return true;
+    }
+    return false;
   } catch (err) {
     console.error("Falha ao abrir link compartilhado:", err);
     return false;
@@ -4255,7 +4542,7 @@ function buildCommentItem(c, myUserId) {
     ? `<button class="btn-reply-comment" onclick="startReplyToComment('${c.id}')">Responder</button>`
     : "";
   item.innerHTML = `
-    ${c.parent_id ? '<span class="reply-arrow">↳</span> ' : ""}<strong>${escapeHtml(authorName)}</strong> <span class="comment-text">${escapeHtml(c.text)}</span>${ownActions}
+    ${c.parent_id ? '<span class="reply-arrow">↳</span> ' : ""}<strong style="cursor:pointer;" onclick="openUserProfile('${c.user_id}')">${escapeHtml(authorName)}</strong> <span class="comment-text">${linkifyMentions(escapeHtml(c.text))}</span>${ownActions}
     ${replyBtn ? `<div class="comment-actions-row">${replyBtn}</div>` : ""}
   `;
   return item;
@@ -5638,7 +5925,7 @@ function renderProfileSearchResults(container, profiles) {
 
     item.onclick = () => {
       closeSearchOverlay();
-      openPrivateChat(p.id, name, p.avatar_url);
+      openUserProfile(p.id);
     };
 
     const safeName = escapeHtml(name);
@@ -5654,7 +5941,7 @@ function renderProfileSearchResults(container, profiles) {
         <span class="inbox-message" style="font-size: 0.65rem; color: var(--light-gray);">@${escapeHtml(p.username)}</span>
       </div>
       <div class="inbox-right" style="display: flex; align-items: center; justify-content: center;">
-        <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;">
+        <button class="btn-lightbox-like active" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff;" onclick="event.stopPropagation(); closeSearchOverlay(); openPrivateChat('${p.id}', '${escapeHtml(name).replace(/'/g, "\\'")}', '${p.avatar_url || ""}');">
           Mensagem
         </button>
         ${privateBtnHtml}
@@ -5811,10 +6098,8 @@ function renderCaptionSearchResults(container, posts) {
       : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`)
       + `<button class="post-grid-report-btn" title="Denunciar publicação" onclick="event.stopPropagation(); openReportPostPrompt('${post.id}')">⋮</button>`;
     item.onclick = () => {
-      if (post.author) {
-        closeSearchOverlay();
-        openPrivateChat(post.author.id, authorName, post.author.avatar_url);
-      }
+      closeSearchOverlay();
+      openPostLightbox(post.id);
     };
     grid.appendChild(item);
   });
@@ -5824,11 +6109,31 @@ function renderCaptionSearchResults(container, posts) {
 // Escapa primeiro (defesa contra XSS na legenda, que é texto livre do
 // usuário) e só DEPOIS troca #hashtag por um link clicável — a ordem
 // importa, senão o link viraria alvo de escape também.
+// Reaproveitado por legenda de post (com hashtag) e texto de comentário (só
+// menção) — mesmo padrão @usuário do onboarding (só minúsculas/números/./_).
+function linkifyMentions(escapedText) {
+  return escapedText.replace(/@([a-z0-9_.]{3,24})/gi, (match, username) => {
+    return `<span style="color: var(--primary); cursor: pointer; font-weight: 600;" onclick="event.stopPropagation(); openUserProfileByUsername('${username.toLowerCase()}');">@${username}</span>`;
+  });
+}
+
+async function openUserProfileByUsername(username) {
+  if (!requireAuth()) return;
+  try {
+    const profile = await DB.getProfileByUsername(username);
+    if (!profile) { showToast(`@${username} não encontrado.`); return; }
+    openUserProfile(profile.id);
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar esse perfil.");
+  }
+}
+
 function renderCaptionWithHashtags(text) {
   const escaped = escapeHtml(text || "");
-  return escaped.replace(/#([\wÀ-ÿ]{2,50})/g, (match, tag) => {
+  const withHashtags = escaped.replace(/#([\wÀ-ÿ]{2,50})/g, (match, tag) => {
     return `<span style="color: var(--primary); cursor: pointer;" onclick="event.stopPropagation(); jumpToHashtagSearch('${tag}');">#${tag}</span>`;
   });
+  return linkifyMentions(withHashtags);
 }
 
 function jumpToHashtagSearch(tag) {
@@ -5912,10 +6217,8 @@ async function performHashtagSearch(query, container) {
       : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`)
       + `<button class="post-grid-report-btn" title="Denunciar publicação" onclick="event.stopPropagation(); openReportPostPrompt('${post.id}')">⋮</button>`;
     item.onclick = () => {
-      if (post.author) {
-        closeSearchOverlay();
-        openPrivateChat(post.author.id, authorName, post.author.avatar_url);
-      }
+      closeSearchOverlay();
+      openPostLightbox(post.id);
     };
     grid.appendChild(item);
   });
@@ -6084,7 +6387,9 @@ function showCurrentStory() {
     }
   });
 
-  const isMine = STATE.storyViewerIsHighlightsMode || STATE.storiesFeed[STATE.storyViewerAuthorIndex]?.user_id === STATE.myUserId;
+  const isMine = STATE.storyViewerIsHighlightsMode
+    ? STATE.storyViewerHighlightsOwnerId === STATE.myUserId
+    : STATE.storiesFeed[STATE.storyViewerAuthorIndex]?.user_id === STATE.myUserId;
   document.getElementById("story-viewer-own-actions").style.display = isMine ? "flex" : "none";
   if (isMine) {
     DB.getStoryViewers(story.id)
@@ -6176,6 +6481,7 @@ function storyViewerAdvanceAuthor(direction) {
 // só), então só fecha ao chegar no fim em vez de avançar pra outro autor.
 async function openHighlightsViewer(userId, startIndex = 0) {
   STATE.storyViewerIsHighlightsMode = true;
+  STATE.storyViewerHighlightsOwnerId = userId;
   STATE.storyViewerAuthorIndex = -1;
 
   try {
@@ -6187,10 +6493,15 @@ async function openHighlightsViewer(userId, startIndex = 0) {
   }
   if (STATE.storyViewerStories.length === 0) { STATE.storyViewerIsHighlightsMode = false; return; }
 
+  const isMine = userId === STATE.myUserId;
+  const ownerProfile = isMine
+    ? { avatar_url: STATE.myAvatarUrl, display_name: STATE.profileName, username: STATE.myUsername }
+    : STATE.viewedUserProfile;
+
   STATE.storyViewerIndex = Math.min(startIndex, STATE.storyViewerStories.length - 1);
   document.getElementById("modal-story-viewer").style.display = "flex";
-  document.getElementById("story-viewer-avatar").src = STATE.myAvatarUrl || DEFAULT_AVATAR_DATA_URI;
-  document.getElementById("story-viewer-username").textContent = STATE.profileName || STATE.myUsername || "";
+  document.getElementById("story-viewer-avatar").src = (ownerProfile && ownerProfile.avatar_url) || DEFAULT_AVATAR_DATA_URI;
+  document.getElementById("story-viewer-username").textContent = (ownerProfile && (ownerProfile.display_name || ownerProfile.username)) || "";
 
   const progressRow = document.getElementById("story-viewer-progress-row");
   progressRow.innerHTML = STATE.storyViewerStories.map(() => `<div class="segment"><div class="fill"></div></div>`).join("");
@@ -6205,9 +6516,15 @@ function closeStoryViewer() {
   STATE.storyViewerAuthorIndex = -1;
   STATE.storyViewerStories = [];
   const wasHighlightsMode = STATE.storyViewerIsHighlightsMode;
+  const highlightsOwnerId = STATE.storyViewerHighlightsOwnerId;
   STATE.storyViewerIsHighlightsMode = false;
-  if (wasHighlightsMode) renderProfileHighlights();
-  else renderStoriesRail();
+  STATE.storyViewerHighlightsOwnerId = null;
+  if (wasHighlightsMode) {
+    if (highlightsOwnerId === STATE.myUserId) renderProfileHighlights();
+    else if (STATE.activeScreen === "user-profile") renderUserProfileHighlights(highlightsOwnerId);
+  } else {
+    renderStoriesRail();
+  }
 }
 
 async function openStoryViewersList() {
@@ -6292,13 +6609,13 @@ async function toggleCurrentStoryHighlight() {
 }
 
 async function toggleCurrentStoryMute() {
-  const author = STATE.storiesFeed[STATE.storyViewerAuthorIndex];
-  if (!author) return;
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  if (!story) return;
   const btn = document.getElementById("story-viewer-mute-btn");
   const newMuted = btn.dataset.muted !== "true";
 
   try {
-    await DB.toggleStoryMute(author.user_id, newMuted);
+    await DB.toggleStoryMute(story.user_id, newMuted);
     btn.dataset.muted = String(newMuted);
     btn.textContent = newMuted ? "🔕" : "🔔";
     showToast(newMuted ? "Stories dessa pessoa silenciados." : "Stories dessa pessoa não estão mais silenciados.");
@@ -6317,15 +6634,17 @@ async function sendStoryReply() {
   const text = input.value.trim();
   if (!text) return;
 
+  // story.user_id já identifica o autor diretamente — não precisa resolver
+  // via STATE.storiesFeed, que só existe no modo feed efêmero (fica vazio no
+  // visualizador de Destaques, aberto a partir de um perfil).
   const story = STATE.storyViewerStories[STATE.storyViewerIndex];
-  const author = STATE.storiesFeed[STATE.storyViewerAuthorIndex];
-  if (!story || !author) return;
+  if (!story) return;
 
   input.disabled = true;
   try {
     const imageUrl = story.media_type === "image" ? story.media_url : null;
     const messageText = story.media_type === "image" ? text : `📹 Respondendo ao story: ${text}`;
-    await DB.sendDirectMessage(author.user_id, messageText, imageUrl);
+    await DB.sendDirectMessage(story.user_id, messageText, imageUrl);
     input.value = "";
     showToast("Resposta enviada!");
   } catch (err) {
@@ -6649,6 +6968,22 @@ async function applyProfileToUI(profile) {
     });
   }
 
+  // "Online agora" nas DMs — canal global de Presence (uma vez por sessão) +
+  // heartbeat de last_seen_at pra quem NÃO está online agora. STATE.onlineUserIds
+  // é reconsultado pela tela de chat sempre que o Presence sincroniza de novo.
+  if (!STATE.presenceChannel) {
+    STATE.onlineUserIds = new Set();
+    STATE.presenceChannel = DB.subscribeToGlobalPresence(profile.id, (onlineUserIds) => {
+      STATE.onlineUserIds = onlineUserIds;
+      renderChatPartnerStatus();
+      if (STATE.activeScreen === "messages") renderInboxList();
+    });
+    DB.touchLastSeen().catch(() => {});
+    if (!STATE.lastSeenHeartbeat) {
+      STATE.lastSeenHeartbeat = setInterval(() => DB.touchLastSeen().catch(() => {}), 2 * 60 * 1000);
+    }
+  }
+
   // O servidor decide o XP/nível (nunca o cliente) — anuncia o level-up comparando
   // com o nível anterior, já que a RPC só devolve o estado final.
   if (previousLevel && profile.level > previousLevel) {
@@ -6793,6 +7128,14 @@ async function handleLogout() {
   if (STATE.callInvitesChannel) {
     sb.removeChannel(STATE.callInvitesChannel);
     STATE.callInvitesChannel = null;
+  }
+  if (STATE.presenceChannel) {
+    sb.removeChannel(STATE.presenceChannel);
+    STATE.presenceChannel = null;
+  }
+  if (STATE.lastSeenHeartbeat) {
+    clearInterval(STATE.lastSeenHeartbeat);
+    STATE.lastSeenHeartbeat = null;
   }
   if (STATE.activeCallInvite) closeCallOverlay();
   STATE.dmsList = [];

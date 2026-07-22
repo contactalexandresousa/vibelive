@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722l">
+  <link rel="stylesheet" href="styles.css?v=20260722m">
 </head>
 <body>
 
@@ -198,6 +198,9 @@
                 <span class="vibe-category-label">Vibe Privada</span>
               </button>
             </div>
+
+            <!-- Categoria de conteúdo (assunto da live) — dimensão separada do filtro Vibe acima -->
+            <div class="live-category-chips-row" id="live-category-chips-row"></div>
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
@@ -376,7 +379,7 @@
               <button class="btn-back-chat" onclick="navigateTo('messages')">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
               </button>
-              <div class="chat-partner-info">
+              <div class="chat-partner-info" style="cursor: pointer;" onclick="openUserProfile(STATE.activeChatPartner)">
                 <img id="chat-partner-avatar" src="" alt="Avatar">
                 <div class="chat-partner-text">
                   <span id="chat-partner-name">Nome</span>
@@ -411,8 +414,74 @@
             </div>
           </section>
 
+          <!-- 5.1 TELA DE PERFIL DE OUTRA PESSOA (somente-leitura) -->
+          <section id="screen-user-profile" class="screen profile-screen-style">
+            <header class="private-chat-header">
+              <button class="btn-back-chat" onclick="navigateTo(STATE.userProfileReturnScreen || 'discover')">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+              </button>
+              <div class="chat-partner-info">
+                <div class="chat-partner-text">
+                  <span id="user-profile-header-name">Perfil</span>
+                </div>
+              </div>
+              <div class="chat-header-actions">
+                <button class="chat-action-btn" onclick="openUserProfileOptions()">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                </button>
+              </div>
+            </header>
+
+            <div class="profile-scroll-area">
+              <div class="profile-card-premium">
+                <div class="profile-header-top">
+                  <div class="profile-avatar-container">
+                    <img class="profile-main-avatar" id="user-profile-avatar-img" src="" alt="Avatar">
+                  </div>
+                  <div class="profile-quick-stats">
+                    <div class="quick-stat-box">
+                      <span class="stat-number" id="user-profile-stat-following">0</span>
+                      <span class="stat-label">Seguindo</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number" id="user-profile-stat-followers">0</span>
+                      <span class="stat-label">Seguidores</span>
+                    </div>
+                    <div class="quick-stat-box">
+                      <span class="stat-number" id="user-profile-stat-likes">0</span>
+                      <span class="stat-label">Curtidas</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="profile-bio-info">
+                  <h3 id="user-profile-display-name">—</h3>
+                  <p class="profile-handle" id="user-profile-handle">@—</p>
+                  <p class="profile-bio-text" id="user-profile-bio-text"></p>
+                </div>
+
+                <div class="profile-actions-row">
+                  <button class="profile-action-btn primary" id="user-profile-follow-btn" onclick="toggleUserProfileFollow()">
+                    <span>+ Seguir</span>
+                  </button>
+                  <button class="profile-action-btn secondary" onclick="messageUserProfile()">
+                    <span>✉️ Mensagem</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="profile-highlights-row" id="user-profile-highlights-row" style="display: none;"></div>
+
+              <div class="profile-posts-grid" id="user-profile-posts-grid"></div>
+              <div class="discover-empty-state" id="user-profile-posts-empty" style="display: none;">
+                <div class="discover-empty-icon">🎬</div>
+                <h3>Nenhuma publicação ainda</h3>
+              </div>
+            </div>
+          </section>
+
           <!-- 6. TELA DE PERFIL E RECARGA DE MOEDAS -->
-          <section id="screen-profile" class="screen">
+          <section id="screen-profile" class="screen profile-screen-style">
 
             <div class="profile-scroll-area">
               
@@ -722,6 +791,10 @@
                    <div class="setup-action-icon" id="setup-privacy-icon">🌐</div>
                    <span>Privacidade</span>
                  </button>
+                 <button class="setup-action-item" onclick="openLiveCategoryModal()">
+                   <div class="setup-action-icon" id="setup-category-icon">🏷️</div>
+                   <span>Categoria</span>
+                 </button>
                </div>
 
                <!-- Botão de Transmissão -->
@@ -898,7 +971,7 @@
               <div id="lightbox-carousel-dots" class="lightbox-carousel-dots" style="display: none;"></div>
             </div>
             <div class="lightbox-details">
-              <div class="lightbox-author-row">
+              <div class="lightbox-author-row" style="cursor: pointer;" onclick="openLightboxAuthorProfile()">
                 <img src="" id="lightbox-author-avatar" class="lightbox-avatar" alt="Avatar">
                 <div class="lightbox-author-text">
                   <strong id="lightbox-author-name">—</strong>
@@ -925,8 +998,9 @@
                   <span id="lightbox-likes-count">42 curtidas</span>
                 </button>
                 <button class="btn-lightbox-like" style="margin-left: 8px;" onclick="shareLightboxPost()">🔗 Compartilhar</button>
-                <button class="btn-lightbox-like" style="margin-left: 8px;" onclick="editLightboxPost()">✏️ Editar</button>
-                <button class="btn-lightbox-like" style="margin-left: 8px; color: var(--danger);" onclick="deleteLightboxPost()">🗑️ Excluir</button>
+                <button class="btn-lightbox-like" id="lightbox-report-btn" style="margin-left: 8px; color: var(--danger); display: none;" onclick="openReportPostPrompt(STATE.activeLightboxPostId)">🚩 Denunciar</button>
+                <button class="btn-lightbox-like" id="lightbox-edit-btn" style="margin-left: 8px;" onclick="editLightboxPost()">✏️ Editar</button>
+                <button class="btn-lightbox-like" id="lightbox-delete-btn" style="margin-left: 8px; color: var(--danger);" onclick="deleteLightboxPost()">🗑️ Excluir</button>
               </div>
               <div class="lightbox-comments-list" id="lightbox-comments-list">
                 <!-- Comentários gerados via JS -->
@@ -1652,6 +1726,19 @@
           </div>
         </div>
 
+        <!-- Modal: categoria de conteúdo da live -->
+        <div class="new-post-modal" id="modal-live-category" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLiveCategoryModal()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header">
+              <h3>Categoria da live</h3>
+              <button class="btn-close-new-post" onclick="closeLiveCategoryModal()">×</button>
+            </header>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin: 10px 0;">Ajuda quem procura um assunto específico a te encontrar no Discover. Opcional.</p>
+            <div id="live-category-picker-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+        </div>
+
         <!-- Modal: pedir senha pra entrar numa live protegida -->
         <div class="new-post-modal" id="modal-live-password-gate" style="display: none;">
           <div class="new-post-overlay" onclick="closeLivePasswordGate()"></div>
@@ -2124,9 +2211,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722l"></script>
+  <script src="supabase-client.js?v=20260722m"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722l"></script>
+  <script src="app.js?v=20260722m"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

@@ -157,6 +157,18 @@ const DB = {
     return data;
   },
 
+  // Usado pelo lightbox quando o post não é meu (resultado de busca,
+  // notificação, grade do perfil de outra pessoa) — RLS de posts já barra
+  // privado/de conta suspensa, igual getPost acima.
+  async getPostWithAuthor(postId) {
+    const { data: post, error } = await sb.from("posts").select("*").eq("id", postId).maybeSingle();
+    if (error) throw error;
+    if (!post) return null;
+    const { data: author, error: authErr } = await sb.from("profiles").select("id, username, display_name, avatar_url").eq("id", post.user_id).maybeSingle();
+    if (authErr) throw authErr;
+    return { ...post, author };
+  },
+
   // Contadores reais do perfil (seguindo/seguidores/curtidas) — antes eram
   // números fixos e falsos no HTML.
   async getProfileStats(userId, username) {
@@ -870,6 +882,18 @@ const DB = {
     return data;
   },
 
+  // Mesma coisa que getMyPosts, mas pra qualquer conta — usado na tela de
+  // perfil de outra pessoa. RLS de posts barra privado/de conta suspensa
+  // automaticamente, igual getPost.
+  async getUserPosts(userId, offset = 0, limit = 24) {
+    const { data, error } = await sb.from("posts").select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return data;
+  },
+
   async getPostLikeState(postId) {
     const { data: { user } } = await sb.auth.getUser();
     const [{ count }, { data: mine }] = await Promise.all([
@@ -1039,12 +1063,12 @@ const DB = {
   },
 
   // Quem está transmitindo de verdade agora (separado dos streamers mockados).
-  async startLiveSession(roomName, title) {
+  async startLiveSession(roomName, title, category = null) {
     const { data: { user } } = await sb.auth.getUser();
     // Encerra qualquer sessão própria anterior que tenha ficado pendurada
     // (ex: fechou a aba sem clicar em "Encerrar") antes de abrir uma nova.
     await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
-    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName, title: title || null });
+    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName, title: title || null, category: category || null });
     if (error) throw error;
   },
 
@@ -1473,6 +1497,33 @@ const DB = {
   // é o que avisa em tempo real quando quem me mandou uma mensagem apaga ela
   // "para todos" (o texto/imagem somem, is_deleted vira true). onTyping é o
   // indicador de "digitando…", via Broadcast (não mexe no banco).
+  // "Online agora" via Presence (mesmo mecanismo da sala de live, 0012/0092) —
+  // key = meu próprio user_id, então o estado do canal já vem indexado por
+  // quem está online, sem precisar cruzar com nenhuma outra lista. Um único
+  // canal global por sessão (não por conversa) — todo mundo logado entra
+  // nele, então dá pra checar "fulano tá online" pra QUALQUER pessoa, não só
+  // quem eu tenho conversa aberta agora.
+  subscribeToGlobalPresence(myUserId, onSync) {
+    const channel = sb.channel("global_presence", {
+      config: { presence: { key: myUserId } }
+    })
+      .on("presence", { event: "sync" }, () => {
+        onSync(new Set(Object.keys(channel.presenceState())));
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") channel.track({ online_at: new Date().toISOString() });
+      });
+    return channel;
+  },
+
+  // "Visto por último" (quando NÃO está online agora) — coluna pública
+  // comum, sem RPC (a policy de UPDATE do próprio perfil já cobre).
+  async touchLastSeen() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    await sb.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id);
+  },
+
   subscribeToDirectMessages(myUserId, onMessage, onReadReceipt, onMessageEdited, onTyping) {
     const channel = sb.channel(`dm_inbox:${myUserId}`)
       .on("postgres_changes", {

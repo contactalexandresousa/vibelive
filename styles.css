@@ -598,6 +598,17 @@ body {
   white-space: nowrap;
 }
 
+.card-category-inline-badge {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+
 .card-btn-call {
   position: absolute;
   bottom: 12px;
@@ -4753,11 +4764,11 @@ input:-webkit-autofill:focus {
 /* ==========================================================================
    26. REDESENHADA PREMIUM: TELA DE PERFIL DO CRIADOR
    ========================================================================== */
-#screen-profile {
+.profile-screen-style {
   background: radial-gradient(circle at top, var(--screen-gradient-start) 0%, var(--screen-gradient-end) 100%);
 }
 
-#screen-profile .profile-header-premium {
+.profile-screen-style .profile-header-premium {
   height: 56px;
   padding: 0 16px;
   display: flex;
@@ -4768,7 +4779,7 @@ input:-webkit-autofill:focus {
   backdrop-filter: blur(12px);
 }
 
-#screen-profile .profile-header-premium h2 {
+.profile-screen-style .profile-header-premium h2 {
   font-family: var(--font-display);
   font-size: 1.1rem;
   font-weight: 800;
@@ -4778,7 +4789,7 @@ input:-webkit-autofill:focus {
   -webkit-text-fill-color: transparent;
 }
 
-#screen-profile .profile-settings-btn {
+.profile-screen-style .profile-settings-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
   width: 32px;
@@ -4792,25 +4803,25 @@ input:-webkit-autofill:focus {
   transition: var(--transition-smooth);
 }
 
-#screen-profile .profile-settings-btn svg {
+.profile-screen-style .profile-settings-btn svg {
   width: 15px;
   height: 15px;
 }
 
 /* Novo visual do Cartão de Perfil */
-#screen-profile .profile-card-premium {
+.profile-screen-style .profile-card-premium {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
   border-bottom: 1px solid var(--glass-border);
   padding: 24px 16px;
 }
 
-#screen-profile .profile-quick-stats {
+.profile-screen-style .profile-quick-stats {
   display: flex;
   justify-content: space-between;
   gap: 10px;
 }
 
-#screen-profile .quick-stat-box {
+.profile-screen-style .quick-stat-box {
   flex: 1;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--glass-border);
@@ -4821,14 +4832,14 @@ input:-webkit-autofill:focus {
   align-items: center;
 }
 
-#screen-profile .quick-stat-box .stat-number {
+.profile-screen-style .quick-stat-box .stat-number {
   font-size: 1.1rem;
   color: #fff;
   font-weight: 850;
   font-family: var(--font-display);
 }
 
-#screen-profile .quick-stat-box .stat-label {
+.profile-screen-style .quick-stat-box .stat-label {
   font-size: 0.58rem;
   color: var(--light-gray);
   text-transform: uppercase;
@@ -4836,12 +4847,12 @@ input:-webkit-autofill:focus {
   margin-top: 1px;
 }
 
-#screen-profile .profile-bio-info {
+.profile-screen-style .profile-bio-info {
   margin-top: 18px;
   margin-bottom: 18px;
 }
 
-#screen-profile .profile-bio-info h3 {
+.profile-screen-style .profile-bio-info h3 {
   font-size: 1.1rem;
   font-weight: 800;
   color: var(--text-primary);
@@ -4850,21 +4861,21 @@ input:-webkit-autofill:focus {
   gap: 6px;
 }
 
-#screen-profile .premium-verified {
+.profile-screen-style .premium-verified {
   color: var(--info);
   font-size: 0.85rem;
   font-weight: 950;
   filter: drop-shadow(0 0 4px rgba(78, 158, 255, 0.4));
 }
 
-#screen-profile .profile-handle {
+.profile-screen-style .profile-handle {
   color: var(--primary);
   font-weight: 700;
   font-size: 0.72rem;
   margin-top: 2px;
 }
 
-#screen-profile .profile-bio-text {
+.profile-screen-style .profile-bio-text {
   font-size: 0.78rem;
   color: var(--text-secondary);
   line-height: 1.4;
@@ -4872,12 +4883,12 @@ input:-webkit-autofill:focus {
 }
 
 /* Botões do Perfil */
-#screen-profile .profile-actions-row {
+.profile-screen-style .profile-actions-row {
   display: flex;
   gap: 10px;
 }
 
-#screen-profile .profile-action-btn {
+.profile-screen-style .profile-action-btn {
   flex: 1;
   height: 40px;
   border-radius: 14px;
@@ -4885,62 +4896,62 @@ input:-webkit-autofill:focus {
   font-weight: 800;
 }
 
-#screen-profile .profile-action-btn.primary {
+.profile-screen-style .profile-action-btn.primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
   box-shadow: 0 4px 15px rgba(255, 77, 109, 0.3);
 }
 
-#screen-profile .profile-action-btn.secondary {
+.profile-screen-style .profile-action-btn.secondary {
   background: var(--overlay-06);
   border: 1px solid var(--glass-border);
   color: var(--text-primary);
 }
 
 /* Carteira de moedas estilo Carteira Virtual Premium */
-#screen-profile .coin-shop-container.collapsible {
+.profile-screen-style .coin-shop-container.collapsible {
   background: var(--overlay-04);
   border-bottom: 1px solid var(--glass-border);
   padding: 18px 16px;
 }
 
-#screen-profile .shop-title {
+.profile-screen-style .shop-title {
   font-size: 0.85rem;
   font-weight: 800;
   text-transform: uppercase;
   color: #fff;
 }
 
-#screen-profile .balance-display {
+.profile-screen-style .balance-display {
   background: rgba(0, 0, 0, 0.3);
   padding: 4px 10px;
   border-radius: 10px;
   border: 0.5px solid var(--glass-border);
 }
 
-#screen-profile .balance-display strong {
+.profile-screen-style .balance-display strong {
   color: var(--secondary);
   font-size: 0.85rem;
 }
 
-#screen-profile .package-card {
+.profile-screen-style .package-card {
   background: var(--overlay-06);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   transition: var(--transition-smooth);
 }
 
-#screen-profile .package-card:hover {
+.profile-screen-style .package-card:hover {
   border-color: rgba(240, 178, 61, 0.4);
   background: rgba(240, 178, 61, 0.02);
 }
 
-#screen-profile .package-coins {
+.profile-screen-style .package-coins {
   color: var(--secondary);
   font-weight: 800;
 }
 
-#screen-profile .btn-buy-package {
+.profile-screen-style .btn-buy-package {
   background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
   color: #000;
   font-weight: 850;
@@ -4949,39 +4960,39 @@ input:-webkit-autofill:focus {
 }
 
 /* Abas e Grid de Publicações */
-#screen-profile .profile-tabs {
+.profile-screen-style .profile-tabs {
   background: rgba(var(--glass-dark-rgb), 0.3);
   border-bottom: 1px solid var(--glass-border);
 }
 
-#screen-profile .profile-tab-header-btn {
+.profile-screen-style .profile-tab-header-btn {
   height: 48px;
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-#screen-profile .profile-tab-header-btn.active {
+.profile-screen-style .profile-tab-header-btn.active {
   color: #fff;
 }
 
-#screen-profile .profile-tab-header-btn.active::after {
+.profile-screen-style .profile-tab-header-btn.active::after {
   background: var(--primary);
   height: 2px;
 }
 
-#screen-profile .profile-posts-grid {
+.profile-screen-style .profile-posts-grid {
   padding: 4px;
   gap: 4px;
 }
 
-#screen-profile .post-grid-item {
+.profile-screen-style .post-grid-item {
   border-radius: 10px;
   overflow: hidden;
   border: 0.5px solid var(--glass-border);
 }
 
 /* Botão Sair da Conta reformado */
-#screen-profile .btn-logout {
+.profile-screen-style .btn-logout {
   width: calc(100% - 32px);
   margin: 20px 16px 40px;
   height: 42px;
@@ -4996,7 +5007,7 @@ input:-webkit-autofill:focus {
   transition: var(--transition-smooth);
 }
 
-#screen-profile .btn-logout:hover {
+.profile-screen-style .btn-logout:hover {
   background: rgba(255, 77, 109, 0.1);
   border-color: var(--primary);
 }
@@ -5569,6 +5580,35 @@ input:-webkit-autofill:focus {
 }
 
 .vibe-category-card.active .vibe-category-label {
+  color: #fff;
+}
+
+/* Chips de categoria de conteúdo — pílulas horizontais roláveis, dimensão
+   separada dos cards "Vibe" acima (assunto da live, não engajamento/conta). */
+.live-category-chips-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 16px 10px;
+  overflow-x: auto;
+}
+
+.live-category-chip {
+  flex-shrink: 0;
+  padding: 6px 13px;
+  border-radius: 16px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--overlay-04);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition-smooth);
+}
+
+.live-category-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
   color: #fff;
 }
 
