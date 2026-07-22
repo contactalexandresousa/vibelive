@@ -7397,8 +7397,15 @@ async function applyProfileToUI(profile) {
       }
       renderInboxList();
     }, (row) => {
+      // Esse UPDATE (sender_id = eu) tanto pode ser o destinatário marcando
+      // como lida quanto EU editando/apagando a própria mensagem numa OUTRA
+      // sessão logada (celular + navegador, por exemplo) — sem checar
+      // is_deleted/edited_at aqui, essa segunda sessão nunca saberia que a
+      // mensagem mudou até recarregar a página.
       if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.recipient_id) {
-        updateChatBubbleReadStatus(row.id, row.read_at);
+        if (row.is_deleted) applyDeletedTombstoneToBubble(row.id, "Você apagou esta mensagem");
+        else if (row.edited_at) applyEditedTextToBubble(row.id, row.text, row.edited_at);
+        else updateChatBubbleReadStatus(row.id, row.read_at);
       }
     }, (row) => {
       if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.sender_id) {

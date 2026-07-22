@@ -1599,9 +1599,13 @@ const DB = {
   },
 
   async getStoryViewers(storyId) {
+    // FK explícita por precaução — um embed de profiles(...) sem qualificar
+    // já quebrou uma vez (getComments, quando comment_likes criou um segundo
+    // caminho até profiles) assim que outra tabela ganha um segundo caminho
+    // até profiles. story_views só tem um hoje, mas fixar já evita repetir.
     const { data, error } = await sb
       .from("story_views")
-      .select("viewed_at, profiles(id, username, display_name, avatar_url)")
+      .select("viewed_at, profiles!story_views_viewer_id_fkey(id, username, display_name, avatar_url)")
       .eq("story_id", storyId)
       .order("viewed_at", { ascending: false });
     if (error) throw error;
