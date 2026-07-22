@@ -1240,13 +1240,52 @@ function appendPrivateChatBubble(msg, myUserId) {
     vipSuffix = `<span style="font-size: 0.58rem; display: block; color: var(--secondary); font-weight: bold; margin-bottom: 2px;">👑 VIP Ouro</span>`;
   }
 
+  const imageHtml = msg.image_url ? `<img src="${msg.image_url}" alt="Foto" class="chat-bubble-image" onclick="openLightboxImage('${msg.image_url}')">` : "";
+  const textHtml = msg.text ? `<span>${escapeHtml(msg.text)}</span>` : "";
+
   bubble.innerHTML = `
     ${vipSuffix}
-    <span>${escapeHtml(msg.text)}</span>
+    ${imageHtml}
+    ${textHtml}
     <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
   `;
   DOM.privateChatHistory.appendChild(bubble);
   DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
+}
+
+function openLightboxImage(url) {
+  window.open(url, "_blank");
+}
+
+async function handlePrivateChatImageSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = ""; // permite escolher o mesmo arquivo de novo depois
+  if (!file) return;
+  if (!requireAuth()) return;
+
+  const partnerId = STATE.activeChatPartner;
+  if (!partnerId) return;
+
+  if (!file.type.startsWith("image/")) {
+    showToast("Escolha um arquivo de imagem.");
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    showToast("Imagem muito grande (máximo 15MB).");
+    return;
+  }
+
+  showToast("Enviando foto...");
+  try {
+    const compressed = await compressImageFile(file, 1280, 0.85);
+    const user = await Auth.getUser();
+    const imageUrl = await DB.uploadDmMedia(user.id, compressed);
+    const sent = await DB.sendDirectMessage(partnerId, null, imageUrl);
+    appendPrivateChatBubble(sent, user.id);
+    renderInboxList();
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar a foto.");
+  }
 }
 
 function handlePrivateChatKey(event) {
@@ -2033,6 +2072,66 @@ function closeAdminAuditLogPanel() {
   document.getElementById("modal-admin-audit").style.display = "none";
 }
 
+async function openAdminBannedWordsPanel() {
+  if (!STATE.isAdmin) return;
+  document.getElementById("modal-admin-banned-words").style.display = "flex";
+  document.getElementById("banned-word-input").value = "";
+  await renderBannedWordsList();
+}
+
+function closeAdminBannedWordsPanel() {
+  document.getElementById("modal-admin-banned-words").style.display = "none";
+}
+
+async function renderBannedWordsList() {
+  const container = document.getElementById("banned-words-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  try {
+    const words = await DB.getBannedWords();
+    if (words.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Nenhuma palavra bloqueada ainda.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    words.forEach(word => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-details"><span class="inbox-name">${escapeHtml(word)}</span></div>
+        <div class="inbox-right"><button class="btn-follow-primary" style="height:26px; font-size:0.62rem; padding:0 10px; background:rgba(241,85,76,0.15); color:var(--danger);" onclick="removeBannedWordClick('${escapeHtml(word).replace(/'/g, "\\'")}', this)">Remover</button></div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+async function addBannedWordFromInput() {
+  const input = document.getElementById("banned-word-input");
+  const word = input.value.trim();
+  if (!word) return;
+  try {
+    await DB.addBannedWord(word);
+    input.value = "";
+    await renderBannedWordsList();
+    showToast("Palavra adicionada ao filtro.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível adicionar agora.");
+  }
+}
+
+async function removeBannedWordClick(word, btn) {
+  btn.disabled = true;
+  try {
+    await DB.removeBannedWord(word);
+    await renderBannedWordsList();
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível remover agora.");
+  }
+}
+
 // 12.7. EXTRATO DE MOEDAS E PAINEL DE GANHOS
 const TRANSACTION_TYPE_INFO = {
   gift: { label: "Presente enviado", icon: "🎁" },
@@ -2044,6 +2143,7 @@ const TRANSACTION_TYPE_INFO = {
   roulette_spin: { label: "Roleta", icon: "🎰" },
   daily_checkin: { label: "Check-in diário", icon: "🗓️" },
   pix_recharge: { label: "Recarga PIX", icon: "💳" },
+  card_recharge: { label: "Recarga cartão", icon: "💳" },
   private_content_unlock: { label: "Desbloqueio de conteúdo", icon: "🔓" },
   private_content_sale: { label: "Venda de conteúdo", icon: "🔓" },
   withdrawal_request: { label: "Pedido de saque", icon: "💸" },
@@ -3022,36 +3122,16 @@ async function refreshProfileStats(userId, username) {
   }
 }
 
-async function renderProfilePosts() {
-  const container = document.getElementById("profile-posts-grid-container");
-  const emptyState = document.getElementById("profile-posts-empty-state");
-  if (!container) return;
+// Grid de posts do perfil carrega em páginas de 24 (DB.getMyPosts já rejeita
+// buscar tudo de uma vez) — rolar até o fim busca a próxima leva sozinho via
+// IntersectionObserver, sem botão "carregar mais".
+const PROFILE_POSTS_PAGE_SIZE = 24;
+STATE.profilePostsOffset = 0;
+STATE.profilePostsHasMore = true;
+STATE.profilePostsLoadingMore = false;
+STATE.profilePostsObserver = null;
 
-  if (!STATE.isLoggedIn) {
-    container.innerHTML = "";
-    STATE.myPosts = [];
-    return;
-  }
-
-  let posts;
-  try {
-    posts = await DB.getMyPosts();
-  } catch (err) {
-    console.error("Falha ao carregar publicações:", err);
-    return;
-  }
-  STATE.myPosts = posts;
-
-  container.innerHTML = "";
-
-  if (posts.length === 0) {
-    container.style.display = "none";
-    if (emptyState) emptyState.style.display = "flex";
-    return;
-  }
-  container.style.display = "grid";
-  if (emptyState) emptyState.style.display = "none";
-
+function appendPostsToProfileGrid(posts, container) {
   posts.forEach(post => {
     const item = document.createElement("div");
     item.className = "post-grid-item";
@@ -3088,6 +3168,79 @@ async function renderProfilePosts() {
       if (el) el.textContent = comments.length;
     }).catch(() => {});
   });
+}
+
+async function renderProfilePosts() {
+  const container = document.getElementById("profile-posts-grid-container");
+  const emptyState = document.getElementById("profile-posts-empty-state");
+  if (!container) return;
+
+  STATE.profilePostsOffset = 0;
+  STATE.profilePostsHasMore = true;
+  if (STATE.profilePostsObserver) {
+    STATE.profilePostsObserver.disconnect();
+    STATE.profilePostsObserver = null;
+  }
+
+  if (!STATE.isLoggedIn) {
+    container.innerHTML = "";
+    STATE.myPosts = [];
+    return;
+  }
+
+  let posts;
+  try {
+    posts = await DB.getMyPosts(0, PROFILE_POSTS_PAGE_SIZE);
+  } catch (err) {
+    console.error("Falha ao carregar publicações:", err);
+    return;
+  }
+  STATE.myPosts = posts;
+  STATE.profilePostsOffset = posts.length;
+  STATE.profilePostsHasMore = posts.length === PROFILE_POSTS_PAGE_SIZE;
+
+  container.innerHTML = "";
+
+  if (posts.length === 0) {
+    container.style.display = "none";
+    if (emptyState) emptyState.style.display = "flex";
+    return;
+  }
+  container.style.display = "grid";
+  if (emptyState) emptyState.style.display = "none";
+
+  appendPostsToProfileGrid(posts, container);
+  setupProfilePostsInfiniteScroll();
+}
+
+function setupProfilePostsInfiniteScroll() {
+  const sentinel = document.getElementById("profile-posts-load-sentinel");
+  const root = document.querySelector(".profile-scroll-area");
+  if (!sentinel || !root) return;
+
+  STATE.profilePostsObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) loadMoreProfilePosts();
+  }, { root, rootMargin: "300px" });
+  STATE.profilePostsObserver.observe(sentinel);
+}
+
+async function loadMoreProfilePosts() {
+  if (STATE.profilePostsLoadingMore || !STATE.profilePostsHasMore) return;
+  STATE.profilePostsLoadingMore = true;
+
+  try {
+    const posts = await DB.getMyPosts(STATE.profilePostsOffset, PROFILE_POSTS_PAGE_SIZE);
+    STATE.myPosts = STATE.myPosts.concat(posts);
+    STATE.profilePostsOffset += posts.length;
+    STATE.profilePostsHasMore = posts.length === PROFILE_POSTS_PAGE_SIZE;
+
+    const container = document.getElementById("profile-posts-grid-container");
+    if (container && posts.length > 0) appendPostsToProfileGrid(posts, container);
+  } catch (err) {
+    console.error("Falha ao carregar mais publicações:", err);
+  } finally {
+    STATE.profilePostsLoadingMore = false;
+  }
 }
 
 function openNewPostModal() {
@@ -4663,6 +4816,8 @@ async function applyProfileToUI(profile) {
   if (adminErrorsBtn) adminErrorsBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminAuditBtn = document.getElementById("btn-admin-audit");
   if (adminAuditBtn) adminAuditBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminBannedWordsBtn = document.getElementById("btn-admin-banned-words");
+  if (adminBannedWordsBtn) adminBannedWordsBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();

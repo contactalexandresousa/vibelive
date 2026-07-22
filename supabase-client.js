@@ -403,6 +403,22 @@ const DB = {
     return data;
   },
 
+  async getBannedWords() {
+    const { data, error } = await sb.from("banned_words").select("word").order("word");
+    if (error) throw error;
+    return data.map(r => r.word);
+  },
+
+  async addBannedWord(word) {
+    const { error } = await sb.rpc("admin_add_banned_word", { p_word: word });
+    if (error) throw error;
+  },
+
+  async removeBannedWord(word) {
+    const { error } = await sb.rpc("admin_remove_banned_word", { p_word: word });
+    if (error) throw error;
+  },
+
   async getAdminAuditLog(limit = 50) {
     const { data, error } = await sb
       .from("admin_audit_log")
@@ -682,9 +698,12 @@ const DB = {
     if (error) throw error;
   },
 
-  async getMyPosts() {
+  async getMyPosts(offset = 0, limit = 24) {
     const { data: { user } } = await sb.auth.getUser();
-    const { data, error } = await sb.from("posts").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data, error } = await sb.from("posts").select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
     if (error) throw error;
     return data;
   },
@@ -856,11 +875,15 @@ const DB = {
     // profiles (convidados), existe mais de um caminho possível sem isso.
     // created_at do profile alimenta o filtro "Vibe Nova" (conta com menos
     // de 1 semana); viewer_count alimenta o "Vibe Hot".
+    // Sem limite aqui, uma live viral (ou um dia de crescimento real) faria
+    // essa consulta trazer TODA sessão ativa de uma vez só. 200 é bem acima
+    // de qualquer volume atual, só existe pra não ficar irrestrito de propósito.
     const { data, error } = await sb
       .from("live_sessions")
       .select("*, profiles!live_sessions_user_id_fkey(username, display_name, avatar_url, created_at)")
       .is("ended_at", null)
-      .order("started_at", { ascending: false });
+      .order("started_at", { ascending: false })
+      .limit(200);
     if (error) throw error;
     return data;
   },
@@ -1078,7 +1101,7 @@ const DB = {
       if (!byPartner.has(partnerId)) {
         byPartner.set(partnerId, {
           partnerId,
-          lastMessage: m.text,
+          lastMessage: m.text || (m.image_url ? "📷 Foto" : ""),
           lastAt: m.created_at,
           unread: m.recipient_id === user.id && !m.read_at
         });
@@ -1109,15 +1132,28 @@ const DB = {
     return data;
   },
 
-  async sendDirectMessage(recipientId, text) {
+  async sendDirectMessage(recipientId, text, imageUrl = null) {
     const { data: { user } } = await sb.auth.getUser();
     const { data, error } = await sb
       .from("direct_messages")
-      .insert({ sender_id: user.id, recipient_id: recipientId, text })
+      .insert({ sender_id: user.id, recipient_id: recipientId, text: text || null, image_url: imageUrl })
       .select()
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async uploadDmMedia(userId, file) {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: uploadError } = await sb.storage.from("dm-media").upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type || "image/jpeg"
+    });
+    if (uploadError) throw uploadError;
+
+    const { data } = sb.storage.from("dm-media").getPublicUrl(path);
+    return data.publicUrl;
   },
 
   async markConversationRead(partnerId) {

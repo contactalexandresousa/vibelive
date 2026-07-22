@@ -4281,6 +4281,14 @@ input:-webkit-autofill:focus {
   align-self: flex-end;
 }
 
+.chat-bubble-image {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 12px;
+  cursor: pointer;
+  object-fit: cover;
+}
+
 /* Barra inferior de escrita */
 .private-chat-input-bar {
   height: 52px;

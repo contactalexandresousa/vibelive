@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260721n">
+  <link rel="stylesheet" href="styles.css?v=20260721o">
 </head>
 <body>
 
@@ -434,7 +434,8 @@
 
             <!-- Barra de Input de Mensagem -->
             <div class="private-chat-input-bar">
-              <button class="chat-media-btn" onclick="showToast('Envio de fotos desativado')">
+              <input type="file" id="private-chat-media-input" accept="image/*" style="display: none;" onchange="handlePrivateChatImageSelected(event)">
+              <button class="chat-media-btn" onclick="document.getElementById('private-chat-media-input').click()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
               </button>
               <input type="text" id="private-chat-input" placeholder="Mensagem..." onkeydown="handlePrivateChatKey(event)">
@@ -611,6 +612,7 @@
                   <div class="profile-posts-grid" id="profile-posts-grid-container">
                     <!-- Gerado via JS -->
                   </div>
+                  <div id="profile-posts-load-sentinel" style="height: 1px;"></div>
                   <div class="discover-empty-state" id="profile-posts-empty-state" style="display: none;">
                     <div class="discover-empty-icon">🎬</div>
                     <h3>Nenhuma publicação ainda</h3>
@@ -1043,6 +1045,10 @@
                 📋 Log de Auditoria (Admin)
               </button>
 
+              <button class="btn-publish-post" id="btn-admin-banned-words" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminBannedWordsPanel()">
+                🚫 Palavras Bloqueadas (Admin)
+              </button>
+
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
 
               <div class="form-group-post">
@@ -1317,6 +1323,25 @@
             </header>
             <div class="search-results-scroll">
               <div class="inbox-list" id="admin-audit-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Filtro de Palavras Bloqueadas -->
+        <div class="new-post-modal" id="modal-admin-banned-words" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminBannedWordsPanel()"></div>
+          <div class="new-post-content" style="height: 70%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🚫 Palavras Bloqueadas</h3>
+              <button class="btn-close-new-post" onclick="closeAdminBannedWordsPanel()">×</button>
+            </header>
+            <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 10px;">Censura automaticamente (troca por ***) no chat ao vivo e em legendas de posts.</p>
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+              <input type="text" id="banned-word-input" placeholder="Nova palavra" style="flex: 1;">
+              <button class="btn-follow-primary" style="height: 40px; padding: 0 14px; font-size: 0.68rem; margin-top: 0; white-space: nowrap;" onclick="addBannedWordFromInput()">Adicionar</button>
+            </div>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="banned-words-list-container"></div>
             </div>
           </div>
         </div>
@@ -1868,9 +1893,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260721n"></script>
+  <script src="supabase-client.js?v=20260721o"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260721n"></script>
+  <script src="app.js?v=20260721o"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
