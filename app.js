@@ -889,7 +889,7 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
     STATE.liveKitRoom.disconnect();
     STATE.liveKitRoom = null;
   }
-  detachCohostTile("live-cohost-video");
+  clearAllCohostTiles("live-cohost-tiles");
 
   STATE.currentLiveBroadcaster = b;
   STATE.currentLiveIsReal = true;
@@ -974,29 +974,28 @@ async function connectToRealLiveVideo(hostUserId, loader) {
 
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
       // O anfitrião publica na identidade hostUserId; qualquer outro
-      // participante publicando na mesma sala é um co-transmissor, cujo
-      // vídeo vai num tile PiP separado em vez de sobrescrever o principal.
+      // participante publicando na mesma sala é um co-transmissor — cada um
+      // ganha o próprio tile PiP (identity vira a chave), em vez de um único
+      // elemento fixo que só cabia um convidado por vez.
       const isCohost = participant.identity !== hostUserId;
-      const target = isCohost ? document.getElementById("live-cohost-video") : DOM.liveVideo;
-      if (!target) return;
 
+      if (isCohost) {
+        attachCohostParticipantTrack(track, participant.identity, "live-cohost-tiles");
+        return;
+      }
       if (track.kind === "video") {
-        track.attach(target);
-        if (isCohost) {
-          target.style.display = "block";
-        } else {
-          loader.style.opacity = "0";
-          setTimeout(() => { loader.style.display = "none"; }, 500);
-        }
-        target.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
+        track.attach(DOM.liveVideo);
+        loader.style.opacity = "0";
+        setTimeout(() => { loader.style.display = "none"; }, 500);
+        DOM.liveVideo.play().catch(err => console.log("Autoplay bloqueado, aguardando clique", err));
       } else if (track.kind === "audio") {
-        track.attach(target);
+        track.attach(DOM.liveVideo);
       }
     });
 
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
       if (participant.identity !== hostUserId) {
-        detachCohostTile("live-cohost-video");
+        detachCohostParticipantTile(participant.identity, "live-cohost-tiles");
       }
     });
 
@@ -1033,7 +1032,7 @@ function closeLiveRoom() {
     STATE.liveKitRoom = null;
   }
   clearLivePoll("live-poll-card");
-  detachCohostTile("live-cohost-video");
+  clearAllCohostTiles("live-cohost-tiles");
 
   STATE.currentLiveBroadcaster = null;
   STATE.currentLiveIsReal = false;
@@ -2641,11 +2640,13 @@ async function renderAdminAppealsList() {
     container.innerHTML = "";
     appeals.forEach(a => {
       const name = escapeHtml(a.profile ? (a.profile.display_name || a.profile.username) : "Conta removida");
-      const isMfaLockout = a.type === "mfa_lockout";
-      const typeLabel = isMfaLockout
-        ? '<span style="font-weight:400; color:var(--light-gray);">· sem acesso ao 2FA</span>'
-        : '<span style="font-weight:400; color:var(--light-gray);">· conta suspensa</span>';
-      const approveLabel = isMfaLockout ? "Aprovar (desativa 2FA)" : "Aprovar (reativa conta)";
+      const typeMeta = {
+        mfa_lockout: { label: "sem acesso ao 2FA", approve: "Aprovar (desativa 2FA)" },
+        verification_request: { label: "pedido de verificação", approve: "Aprovar (verifica conta)" },
+        suspension: { label: "conta suspensa", approve: "Aprovar (reativa conta)" },
+      }[a.type] || { label: "conta suspensa", approve: "Aprovar (reativa conta)" };
+      const typeLabel = `<span style="font-weight:400; color:var(--light-gray);">· ${typeMeta.label}</span>`;
+      const approveLabel = typeMeta.approve;
       const item = document.createElement("div");
       item.className = "inbox-item";
       item.style.alignItems = "flex-start";
@@ -3837,10 +3838,10 @@ async function launchBroadcastingSession() {
     // sala — mostra num tile PiP em vez de sobrescrever a própria câmera.
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (participant.identity === user.id) return;
-      attachCohostTrack(track, "my-live-cohost-video");
+      attachCohostParticipantTrack(track, participant.identity, "my-live-cohost-tiles");
     });
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-      if (participant.identity !== user.id) detachCohostTile("my-live-cohost-video");
+      if (participant.identity !== user.id) detachCohostParticipantTile(participant.identity, "my-live-cohost-tiles");
     });
 
     await room.connect(LIVEKIT_URL, token);
@@ -3966,7 +3967,7 @@ async function stopOwnLiveStream() {
     }
   }
   STATE.activeLiveSessionId = null;
-  document.getElementById("my-live-cohost-video").style.display = "none";
+  clearAllCohostTiles("my-live-cohost-tiles");
 
   // Reiniciar telas do go live
   DOM.goLiveSetup.style.display = "flex";
@@ -5020,6 +5021,35 @@ function updateDmPrivacyButtonUI() {
   btn.textContent = `✉️ Quem pode te mandar DM: ${STATE.dmPrivacy === "followers_only" ? "Só quem eu sigo" : "Todo mundo"}`;
 }
 
+function updateVerificationRequestButtonUI() {
+  const btn = document.getElementById("btn-request-verification");
+  if (btn) btn.style.display = STATE.isVerified ? "none" : "block";
+}
+
+function openVerificationRequestModal() {
+  document.getElementById("verification-request-input").value = "";
+  document.getElementById("modal-verification-request").style.display = "flex";
+}
+
+function closeVerificationRequestModal() {
+  document.getElementById("modal-verification-request").style.display = "none";
+}
+
+async function submitVerificationRequest() {
+  const message = document.getElementById("verification-request-input").value.trim();
+  if (!message) {
+    showToast("Explique por que sua conta deveria ser verificada.");
+    return;
+  }
+  try {
+    await DB.submitVerificationRequest(message);
+    showToast("Pedido enviado! Um admin vai revisar em breve.");
+    closeVerificationRequestModal();
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar o pedido agora.");
+  }
+}
+
 function openProfileSettingsModal() {
   document.getElementById("modal-profile-settings").style.display = "flex";
 
@@ -5606,6 +5636,7 @@ async function saveProfileChanges() {
     STATE.myPrivateContentPrice = profile.private_content_price;
     STATE.mySubscriptionPrice = profile.subscription_price_coins;
     STATE.isVerified = !!profile.is_verified;
+    updateVerificationRequestButtonUI();
     const nameEl = document.querySelector(".profile-bio-info h3");
     const handleEl = document.querySelector(".profile-handle");
     const bioEl = document.querySelector(".profile-bio-text");
@@ -5952,19 +5983,42 @@ async function leaveCohost() {
   }
 }
 
-// Anexa o vídeo de um segundo participante (o co-transmissor) num tile
-// menor sobreposto — chamado tanto na tela de quem assiste quanto na do
-// próprio anfitrião, cada um com o id do próprio elemento de vídeo PiP.
-function attachCohostTrack(track, videoElementId) {
-  const el = document.getElementById(videoElementId);
-  if (!el) return;
-  track.attach(el);
-  el.style.display = "block";
+// Um tile PiP por co-transmissor (identity do LiveKit vira a chave) — antes
+// era um <video> fixo só, então um segundo convidado aceito nunca aparecia
+// (o track dele sobrescrevia o do primeiro, ou simplesmente não tinha onde
+// anexar). Chamado tanto na tela de quem assiste quanto na do próprio
+// anfitrião, cada um com o id do próprio container.
+function attachCohostParticipantTrack(track, participantIdentity, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  let tile = container.querySelector(`video[data-participant="${participantIdentity}"]`);
+  if (!tile) {
+    tile = document.createElement("video");
+    tile.className = "cohost-pip-video";
+    tile.playsInline = true;
+    tile.autoplay = true;
+    tile.dataset.participant = participantIdentity;
+    container.appendChild(tile);
+  }
+  track.attach(tile);
+  container.style.display = "flex";
 }
 
-function detachCohostTile(videoElementId) {
-  const el = document.getElementById(videoElementId);
-  if (el) { el.style.display = "none"; el.srcObject = null; }
+function detachCohostParticipantTile(participantIdentity, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const tile = container.querySelector(`video[data-participant="${participantIdentity}"]`);
+  if (tile) tile.remove();
+  if (container.children.length === 0) container.style.display = "none";
+}
+
+// Limpa todos os tiles de uma vez — usado ao trocar de sala/encerrar, não
+// dá pra confiar em TrackUnsubscribed individual chegar a tempo nesses casos.
+function clearAllCohostTiles(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = "";
+  container.style.display = "none";
 }
 
 // ==========================================================================
@@ -6422,6 +6476,87 @@ function renderCaptionSearchResults(container, posts) {
 // Escapa primeiro (defesa contra XSS na legenda, que é texto livre do
 // usuário) e só DEPOIS troca #hashtag por um link clicável — a ordem
 // importa, senão o link viraria alvo de escape também.
+// Autocomplete de @menção — reaproveitável por qualquer campo (legenda de
+// post, comentário) que chame isso no oninput. Detecta um "@parcial" sendo
+// digitado bem antes do cursor (sem espaço no meio) e sugere usernames.
+let mentionAutocompleteTimer = null;
+let mentionAutocompleteActiveInput = null;
+let mentionAutocompleteAtPos = null;
+
+function handleMentionAutocompleteInput(event) {
+  const input = event.target;
+  const cursorPos = input.selectionStart;
+  const textBeforeCursor = input.value.slice(0, cursorPos);
+  const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_.]{1,24})$/);
+
+  if (!match) {
+    hideMentionAutocomplete();
+    return;
+  }
+
+  mentionAutocompleteActiveInput = input;
+  mentionAutocompleteAtPos = cursorPos - match[1].length - 1;
+  const partial = match[1];
+
+  clearTimeout(mentionAutocompleteTimer);
+  mentionAutocompleteTimer = setTimeout(async () => {
+    try {
+      const results = await DB.searchProfiles(partial);
+      showMentionAutocomplete(results.slice(0, 6));
+    } catch (err) {
+      hideMentionAutocomplete();
+    }
+  }, 250);
+}
+
+function showMentionAutocomplete(results) {
+  const dropdown = document.getElementById("mention-autocomplete-dropdown");
+  if (!mentionAutocompleteActiveInput || results.length === 0) {
+    hideMentionAutocomplete();
+    return;
+  }
+  const rect = mentionAutocompleteActiveInput.getBoundingClientRect();
+  dropdown.innerHTML = "";
+  results.forEach(p => {
+    const item = document.createElement("div");
+    item.className = "mention-autocomplete-item";
+    item.innerHTML = `<img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt=""><span>@${escapeHtml(p.username)}</span>`;
+    // mousedown (não click) + preventDefault: o input não pode perder foco
+    // antes da seleção ser aplicada, senão a posição do cursor se perde.
+    item.onmousedown = (e) => { e.preventDefault(); insertMentionSelection(p.username); };
+    dropdown.appendChild(item);
+  });
+  dropdown.style.left = `${rect.left}px`;
+  dropdown.style.width = `${Math.max(180, rect.width)}px`;
+  dropdown.style.display = "block";
+  // Abre pra cima do campo por padrão (teclado mobile costuma cobrir o que
+  // vem abaixo) — só abre pra baixo se não tiver espaço em cima.
+  const dropdownHeight = dropdown.offsetHeight;
+  dropdown.style.top = rect.top > dropdownHeight + 8
+    ? `${rect.top - dropdownHeight - 6}px`
+    : `${rect.bottom + 6}px`;
+}
+
+function insertMentionSelection(username) {
+  const input = mentionAutocompleteActiveInput;
+  if (!input || mentionAutocompleteAtPos === null) return;
+  const cursorPos = input.selectionStart;
+  const before = input.value.slice(0, mentionAutocompleteAtPos);
+  const after = input.value.slice(cursorPos);
+  input.value = `${before}@${username} ${after}`;
+  const newCursorPos = before.length + username.length + 2;
+  input.focus();
+  input.setSelectionRange(newCursorPos, newCursorPos);
+  hideMentionAutocomplete();
+}
+
+function hideMentionAutocomplete() {
+  const dropdown = document.getElementById("mention-autocomplete-dropdown");
+  if (dropdown) dropdown.style.display = "none";
+  mentionAutocompleteActiveInput = null;
+  mentionAutocompleteAtPos = null;
+}
+
 // Reaproveitado por legenda de post (com hashtag) e texto de comentário (só
 // menção) — mesmo padrão @usuário do onboarding (só minúsculas/números/./_).
 function linkifyMentions(escapedText) {
@@ -7215,6 +7350,7 @@ async function applyProfileToUI(profile) {
   STATE.mySubscriptionPrice = profile.subscription_price_coins;
   STATE.isAdmin = !!profile.is_admin;
   STATE.isVerified = !!profile.is_verified;
+  updateVerificationRequestButtonUI();
 
   const nameEl = document.querySelector(".profile-bio-info h3");
   const handleEl = document.querySelector(".profile-handle");

@@ -516,6 +516,11 @@ const DB = {
     if (error) throw error;
   },
 
+  async submitVerificationRequest(message) {
+    const { error } = await sb.rpc("submit_verification_request", { p_message: message });
+    if (error) throw error;
+  },
+
   async getModerationBlocks(limit = 50) {
     const { data, error } = await sb.rpc("get_moderation_blocks", { p_limit: limit });
     if (error) throw error;

@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722o">
+  <link rel="stylesheet" href="styles.css?v=20260722p">
 </head>
 <body>
 
@@ -232,7 +232,7 @@
             <!-- Vídeo em loop simulando a live -->
             <div class="live-video-wrapper" onclick="handleLiveVideoTap()">
               <video id="live-player-video" loop playsinline muted></video>
-              <video id="live-cohost-video" class="cohost-pip-video" playsinline autoplay style="display: none;"></video>
+              <div id="live-cohost-tiles" class="cohost-tiles-container" style="display: none;"></div>
               <div class="video-loading-placeholder">
                 <div class="loader-spinner"></div>
                 <p>Conectando ao stream...</p>
@@ -777,7 +777,7 @@
             <!-- Feed de Câmera Local -->
             <div class="go-live-feed-container">
               <video id="go-live-video" autoplay playsinline muted></video>
-              <video id="my-live-cohost-video" class="cohost-pip-video" playsinline autoplay style="display: none;"></video>
+              <div id="my-live-cohost-tiles" class="cohost-tiles-container" style="display: none;"></div>
               <div class="camera-fallback-msg">
                 <svg class="icon-camera" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 <p>Por favor, permita o acesso à câmera para transmitir</p>
@@ -977,7 +977,7 @@
               </div>
               <div class="form-group-post">
                 <label for="post-caption-input">Legenda:</label>
-                <textarea id="post-caption-input" placeholder="Escreva uma legenda..."></textarea>
+                <textarea id="post-caption-input" placeholder="Escreva uma legenda..." oninput="handleMentionAutocompleteInput(event)" onblur="setTimeout(hideMentionAutocomplete, 150)"></textarea>
               </div>
               <label class="invite-checkbox-item" style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
                 <input type="checkbox" id="post-is-private-input">
@@ -1040,7 +1040,7 @@
                 <button type="button" onclick="cancelReplyToComment()">Cancelar</button>
               </div>
               <div class="lightbox-comment-input-row">
-                <input type="text" id="lightbox-new-comment" placeholder="Adicione um comentário...">
+                <input type="text" id="lightbox-new-comment" placeholder="Adicione um comentário..." oninput="handleMentionAutocompleteInput(event)" onblur="setTimeout(hideMentionAutocomplete, 150)">
                 <button onclick="addLightboxComment()">Publicar</button>
               </div>
             </div>
@@ -1161,6 +1161,10 @@
 
               <button class="btn-publish-post" id="btn-dm-privacy-toggle" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="toggleDmPrivacySetting()">
                 ✉️ Quem pode te mandar DM: Todo mundo
+              </button>
+
+              <button class="btn-publish-post" id="btn-request-verification" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary); display: none;" onclick="openVerificationRequestModal()">
+                ✓ Solicitar Selo de Verificado
               </button>
 
               <button class="btn-publish-post" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openBlockedUsersPanel()">
@@ -1762,6 +1766,24 @@
           </div>
         </div>
 
+        <!-- Dropdown de autocomplete de @menção — reaproveitado por qualquer
+             campo que tenha handleMentionAutocompleteInput no oninput -->
+        <div id="mention-autocomplete-dropdown" class="mention-autocomplete-dropdown" style="display: none;"></div>
+
+        <!-- Modal: solicitar selo de verificado -->
+        <div class="new-post-modal" id="modal-verification-request" style="display: none;">
+          <div class="new-post-overlay" onclick="closeVerificationRequestModal()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header">
+              <h3>Solicitar Selo de Verificado</h3>
+              <button class="btn-close-new-post" onclick="closeVerificationRequestModal()">×</button>
+            </header>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin: 10px 0;">Explique por que sua conta deveria ser verificada (ex: figura pública, marca, criador de conteúdo reconhecido). Um admin revisa o pedido.</p>
+            <textarea id="verification-request-input" placeholder="Descreva sua situação..." style="min-height: 90px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem; resize: none;"></textarea>
+            <button class="btn-publish-post" style="margin-top: 14px;" onclick="submitVerificationRequest()">Enviar Pedido</button>
+          </div>
+        </div>
+
         <!-- Modal: moderar espectador do chat da minha live -->
         <div class="new-post-modal" id="modal-live-chat-moderation" style="display: none;">
           <div class="new-post-overlay" onclick="closeLiveChatModerationMenu()"></div>
@@ -2277,9 +2299,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722o"></script>
+  <script src="supabase-client.js?v=20260722p"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722o"></script>
+  <script src="app.js?v=20260722p"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

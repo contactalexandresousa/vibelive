@@ -3892,18 +3892,27 @@ input:-webkit-autofill:focus {
   flex-shrink: 0;
 }
 
-.cohost-pip-video {
+/* Um tile por co-transmissor — a fileira inteira fica ancorada onde o PiP
+   único ficava antes; cada tile individual só cuida do próprio tamanho. */
+.cohost-tiles-container {
   position: absolute;
   top: 90px;
   right: 12px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cohost-pip-video {
   width: 96px;
   height: 140px;
   object-fit: cover;
   border-radius: 14px;
   border: 2px solid rgba(255, 255, 255, 0.35);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-  z-index: 15;
   background: #000;
+  display: block;
 }
 
 .cohost-active-banner {
@@ -5673,6 +5682,42 @@ input:-webkit-autofill:focus {
 .suggested-profile-card .suggested-followers {
   font-size: 0.58rem;
   color: var(--text-secondary);
+}
+
+/* Autocomplete de @menção — position:fixed, coordenadas calculadas via
+   getBoundingClientRect() do campo ativo (funciona dentro de qualquer modal
+   ou tela sem precisar de posicionamento relativo específico por contexto). */
+.mention-autocomplete-dropdown {
+  position: fixed;
+  z-index: 3000;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  max-height: 190px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.mention-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+}
+
+.mention-autocomplete-item:hover {
+  background: var(--overlay-06);
+}
+
+.mention-autocomplete-item img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
