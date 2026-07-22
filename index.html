@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722c">
+  <link rel="stylesheet" href="styles.css?v=20260722d">
 </head>
 <body>
 
@@ -215,7 +215,7 @@
           <!-- 3. TELA DE LIVE PLAYER (ASSISTINDO) -->
           <section id="screen-live-room" class="screen">
             <!-- Vídeo em loop simulando a live -->
-            <div class="live-video-wrapper">
+            <div class="live-video-wrapper" onclick="handleLiveVideoTap()">
               <video id="live-player-video" loop playsinline muted></video>
               <video id="live-cohost-video" class="cohost-pip-video" playsinline autoplay style="display: none;"></video>
               <div class="video-loading-placeholder">
@@ -226,87 +226,51 @@
 
             <!-- Overlays da Live -->
             <div class="live-overlay-container">
-              
-              <!-- 1. Cabeçalho Superior conforme a Foto (Streamer + Seguir + Visualizadores) -->
+
+              <!-- Cabeçalho: Streamer + Seguir + Visualizadores -->
               <div class="live-header-tiktok">
                 <div class="streamer-card-left">
-                  <img id="streamer-avatar" src="" alt="Streamer" class="streamer-avatar-img">
+                  <img id="streamer-avatar" src="" alt="Streamer" class="streamer-avatar-img" onclick="openLiveStreamerOptions()">
                   <div class="streamer-text-details">
                     <span id="streamer-name" class="streamer-name-tag">Carregando...</span>
                     <span id="streamer-stats" class="streamer-promo-subtitle">Conteúdo promo</span>
                   </div>
-                  <button id="btn-follow-streamer" class="btn-follow-primary" onclick="toggleFollowStreamer()">+ Seguir</button>
+                  <button id="btn-follow-streamer" class="btn-follow-primary" onclick="toggleFollowStreamer()">Seguir</button>
                 </div>
 
                 <div class="live-header-right-panel">
                   <!-- Avatares reais de quem está assistindo agora (Presence) -->
                   <div class="header-viewers-list" id="header-viewers-list"></div>
+                  <svg class="icon-eye-count" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                   <span id="live-viewer-count" class="viewers-count-number">115</span>
-                  <button class="btn-header-chevron" onclick="openLiveStreamerOptions()">
-                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                  <button class="btn-header-icon" onclick="toggleLiveFocusMode()" title="Limpar tela" aria-label="Limpar tela, mostrar só o vídeo">
+                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 5c-6.06 0-10.98 4.28-12 9 .61 2.84 2.4 5.26 4.83 6.85l1.42-1.42C4.5 18.09 3.06 16.19 2.46 14 3.7 9.53 7.55 7 12 7c1.28 0 2.51.2 3.65.58l1.55-1.55A13.6 13.6 0 0 0 12 5zm8.6 3.4L19 10c1.13 1.03 2.02 2.36 2.54 4-1.24 4.47-5.09 7-9.54 7-.9 0-1.77-.1-2.6-.3l-1.66 1.66C8.66 22.79 10.28 23 12 23c6.06 0 10.98-4.28 12-9-.5-2.3-1.72-4.35-3.4-5.98v-.02zM12 9a5 5 0 0 0-4.9 6.02l6.92-6.92C13.42 9.13 12.73 9 12 9zm-.02 8L18 10.98c.1.65.02 1.31-.22 1.92A5.01 5.01 0 0 1 11.98 17z"/></svg>
                   </button>
                   <button class="btn-close-live-x" onclick="closeLiveRoom(); navigateTo('discover');">×</button>
-                </div>
-              </div>
-
-              <!-- 2. Linha de Pills / Badges (Abaixo do Header) -->
-              <div class="live-badges-pills-row">
-                <div class="live-pill-badge daily-ranking">
-                  <span class="pill-emoji">🔥</span>
-                  <span>Classificação diária</span>
-                </div>
-                <div class="live-pill-badge custom-goal">
-                  <span class="pill-emoji">🎯</span>
-                  <span>0/10</span>
-                </div>
-                <div class="live-pill-badge custom-room">
-                  <span>Estádio</span>
                 </div>
               </div>
 
               <!-- Enquete ao vivo (aparece só quando o transmissor cria uma) -->
               <div class="live-poll-card" id="live-poll-card" style="display: none;"></div>
 
-              <!-- Meio: Caixa de aviso flutuante promocional -->
-              <div class="floating-promo-box" style="display: none;">
-                <span class="promo-badge">PROMOÇÃO LOUCA</span>
-                <span class="promo-timer">00:25:27</span>
-                <button class="promo-close" onclick="this.parentElement.remove()">×</button>
-              </div>
-
-              <!-- 3. Rodapé da Live: Comentários e Ações -->
+              <!-- Rodapé da Live: Comentários e Ações -->
               <div class="live-footer">
-                
+
                 <!-- Área de Chat Flutuante -->
                 <div class="live-chat-area-tiktok" id="live-chat-messages">
                   <!-- Comentários simulados e do Host formatados -->
                 </div>
 
-                <!-- Banner azul de aviso promocional acima da barra inferior -->
-                <div class="live-tooltip-banner">
-                  <span>Músicas da LIVE: deixe que um Presente cante o que você sente</span>
-                  <div class="tooltip-banner-pointer"></div>
-                </div>
-
-                <!-- Barra de Ações Inferior conforme a Foto -->
+                <!-- Barra de Ações Inferior -->
                 <div class="live-action-bar-tiktok">
-                  
-                  <!-- Caixa de digitação com ícone de mensagem dourado -->
+
+                  <!-- Caixa de digitação -->
                   <div class="chat-input-wrapper-tiktok">
-                    <div class="gold-msg-icon">
-                      <svg viewBox="0 0 24 24"><path fill="#f0b23d" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
-                    </div>
-                    <input type="text" id="live-chat-input" placeholder="Tipo..." onkeydown="handleChatInputKey(event)">
+                    <input type="text" id="live-chat-input" placeholder="Digite algo..." onkeydown="handleChatInputKey(event)">
                   </div>
 
                   <!-- Botões de Ações rápidos do lado direito -->
                   <div class="action-buttons-tiktok">
-                    <button class="btn-action-tk emoji" onclick="showToast('Emojis em breve! 😄')">
-                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
-                    </button>
-                    <button class="btn-action-tk connection" onclick="showToast('Conectando chamada 1v1...')">
-                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                    </button>
                     <button class="btn-action-tk roulette" onclick="openRouletteModal()" style="font-size: 1.1rem;">
                       🎡
                     </button>
@@ -315,9 +279,6 @@
                     </button>
                     <button class="btn-action-tk gift" onclick="openGiftDrawer()">
                       🎁
-                    </button>
-                    <button class="btn-action-tk share" onclick="showToast('Link de compartilhamento copiado!')">
-                      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z"/></svg>
                     </button>
                   </div>
                 </div>
@@ -2002,9 +1963,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722c"></script>
+  <script src="supabase-client.js?v=20260722d"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722c"></script>
+  <script src="app.js?v=20260722d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

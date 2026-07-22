@@ -902,6 +902,20 @@ function closeLiveRoom() {
 
   STATE.currentLiveBroadcaster = null;
   STATE.currentLiveIsReal = false;
+  DOM.liveRoom.classList.remove("focus-mode");
+}
+
+// Modo "tela limpa": esconde toda a interface sobre o vídeo (header, chat,
+// botões) deixando só a transmissão visível. Tocar no vídeo de novo traz a
+// interface de volta — mesmo gesto usado em players de vídeo em geral.
+function toggleLiveFocusMode() {
+  DOM.liveRoom.classList.toggle("focus-mode");
+}
+
+function handleLiveVideoTap() {
+  if (DOM.liveRoom.classList.contains("focus-mode")) {
+    DOM.liveRoom.classList.remove("focus-mode");
+  }
 }
 
 async function toggleFollowStreamer() {

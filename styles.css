@@ -678,13 +678,22 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 56px 16px 16px; /* Adiciona espaço no topo por causa da status bar */
-  background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.65) 100%);
+  padding: 56px 14px 16px; /* Adiciona espaço no topo por causa da status bar */
+  background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.7) 100%);
   pointer-events: none; /* Deixa passar clique para o vídeo se necessário */
+  opacity: 1;
+  transition: opacity 0.35s ease;
 }
 
 .live-overlay-container * {
   pointer-events: auto; /* Reativa cliques nos elementos filhos */
+}
+
+/* Modo "tela limpa" — some com toda a interface, só o vídeo fica visível */
+#screen-live-room.focus-mode .live-overlay-container,
+#screen-live-room.focus-mode .hearts-container {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Cabeçalho da Live */
@@ -790,45 +799,6 @@ body {
 .btn-close-live svg {
   width: 16px;
   height: 16px;
-}
-
-/* Anúncio Promocional Flutuante */
-.floating-promo-box {
-  align-self: flex-end;
-  background: linear-gradient(135deg, rgba(240, 178, 61, 0.95), rgba(255, 77, 109, 0.95));
-  border-radius: 12px;
-  padding: 6px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 15px;
-  box-shadow: 0 4px 15px rgba(255, 77, 109,0.3);
-  animation: pulseScale 2s infinite ease-in-out;
-}
-
-.promo-badge {
-  font-size: 0.65rem;
-  font-weight: 900;
-  color: #000;
-  background: #fff;
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
-.promo-timer {
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #fff;
-}
-
-.promo-close {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 /* Rodapé e Chat Flutuante */
@@ -994,6 +964,8 @@ body {
   pointer-events: none;
   z-index: 15;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.35s ease;
 }
 
 .floating-heart {
@@ -3552,26 +3524,29 @@ input:-webkit-autofill:focus {
    24. TELA DE LIVE PLAYER REDESENHADA (ESTILO TIKTOK LIVE)
    ========================================================================== */
 .live-header-tiktok {
-  height: 54px;
-  padding: 0 12px;
+  min-height: 40px;
+  padding: 0 4px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 6px;
   position: relative;
   z-index: 10;
 }
 
 .streamer-card-left {
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 20px;
-  padding: 2px 8px 2px 2px;
+  background: rgba(12, 12, 18, 0.5);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-radius: 22px;
+  padding: 3px 10px 3px 3px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 36px;
-  backdrop-filter: blur(8px);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  gap: 7px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  min-width: 0;
 }
 
 .streamer-avatar-img {
@@ -3579,66 +3554,79 @@ input:-webkit-autofill:focus {
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
+  border: 1.5px solid rgba(255, 77, 109, 0.55);
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .streamer-text-details {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  gap: 1px;
 }
 
 .streamer-name-tag {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 600;
   color: #fff;
   white-space: nowrap;
-  max-width: 65px;
+  max-width: 118px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .streamer-promo-subtitle {
-  font-size: 0.58rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.62);
   white-space: nowrap;
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-follow-primary {
   background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 12px;
-  height: 24px;
-  padding: 0 8px;
-  font-size: 0.65rem;
-  font-weight: bold;
+  border-radius: 14px;
+  height: 26px;
+  padding: 0 11px;
+  font-size: 0.66rem;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: var(--transition-smooth);
 }
 
 .btn-follow-primary.followed {
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .btn-follow-primary:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
 }
 
 /* Painel de Telespectadores Superior */
 .live-header-right-panel {
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 20px;
-  padding: 2px 10px;
+  background: rgba(12, 12, 18, 0.5);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-radius: 22px;
+  padding: 0 4px 0 8px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  backdrop-filter: blur(8px);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  gap: 4px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  flex-shrink: 0;
 }
 
 .header-viewers-list {
@@ -3647,76 +3635,70 @@ input:-webkit-autofill:focus {
 }
 
 .viewer-mini-avatar {
-  width: 24px;
-  height: 24px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
-  border: 1px solid #12131a;
-  margin-right: -6px;
+  border: 1.5px solid rgba(12, 12, 18, 0.9);
+  margin-right: -8px;
+  object-fit: cover;
+}
+
+.viewer-mini-avatar:last-child {
+  margin-right: 0;
+}
+
+.icon-eye-count {
+  width: 12px;
+  height: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  flex-shrink: 0;
 }
 
 .viewers-count-number {
-  font-size: 0.72rem;
-  color: #fff;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.btn-header-chevron {
+.btn-header-icon {
   background: none;
   border: none;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.85);
+  width: 26px;
+  height: 26px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.2s ease;
 }
 
-.btn-header-chevron svg {
-  width: 14px;
-  height: 14px;
+.btn-header-icon:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-header-icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 .btn-close-live-x {
   background: none;
   border: none;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.85);
   font-size: 1.3rem;
   font-weight: 300;
   cursor: pointer;
-  padding: 0 4px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   display: flex;
   align-items: center;
-}
-
-/* Pills de Classificação / Objetivos */
-.live-badges-pills-row {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px;
-  margin-top: 6px;
-  z-index: 10;
-  position: relative;
-}
-
-.live-pill-badge {
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 12px;
-  padding: 3px 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.65rem;
-  color: #fff;
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
-}
-
-.live-pill-badge.daily-ranking {
-  background: linear-gradient(90deg, rgba(240, 178, 61, 0.25) 0%, rgba(255, 77, 109, 0.25) 100%);
-  border: 0.5px solid rgba(240, 178, 61, 0.2);
-}
-
-.pill-emoji {
-  font-size: 0.72rem;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .cohost-pip-video {
@@ -3982,24 +3964,26 @@ input:-webkit-autofill:focus {
 /* Chat de Comentários Redesenhado */
 .live-chat-area-tiktok {
   flex: 1;
-  max-height: 170px;
+  max-height: 190px;
   overflow-y: auto;
-  padding: 0 12px;
+  padding: 0 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  mask-image: linear-gradient(to bottom, transparent 0%, black 15%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%);
+  justify-content: flex-end;
+  gap: 7px;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 18%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 18%);
 }
 
 .live-chat-area-tiktok .chat-msg {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 5px 10px;
-  border-radius: 12px;
+  background: rgba(12, 12, 18, 0.4);
+  backdrop-filter: blur(6px);
+  padding: 6px 11px;
+  border-radius: 14px;
   align-self: flex-start;
-  max-width: 85%;
-  line-height: 1.3;
-  border: 0.5px solid rgba(255, 255, 255, 0.03);
+  max-width: 82%;
+  line-height: 1.35;
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
 }
 
 .live-chat-area-tiktok .chat-msg.system {
@@ -4008,84 +3992,50 @@ input:-webkit-autofill:focus {
 }
 
 .live-chat-area-tiktok .chat-msg.gift-ann {
-  background: rgba(240, 178, 61, 0.12);
-  border: 0.5px solid rgba(240, 178, 61, 0.2);
+  background: rgba(240, 178, 61, 0.14);
+  border: 0.5px solid rgba(240, 178, 61, 0.22);
 }
 
 .live-chat-area-tiktok .msg-author {
-  font-weight: 800;
-  font-size: 0.72rem;
+  font-weight: 700;
+  font-size: 0.7rem;
   color: var(--secondary); /* Dourado/laranja */
   margin-right: 4px;
 }
 
 .live-chat-area-tiktok .chat-msg.system .msg-content {
   color: var(--info);
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 0.64rem;
+  font-weight: 600;
 }
 
 .live-chat-area-tiktok .msg-content {
   font-size: 0.72rem;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.95);
 }
 
-/* Tooltip Banner Azul */
-.live-tooltip-banner {
-  background: var(--info-dark);
-  color: #fff;
-  border-radius: 12px;
-  padding: 6px 12px;
-  margin: 0 12px 10px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 1.35;
-  position: relative;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-  animation: floatTooltip 3s ease-in-out infinite alternate;
-}
-
-@keyframes floatTooltip {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-3px); }
-}
-
-.tooltip-banner-pointer {
-  position: absolute;
-  bottom: -6px;
-  left: 20px;
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 6px solid var(--info-dark);
-}
-
-/* Rodapé de Ações do Tiktok */
+/* Rodapé de Ações */
 .live-action-bar-tiktok {
-  height: 48px;
+  height: 42px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
-  margin-bottom: 8px;
+  padding: 0 10px;
+  margin-top: 10px;
+  margin-bottom: 6px;
 }
 
 .chat-input-wrapper-tiktok {
   flex: 1;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 20px;
-  height: 38px;
+  background: rgba(12, 12, 18, 0.42);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border-radius: 21px;
+  height: 42px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  gap: 6px;
-}
-
-.gold-msg-icon svg {
-  width: 15px;
-  height: 15px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .chat-input-wrapper-tiktok input {
@@ -4093,33 +4043,36 @@ input:-webkit-autofill:focus {
   border: none;
   flex: 1;
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   height: 100%;
 }
 
 .chat-input-wrapper-tiktok input::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .action-buttons-tiktok {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .btn-action-tk {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.4);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 12, 18, 0.42);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   color: #fff;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   transition: transform 0.2s ease, background 0.2s ease;
+  flex-shrink: 0;
 }
 
 .btn-action-tk svg {
@@ -4133,12 +4086,12 @@ input:-webkit-autofill:focus {
 }
 
 .btn-action-tk.rose {
-  background: rgba(255, 77, 109, 0.2);
+  background: rgba(255, 77, 109, 0.18);
   border-color: rgba(255, 77, 109, 0.3);
 }
 
 .btn-action-tk.gift {
-  background: rgba(240, 178, 61, 0.2);
+  background: rgba(240, 178, 61, 0.18);
   border-color: rgba(240, 178, 61, 0.3);
 }
 
