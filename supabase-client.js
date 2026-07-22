@@ -112,6 +112,30 @@ const Auth = {
   }
 };
 
+// Checa uma imagem recém-enviada contra a Edge Function moderate-image
+// (Sightengine) e, se for sinalizada, apaga o arquivo do Storage e lança um
+// erro com a mensagem que os call sites (uploadAvatar/uploadPostMedia/
+// uploadDmMedia) já sabem mostrar via toast. Erro de rede/provedor fora do
+// ar não bloqueia o upload — só a checagem em si decide bloquear.
+async function moderateOrRemove(bucket, path, publicUrl, userId, context) {
+  let result;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/moderate-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: publicUrl, user_id: userId, context })
+    });
+    result = await res.json();
+  } catch (err) {
+    console.error("Falha ao checar moderação de imagem:", err);
+    return;
+  }
+  if (result && result.approved === false) {
+    await sb.storage.from(bucket).remove([path]).catch(() => {});
+    throw new Error(`Essa imagem foi identificada como conteúdo impróprio (${result.reason}) e não pôde ser enviada.`);
+  }
+}
+
 const DB = {
   async getProfile(userId) {
     const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
@@ -218,6 +242,7 @@ const DB = {
     if (uploadError) throw uploadError;
 
     const { data } = sb.storage.from("avatars").getPublicUrl(path);
+    await moderateOrRemove("avatars", path, data.publicUrl, userId, "avatar");
     // Cache-buster: o nome do arquivo não muda entre uploads (upsert), então
     // sem isso o navegador/CDN poderia continuar mostrando a imagem antiga.
     return `${data.publicUrl}?t=${Date.now()}`;
@@ -236,6 +261,11 @@ const DB = {
     if (uploadError) throw uploadError;
 
     const { data } = sb.storage.from("posts").getPublicUrl(path);
+    // Moderação de vídeo é um fluxo bem diferente (assíncrono, via webhook) —
+    // fora de escopo por ora; só checa quando é mesmo uma imagem.
+    if ((file.type || "").startsWith("image/")) {
+      await moderateOrRemove("posts", path, data.publicUrl, userId, "post");
+    }
     return data.publicUrl;
   },
 
@@ -360,6 +390,17 @@ const DB = {
       .limit(limit);
     if (error) throw error;
     return data;
+  },
+
+  async getMySessions() {
+    const { data, error } = await sb.rpc("get_my_sessions");
+    if (error) throw error;
+    return data;
+  },
+
+  async revokeMySession(sessionId) {
+    const { error } = await sb.rpc("revoke_my_session", { p_session_id: sessionId });
+    if (error) throw error;
   },
 
   async getMyReferralCount() {
@@ -1239,6 +1280,7 @@ const DB = {
     if (uploadError) throw uploadError;
 
     const { data } = sb.storage.from("dm-media").getPublicUrl(path);
+    await moderateOrRemove("dm-media", path, data.publicUrl, userId, "dm");
     return data.publicUrl;
   },
 

@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722d">
+  <link rel="stylesheet" href="styles.css?v=20260722e">
 </head>
 <body>
 
@@ -1817,9 +1817,15 @@
               <button class="btn-close-new-post" onclick="closeSessionsModal()">×</button>
             </header>
             <div class="search-results-scroll">
-              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Histórico de logins nessa conta (só o navegador/aparelho usado, sem localização).</p>
+              <p style="font-size: 0.62rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Sessões ativas agora</p>
+              <div class="inbox-list" id="active-sessions-list-container"></div>
+              <button class="btn-follow-primary" style="width: 100%; margin-top: 12px; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="signOutOtherSessions()">Sair de todos os outros dispositivos</button>
+
+              <div style="border-top: 1px solid var(--glass-border); margin: 18px 0 12px;"></div>
+
+              <p style="font-size: 0.62rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Histórico de logins</p>
+              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Registro de todos os logins nessa conta, mesmo os já encerrados.</p>
               <div class="inbox-list" id="sessions-list-container"></div>
-              <button class="btn-follow-primary" style="width: 100%; margin-top: 16px; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="signOutOtherSessions()">Sair de todos os outros dispositivos</button>
             </div>
           </div>
         </div>
@@ -1963,9 +1969,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722d"></script>
+  <script src="supabase-client.js?v=20260722e"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722d"></script>
+  <script src="app.js?v=20260722e"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

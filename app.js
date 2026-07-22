@@ -433,7 +433,7 @@ function renderNotificationsList() {
       <div class="discover-empty-state" style="display: flex;">
         <div class="discover-empty-icon">🔔</div>
         <h3>Nenhuma notificação ainda</h3>
-        <p>Quando alguém te seguir, for ao vivo, ou te convidar pra uma live restrita, aparece aqui.</p>
+        <p>Quando alguém te seguir, curtir ou comentar num post, for ao vivo, ou te convidar pra uma live restrita, aparece aqui.</p>
       </div>
     `;
     return;
@@ -466,6 +466,13 @@ function renderNotificationsList() {
     } else if (n.type === "missed_call") {
       text = `Chamada perdida de ${actorName}`;
       icon = "📞";
+    } else if (n.type === "post_like") {
+      text = `${actorName} curtiu seu post`;
+      icon = "❤️";
+    } else if (n.type === "post_comment") {
+      const preview = escapeHtml((n.metadata && n.metadata.text) || "");
+      text = `${actorName} comentou: "${preview}"`;
+      icon = "💬";
     } else {
       text = `${actorName} está ao vivo agora!`;
       icon = "🔴";
@@ -514,10 +521,17 @@ async function clearAllNotifications() {
   }
 }
 
-function handleNotificationClick(index) {
+async function handleNotificationClick(index) {
   const n = STATE.notifications[index];
-  if (!n || !n.actor) return;
+  if (!n) return;
   closeNotificationPanel();
+  if ((n.type === "post_like" || n.type === "post_comment") && n.metadata && n.metadata.post_id) {
+    navigateTo("profile");
+    if (!STATE.myPosts.some(p => p.id === n.metadata.post_id)) await renderProfilePosts();
+    openPostLightbox(n.metadata.post_id);
+    return;
+  }
+  if (!n.actor) return;
   if (n.type === "went_live" || n.type === "live_invite") {
     enterRealLiveRoom(n.actor_id);
   } else if (n.type === "new_follower" || n.type === "missed_call") {
@@ -1841,6 +1855,8 @@ const PUSH_PREFERENCE_LABELS = {
   direct_message: "Mensagem direta",
   withdrawal_reviewed: "Status do meu saque",
   subscription_expired: "Minha assinatura expirou",
+  post_like: "Curtida no meu post",
+  post_comment: "Comentário no meu post",
 };
 
 async function openPushPreferencesModal() {
@@ -2102,6 +2118,7 @@ async function openAdminStatsPanel() {
       { label: "Saques pendentes", value: `${stats.pending_withdrawals} (🪙 ${stats.pending_withdrawals_coins})`, icon: "💸" },
       { label: "Denúncias pendentes", value: stats.pending_reports, icon: "🛡️" },
       { label: "Bloqueios de rate limit hoje", value: stats.rate_limit_blocks_today, icon: "⛔" },
+      { label: "Imagens bloqueadas por moderação hoje", value: stats.moderation_blocks_today, icon: "🖼️" },
       { label: "Receita total (PIX + cartão aprovados)", value: `R$ ${brl}`, icon: "📈", highlight: true },
     ];
     container.innerHTML = "";
@@ -4143,10 +4160,11 @@ function parseUserAgentLabel(ua) {
 
 async function openSessionsModal() {
   if (!requireAuth()) return;
-  const container = document.getElementById("sessions-list-container");
   document.getElementById("modal-sessions").style.display = "flex";
-  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  renderActiveSessions();
 
+  const container = document.getElementById("sessions-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
   try {
     const events = await DB.getMyLoginEvents(15);
     container.innerHTML = "";
@@ -4167,6 +4185,57 @@ async function openSessionsModal() {
     });
   } catch (err) {
     container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);text-align:center;padding:10px 0;">Não foi possível carregar o histórico agora.</p>`;
+  }
+}
+
+// Diferente do histórico acima (login_events, fica pra sempre): isso reflete
+// auth.sessions de verdade — só o que ainda está válido agora, com opção de
+// encerrar uma sessão específica sem derrubar as outras.
+async function renderActiveSessions() {
+  const container = document.getElementById("active-sessions-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const sessions = await DB.getMySessions();
+    container.innerHTML = "";
+    if (sessions.length === 0) {
+      container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);text-align:center;padding:10px 0;">Nenhuma sessão ativa encontrada.</p>`;
+      return;
+    }
+    sessions.forEach(s => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      const currentBadge = s.is_current
+        ? `<span style="font-size:0.56rem;font-weight:800;color:var(--primary);background:rgba(255,77,109,0.12);padding:1px 6px;border-radius:6px;margin-left:6px;">ESTE DISPOSITIVO</span>`
+        : "";
+      const revokeBtn = s.is_current
+        ? ""
+        : `<button style="background:rgba(241,85,76,0.1);color:var(--danger);border:none;border-radius:8px;padding:5px 10px;font-size:0.65rem;font-weight:700;cursor:pointer;" onclick="revokeSessionClick('${s.id}', this)">Encerrar</button>`;
+      item.innerHTML = `
+        <div class="inbox-details">
+          <span class="inbox-name">💻 ${escapeHtml(parseUserAgentLabel(s.user_agent))}${currentBadge}</span>
+          <span class="inbox-message">${escapeHtml(s.ip || "IP desconhecido")} · ativo ${formatMessageTime(s.updated_at || s.created_at)}</span>
+        </div>
+        <div class="inbox-right">${revokeBtn}</div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.7rem;color:var(--light-gray);text-align:center;padding:10px 0;">Não foi possível carregar as sessões ativas agora.</p>`;
+  }
+}
+
+async function revokeSessionClick(sessionId, btn) {
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    await DB.revokeMySession(sessionId);
+    showToast("Sessão encerrada.");
+    renderActiveSessions();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Encerrar";
+    showToast(err.message || "Não foi possível encerrar essa sessão agora.");
   }
 }
 
