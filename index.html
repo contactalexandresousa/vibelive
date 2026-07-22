@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722g">
+  <link rel="stylesheet" href="styles.css?v=20260722h">
 </head>
 <body>
 
@@ -1053,7 +1053,7 @@
               </button>
 
               <button class="btn-publish-post" id="btn-admin-appeals" style="display: none; margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openAdminAppealsPanel()">
-                📋 Recursos de Suspensão (Admin)
+                📋 Recursos e Recuperação de Conta (Admin)
               </button>
 
               <button class="btn-publish-post" id="btn-admin-moderation" style="display: none; margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openAdminModerationPanel()">
@@ -1360,12 +1360,12 @@
           </div>
         </div>
 
-        <!-- Painel Admin: Recursos de Suspensão -->
+        <!-- Painel Admin: Recursos de Suspensão e Recuperação de Conta -->
         <div class="new-post-modal" id="modal-admin-appeals" style="display: none;">
           <div class="new-post-overlay" onclick="closeAdminAppealsPanel()"></div>
           <div class="new-post-content" style="height: 75%; align-items: stretch;">
             <header class="new-post-header">
-              <h3>📋 Recursos de Suspensão</h3>
+              <h3>📋 Recursos e Recuperação</h3>
               <button class="btn-close-new-post" onclick="closeAdminAppealsPanel()">×</button>
             </header>
             <div class="search-results-scroll">
@@ -1827,7 +1827,33 @@
               <span class="onboarding-error" id="twofa-challenge-error"></span>
               <button class="btn-follow-primary" style="width: 100%; margin-top: 12px;" onclick="submit2faChallenge()">Confirmar</button>
               <button type="button" class="onboarding-skip-btn" style="margin-top: 8px;" id="btn-toggle-backup-code-mode" onclick="toggleBackupCodeMode()">Usar código de backup</button>
+              <button type="button" class="onboarding-skip-btn" style="margin-top: 4px;" onclick="openMfaLockoutModal()">Perdi o autenticador e os códigos de backup</button>
               <button type="button" class="onboarding-skip-btn" style="margin-top: 4px;" onclick="cancel2faChallenge()">Cancelar login</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Recuperação de conta sem acesso ao 2FA — sem overlay de
+             propósito, só fecha pelo botão explícito. -->
+        <div class="new-post-modal" id="modal-mfa-lockout" style="display: none;">
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔒 Recuperar acesso</h3>
+            </header>
+            <div class="new-post-body">
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Se você perdeu o celular com o app autenticador E não tem mais os códigos de backup, um administrador pode desativar o 2FA da sua conta depois de analisar seu pedido.</p>
+              <div id="mfa-lockout-form">
+                <label style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px;">Seu @usuário</label>
+                <input type="text" id="mfa-lockout-username" class="onboarding-input" style="margin-top: 6px; margin-bottom: 12px;" placeholder="@usuario">
+                <label style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px;">Explique sua situação</label>
+                <textarea id="mfa-lockout-message" rows="4" style="width: 100%; margin-top: 6px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; color: var(--text-primary); font-family: var(--font-body); font-size: 0.78rem; resize: vertical;" placeholder="Ex: troquei de celular e não salvei os códigos de backup..."></textarea>
+                <span class="onboarding-error" id="mfa-lockout-error"></span>
+                <button class="btn-follow-primary" style="width: 100%; margin-top: 12px;" onclick="submitMfaLockoutAppeal()">Enviar pedido</button>
+              </div>
+              <div id="mfa-lockout-sent" style="display: none; text-align: center; padding: 10px 0;">
+                <p style="font-size: 0.82rem; color: var(--success);">✅ Pedido enviado! Vamos analisar e entrar em contato — depois disso você poderá entrar só com sua senha.</p>
+              </div>
+              <button type="button" class="onboarding-skip-btn" style="width: 100%; margin-top: 10px;" onclick="closeMfaLockoutModal()">Fechar</button>
             </div>
           </div>
         </div>
@@ -2010,9 +2036,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722g"></script>
+  <script src="supabase-client.js?v=20260722h"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722g"></script>
+  <script src="app.js?v=20260722h"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

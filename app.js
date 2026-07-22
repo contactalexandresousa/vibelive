@@ -1642,6 +1642,7 @@ const WITHDRAWAL_STATUS_LABELS = {
   approved: { text: "Aprovado", color: "var(--primary)" },
   paid: { text: "Pago ✓", color: "#4CAF50" },
   rejected: { text: "Rejeitado", color: "var(--danger)" },
+  cancelled: { text: "Cancelado por você", color: "var(--light-gray)" },
 };
 
 function updateWithdrawEstimate() {
@@ -1690,6 +1691,9 @@ function renderWithdrawHistory(history) {
   history.forEach(r => {
     const status = WITHDRAWAL_STATUS_LABELS[r.status] || { text: r.status, color: "var(--light-gray)" };
     const brl = (r.amount_brl_cents / 100).toFixed(2).replace(".", ",");
+    const cancelBtn = r.status === "pending"
+      ? `<button style="background:rgba(241,85,76,0.1); color:var(--danger); border:none; border-radius:8px; padding:4px 10px; font-size:0.6rem; font-weight:700; cursor:pointer; margin-top:4px;" onclick="handleCancelWithdrawal('${r.id}', this)">Cancelar</button>`
+      : "";
     const item = document.createElement("div");
     item.className = "inbox-item";
     item.innerHTML = `
@@ -1697,12 +1701,30 @@ function renderWithdrawHistory(history) {
         <span class="inbox-name">🪙 ${r.coins_amount} → R$ ${brl}</span>
         <span class="inbox-message">${formatMessageTime(r.requested_at)}</span>
       </div>
-      <div class="inbox-right">
+      <div class="inbox-right" style="align-items: flex-end;">
         <span style="font-size: 0.62rem; font-weight: 700; color: ${status.color};">${status.text}</span>
+        ${cancelBtn}
       </div>
     `;
     container.appendChild(item);
   });
+}
+
+async function handleCancelWithdrawal(requestId, btn) {
+  if (!confirm("Cancelar esse pedido de saque? As moedas voltam pra sua carteira na hora.")) return;
+  btn.disabled = true;
+  try {
+    await DB.cancelMyWithdrawalRequest(requestId);
+    const profile = await DB.getProfile((await Auth.getUser()).id);
+    await applyProfileToUI(profile);
+    document.getElementById("withdraw-current-balance").textContent = `🪙 ${STATE.myCoins}`;
+    showToast("Saque cancelado — moedas devolvidas.");
+    const history = await DB.getMyWithdrawalRequests();
+    renderWithdrawHistory(history);
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível cancelar agora.");
+  }
 }
 
 async function submitWithdrawRequest() {
@@ -1992,7 +2014,7 @@ function renderAdminUserResult(profile) {
     <div style="display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--glass-border); margin-bottom:14px;">
       <img src="${profile.avatar_url}" alt="${name}" style="width:48px; height:48px; border-radius:50%; object-fit:cover;">
       <div style="display:flex; flex-direction:column; gap:4px;">
-        <span style="font-size:0.8rem; font-weight:700; color:#fff;">${name}</span>
+        <span style="font-size:0.8rem; font-weight:700; color:var(--text-primary);">${name}</span>
         <span style="font-size:0.68rem; color:var(--light-gray);">@${escapeHtml(profile.username)}</span>
         <div style="display:flex; gap:6px;">${badges}</div>
       </div>
@@ -2006,9 +2028,17 @@ function renderAdminUserResult(profile) {
          </div>
          <button class="btn-follow-primary" style="width:100%; margin-bottom:10px; background:rgba(241,85,76,0.1); color:var(--danger);" onclick="handleSuspendUser('${profile.id}')">Suspender conta</button>`
     }
-    <button class="btn-follow-primary" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);" onclick="handleToggleVerified('${profile.id}', ${!profile.is_verified})">
+    <button class="btn-follow-primary" style="width:100%; margin-bottom:10px; background:var(--overlay-06); border:1px solid var(--glass-border); color:var(--text-primary);" onclick="handleToggleVerified('${profile.id}', ${!profile.is_verified})">
       ${profile.is_verified ? "Remover selo de verificado" : "Conceder selo de verificado"}
     </button>
+    <div class="form-group-post" style="margin-bottom:10px;">
+      <label>Ajustar saldo de moedas (saldo atual: 🪙${profile.coins}):</label>
+      <div style="display:flex; gap:8px;">
+        <input type="number" id="admin-coin-amount-input" placeholder="+50 ou -50" style="flex:1;">
+        <input type="text" id="admin-coin-reason-input" placeholder="Motivo" style="flex:1;">
+      </div>
+      <button class="btn-follow-primary" style="width:100%; margin-top:8px; background:var(--overlay-06); border:1px solid var(--glass-border); color:var(--text-primary);" onclick="handleAdjustCoins('${profile.id}')">Aplicar ajuste</button>
+    </div>
   `;
 }
 
@@ -2031,6 +2061,22 @@ async function handleUnsuspendUser(userId) {
     renderAdminUserResult(profile);
   } catch (err) {
     showToast(err.message || "Não foi possível reativar agora.");
+  }
+}
+
+async function handleAdjustCoins(userId) {
+  const amount = parseInt(document.getElementById("admin-coin-amount-input").value, 10);
+  const reason = document.getElementById("admin-coin-reason-input").value.trim();
+  if (!amount) { showToast("Informe um valor diferente de zero."); return; }
+  if (!reason) { showToast("Informe o motivo do ajuste."); return; }
+  if (!confirm(`${amount > 0 ? "Creditar" : "Debitar"} 🪙${Math.abs(amount)} ${amount > 0 ? "para" : "de"} essa conta?`)) return;
+
+  try {
+    const profile = await DB.adminAdjustCoins(userId, amount, reason);
+    showToast("Saldo ajustado.");
+    renderAdminUserResult(profile);
+  } catch (err) {
+    showToast(err.message || "Não foi possível ajustar o saldo agora.");
   }
 }
 
@@ -2097,16 +2143,21 @@ async function renderAdminAppealsList() {
     container.innerHTML = "";
     appeals.forEach(a => {
       const name = escapeHtml(a.profile ? (a.profile.display_name || a.profile.username) : "Conta removida");
+      const isMfaLockout = a.type === "mfa_lockout";
+      const typeLabel = isMfaLockout
+        ? '<span style="font-weight:400; color:var(--light-gray);">· sem acesso ao 2FA</span>'
+        : '<span style="font-weight:400; color:var(--light-gray);">· conta suspensa</span>';
+      const approveLabel = isMfaLockout ? "Aprovar (desativa 2FA)" : "Aprovar (reativa conta)";
       const item = document.createElement("div");
       item.className = "inbox-item";
       item.style.alignItems = "flex-start";
       item.innerHTML = `
         <div class="inbox-avatar"><img src="${a.profile ? (a.profile.avatar_url || DEFAULT_AVATAR_DATA_URI) : DEFAULT_AVATAR_DATA_URI}" alt="${name}" style="border-radius:50%;"></div>
         <div class="inbox-details" style="flex: 1;">
-          <span class="inbox-name">${name}</span>
+          <span class="inbox-name">${name} ${typeLabel}</span>
           <span class="inbox-message" style="white-space: normal;">${escapeHtml(a.message)}</span>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn-follow-primary" style="height:28px; font-size:0.62rem; padding:0 12px; background:var(--success);" onclick="handleReviewAppeal('${a.id}', true, this)">Aprovar</button>
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap: wrap;">
+            <button class="btn-follow-primary" style="height:28px; font-size:0.62rem; padding:0 12px; background:var(--success);" onclick="handleReviewAppeal('${a.id}', true, this)">${approveLabel}</button>
             <button class="btn-follow-primary" style="height:28px; font-size:0.62rem; padding:0 12px; background:var(--danger);" onclick="handleReviewAppeal('${a.id}', false, this)">Negar</button>
           </div>
         </div>
@@ -2122,7 +2173,7 @@ async function handleReviewAppeal(appealId, approve, btn) {
   btn.disabled = true;
   try {
     await DB.adminReviewAppeal(appealId, approve);
-    showToast(approve ? "Recurso aprovado — conta reativada." : "Recurso negado.");
+    showToast(approve ? "Recurso aprovado." : "Recurso negado.");
     await renderAdminAppealsList();
   } catch (err) {
     btn.disabled = false;
@@ -2439,8 +2490,10 @@ const TRANSACTION_TYPE_INFO = {
   private_content_sale: { label: "Venda de conteúdo", icon: "🔓" },
   withdrawal_request: { label: "Pedido de saque", icon: "💸" },
   withdrawal_refund: { label: "Saque rejeitado (estorno)", icon: "💸" },
+  withdrawal_cancelled: { label: "Saque cancelado (estorno)", icon: "💸" },
   subscription_charge: { label: "Assinatura", icon: "⭐" },
   subscription_income: { label: "Assinatura recebida", icon: "⭐" },
+  admin_adjustment: { label: "Ajuste administrativo", icon: "🛠️" },
 };
 
 async function openTransactionsModal() {
@@ -4382,6 +4435,55 @@ async function cancel2faChallenge() {
   document.getElementById("modal-2fa-challenge").style.display = "none";
   await Auth.signOut();
   showToast("Login cancelado.");
+}
+
+// Chamado a partir do desafio de 2FA quando a pessoa não tem mais nem o app
+// autenticador nem os códigos de backup — a sessão aal1 do meio do login
+// ainda existe nesse ponto, então dá pra pré-preencher o @usuário sozinho.
+async function openMfaLockoutModal() {
+  document.getElementById("modal-2fa-challenge").style.display = "none";
+  document.getElementById("mfa-lockout-form").style.display = "block";
+  document.getElementById("mfa-lockout-sent").style.display = "none";
+  document.getElementById("mfa-lockout-message").value = "";
+  document.getElementById("mfa-lockout-error").textContent = "";
+  const usernameInput = document.getElementById("mfa-lockout-username");
+  usernameInput.value = "";
+  document.getElementById("modal-mfa-lockout").style.display = "flex";
+
+  try {
+    const user = await Auth.getUser();
+    if (user) {
+      const profile = await DB.getProfile(user.id);
+      usernameInput.value = profile.username;
+    }
+  } catch (err) {
+    // sem problema — a pessoa digita o @usuário na mão
+  }
+}
+
+function closeMfaLockoutModal() {
+  document.getElementById("modal-mfa-lockout").style.display = "none";
+}
+
+async function submitMfaLockoutAppeal() {
+  const username = document.getElementById("mfa-lockout-username").value.trim().replace(/^@/, "");
+  const message = document.getElementById("mfa-lockout-message").value.trim();
+  const errorEl = document.getElementById("mfa-lockout-error");
+  errorEl.textContent = "";
+
+  if (!username) { errorEl.textContent = "Digite seu @usuário."; return; }
+  if (!message) { errorEl.textContent = "Escreva uma mensagem explicando sua situação."; return; }
+
+  try {
+    await DB.submitMfaLockoutAppeal(username, message);
+    document.getElementById("mfa-lockout-form").style.display = "none";
+    document.getElementById("mfa-lockout-sent").style.display = "block";
+    pendingMfaFactorId = null;
+    STATE.mfaChallengeUsingBackupCode = false;
+    await Auth.signOut();
+  } catch (err) {
+    errorEl.textContent = err.message || "Não foi possível enviar o pedido agora.";
+  }
 }
 
 // ==========================================================================

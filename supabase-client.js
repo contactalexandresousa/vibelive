@@ -486,10 +486,21 @@ const DB = {
     return data;
   },
 
+  async adminAdjustCoins(userId, amount, reason) {
+    const { data, error } = await sb.rpc("admin_adjust_coins", { p_user_id: userId, p_amount: amount, p_reason: reason });
+    if (error) throw error;
+    return data;
+  },
+
   // Recurso de suspensão — chamável sem sessão (conta suspensa é deslogada
   // antes de qualquer coisa), identifica a conta pelo @usuário.
   async submitAccountAppeal(username, message) {
     const { error } = await sb.rpc("submit_account_appeal", { p_username: username, p_message: message });
+    if (error) throw error;
+  },
+
+  async submitMfaLockoutAppeal(username, message) {
+    const { error } = await sb.rpc("submit_mfa_lockout_appeal", { p_username: username, p_message: message });
     if (error) throw error;
   },
 
@@ -642,6 +653,12 @@ const DB = {
       .from("withdrawal_requests")
       .select("*")
       .order("requested_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async cancelMyWithdrawalRequest(requestId) {
+    const { data, error } = await sb.rpc("cancel_my_withdrawal_request", { p_request_id: requestId });
     if (error) throw error;
     return data;
   },
