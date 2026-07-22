@@ -2087,7 +2087,8 @@ async function openAdminStatsPanel() {
       { label: "Assinaturas ativas", value: stats.active_subscriptions, icon: "⭐" },
       { label: "Saques pendentes", value: `${stats.pending_withdrawals} (🪙 ${stats.pending_withdrawals_coins})`, icon: "💸" },
       { label: "Denúncias pendentes", value: stats.pending_reports, icon: "🛡️" },
-      { label: "Receita total (PIX aprovado)", value: `R$ ${brl}`, icon: "📈", highlight: true },
+      { label: "Bloqueios de rate limit hoje", value: stats.rate_limit_blocks_today, icon: "⛔" },
+      { label: "Receita total (PIX + cartão aprovados)", value: `R$ ${brl}`, icon: "📈", highlight: true },
     ];
     container.innerHTML = "";
     rows.forEach(r => {
@@ -2331,6 +2332,7 @@ const TRANSACTION_TYPE_INFO = {
   daily_checkin: { label: "Check-in diário", icon: "🗓️" },
   pix_recharge: { label: "Recarga PIX", icon: "💳" },
   card_recharge: { label: "Recarga cartão", icon: "💳" },
+  referral_bonus: { label: "Bônus de indicação", icon: "🎁" },
   private_content_unlock: { label: "Desbloqueio de conteúdo", icon: "🔓" },
   private_content_sale: { label: "Venda de conteúdo", icon: "🔓" },
   withdrawal_request: { label: "Pedido de saque", icon: "💸" },
@@ -4053,6 +4055,7 @@ async function confirm2faEnrollment() {
     await Auth.mfaChallengeAndVerify(STATE.pendingMfaEnrollFactorId, code);
     showToast("Autenticação em duas etapas ativada!");
     await open2faModal();
+    signOutOtherSessionsQuietly();
   } catch (err) {
     errorEl.textContent = "Código inválido. Confira o horário do seu celular e tente de novo.";
   }
@@ -4066,6 +4069,7 @@ async function disable2fa() {
     if (verified) await Auth.mfaUnenroll(verified.id);
     showToast("Autenticação em duas etapas desativada.");
     await open2faModal();
+    signOutOtherSessionsQuietly();
   } catch (err) {
     showToast(err.message || "Não foi possível desativar agora.");
   }
@@ -4167,6 +4171,19 @@ async function signOutOtherSessions() {
   }
 }
 
+// Chamado automaticamente depois de trocar a senha ou ligar/desligar 2FA —
+// são exatamente os dois momentos em que uma sessão roubada em outro
+// aparelho importa mais (a troca de senha deveria, por si só, invalidar
+// acesso antigo). "Best effort": nunca deixa essa limpeza derrubar o
+// sucesso da ação principal que já aconteceu.
+async function signOutOtherSessionsQuietly() {
+  try {
+    await sb.auth.signOut({ scope: "others" });
+  } catch (err) {
+    console.error("Falha ao encerrar outras sessões automaticamente:", err);
+  }
+}
+
 // ==========================================================================
 // 29. PROGRAMA DE INDICAÇÃO
 // ==========================================================================
@@ -4176,11 +4193,36 @@ async function openReferralModal() {
   const link = `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(STATE.myUsername || "")}`;
   document.getElementById("referral-link-display").value = link;
 
+  const listContainer = document.getElementById("referral-list-container");
+  listContainer.innerHTML = `<div style="text-align:center;padding:12px;color:var(--light-gray);font-size:0.72rem;">Carregando...</div>`;
+
   try {
-    const count = await DB.getMyReferralCount();
+    const [count, earnings, referrals] = await Promise.all([
+      DB.getMyReferralCount(),
+      DB.getMyReferralEarnings(),
+      DB.getMyReferrals()
+    ]);
     document.getElementById("referral-count-label").textContent = count;
+    document.getElementById("referral-earnings-label").textContent = `🪙 ${earnings}`;
+
+    if (referrals.length === 0) {
+      listContainer.innerHTML = `<div style="text-align:center;padding:12px;color:var(--light-gray);font-size:0.72rem;">Nenhum amigo indicado ainda.</div>`;
+      return;
+    }
+    listContainer.innerHTML = "";
+    referrals.forEach(r => {
+      const name = escapeHtml(r.display_name || r.username);
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${r.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}" style="border-radius:50%;"></div>
+        <div class="inbox-details"><span class="inbox-name">${name}</span><span class="inbox-message">@${escapeHtml(r.username)} · entrou ${formatMessageTime(r.joined_at)}</span></div>
+      `;
+      listContainer.appendChild(item);
+    });
   } catch (err) {
-    console.error("Falha ao carregar contagem de indicações:", err);
+    console.error("Falha ao carregar dados de indicação:", err);
+    listContainer.innerHTML = `<div style="text-align:center;padding:12px;color:var(--light-gray);font-size:0.72rem;">Não foi possível carregar agora.</div>`;
   }
 }
 
@@ -5005,11 +5047,14 @@ function performProfileSearch() {
     return;
   }
 
-  // Busca real (perfis + legenda de posts em paralelo, com um pequeno atraso
-  // pra não bater no banco a cada tecla digitada).
+  // Busca real (perfis + legenda de posts + título de live ao vivo em
+  // paralelo, com um pequeno atraso pra não bater no banco a cada tecla).
+  // A busca por live não precisa de consulta nova: STATE.realLiveSessions já
+  // está carregado e sincronizado via Realtime, é só filtrar em memória.
   searchDebounceTimer = setTimeout(async () => {
     let matches = [];
     let postMatches = [];
+    let liveMatches = [];
     try {
       const [profileResults, postResults] = await Promise.all([
         DB.searchProfiles(query),
@@ -5017,6 +5062,10 @@ function performProfileSearch() {
       ]);
       matches = profileResults.filter(p => !STATE.blockedUsers.includes(p.id));
       postMatches = postResults.filter(p => !p.author || !STATE.blockedUsers.includes(p.author.id));
+      const queryLower = query.toLowerCase();
+      liveMatches = STATE.realLiveSessions.filter(s =>
+        s.title && s.title.toLowerCase().includes(queryLower) && !STATE.blockedUsers.includes(s.user_id)
+      );
     } catch (err) {
       container.innerHTML = `
         <div class="discover-empty-state" style="display: flex;">
@@ -5028,14 +5077,14 @@ function performProfileSearch() {
       return;
     }
 
-    if (matches.length === 0 && postMatches.length === 0) {
+    if (matches.length === 0 && postMatches.length === 0 && liveMatches.length === 0) {
       container.innerHTML = "";
       const empty = document.createElement("div");
       empty.className = "discover-empty-state";
       empty.style.display = "flex";
       empty.innerHTML = `<div class="discover-empty-icon">🔍</div><h3>Nada encontrado</h3>`;
       const p = document.createElement("p");
-      p.textContent = `Não encontramos perfis nem posts para "${query}".`;
+      p.textContent = `Não encontramos perfis, posts nem lives para "${query}".`;
       empty.appendChild(p);
       container.appendChild(empty);
       return;
@@ -5049,7 +5098,28 @@ function performProfileSearch() {
     if (postMatches.length > 0) {
       renderCaptionSearchResults(container, postMatches);
     }
+    if (liveMatches.length > 0) {
+      renderLiveSearchResults(container, liveMatches);
+    }
   }, 300);
+}
+
+// Resultado de busca por título de live — reaproveita o mesmo card usado no
+// grid do Discover (createRealLiveCardElement), só anexado numa seção própria.
+function renderLiveSearchResults(container, sessions) {
+  const label = document.createElement("p");
+  label.textContent = "Ao vivo agora";
+  label.style.cssText = "font-size:0.65rem;color:var(--light-gray);text-transform:uppercase;letter-spacing:0.3px;margin:14px 0 6px;";
+  container.appendChild(label);
+
+  const grid = document.createElement("div");
+  grid.className = "lives-grid";
+  sessions.forEach(s => {
+    const card = createRealLiveCardElement(s);
+    card.addEventListener("click", closeSearchOverlay);
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
 }
 
 // Resultado de busca livre na legenda — mesmo grid usado na busca de
@@ -5342,6 +5412,7 @@ async function submitNewPassword() {
     document.getElementById("modal-new-password").style.display = "none";
     document.getElementById("new-password-input").value = "";
     showToast("Senha atualizada! Você já está conectado.");
+    signOutOtherSessionsQuietly();
 
     STATE.isLoggedIn = true;
     const user = await Auth.getUser();

@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722b">
+  <link rel="stylesheet" href="styles.css?v=20260722c">
 </head>
 <body>
 
@@ -1872,12 +1872,24 @@
               <button class="btn-close-new-post" onclick="closeReferralModal()">×</button>
             </header>
             <div class="new-post-body">
-              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Quando um amigo se cadastrar com seu link e fizer a primeira recarga PIX, vocês dois ganham 🪙 20 de bônus.</p>
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Quando um amigo se cadastrar com seu link e fizer a primeira recarga (PIX ou cartão), vocês dois ganham 🪙 20 de bônus.</p>
               <div style="display: flex; gap: 8px; margin-bottom: 14px;">
                 <input type="text" id="referral-link-display" readonly style="flex: 1; height: 44px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: #fff; padding: 0 14px; font-family: var(--font-body); font-size: 0.7rem;">
                 <button class="btn-follow-primary" style="height: 44px; padding: 0 14px; margin-top: 0;" onclick="copyReferralLink()">Copiar</button>
               </div>
-              <p style="font-size: 0.72rem; color: var(--light-gray); text-align: center;"><span id="referral-count-label">0</span> amigo(s) indicado(s) até agora</p>
+              <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+                <div style="flex: 1; background: var(--bg-input); border-radius: 12px; padding: 10px; text-align: center;">
+                  <strong style="display: block; font-size: 1.1rem;" id="referral-count-label">0</strong>
+                  <span style="font-size: 0.62rem; color: var(--light-gray); text-transform: uppercase;">Indicados</span>
+                </div>
+                <div style="flex: 1; background: var(--bg-input); border-radius: 12px; padding: 10px; text-align: center;">
+                  <strong style="display: block; font-size: 1.1rem; color: var(--secondary);" id="referral-earnings-label">🪙 0</strong>
+                  <span style="font-size: 0.62rem; color: var(--light-gray); text-transform: uppercase;">Ganho total</span>
+                </div>
+              </div>
+              <div class="search-results-scroll" style="max-height: 180px;">
+                <div class="inbox-list" id="referral-list-container"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1990,9 +2002,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722b"></script>
+  <script src="supabase-client.js?v=20260722c"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722b"></script>
+  <script src="app.js?v=20260722c"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

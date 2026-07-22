@@ -368,6 +368,18 @@ const DB = {
     return data;
   },
 
+  async getMyReferrals() {
+    const { data, error } = await sb.rpc("get_my_referrals");
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyReferralEarnings() {
+    const { data, error } = await sb.rpc("get_my_referral_earnings");
+    if (error) throw error;
+    return data;
+  },
+
   async getMyTransactions(limit = 50) {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return [];
