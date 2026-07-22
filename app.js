@@ -730,6 +730,56 @@ function createRealLiveCardElement(session) {
   return card;
 }
 
+// Sugestões de "quem seguir" — só existia busca por nome exato antes; quem
+// chega sem seguir ninguém não tinha por onde começar a descobrir contas.
+async function renderSuggestedProfiles() {
+  const section = document.getElementById("suggested-profiles-section");
+  const row = document.getElementById("suggested-profiles-row");
+  if (!section || !row || !STATE.isLoggedIn) return;
+
+  let profiles = [];
+  try {
+    profiles = await DB.getSuggestedProfiles(10);
+  } catch (err) {
+    console.error("Falha ao carregar sugestões de perfil:", err);
+  }
+
+  if (profiles.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+  section.style.display = "block";
+  row.innerHTML = "";
+  profiles.forEach(p => {
+    const name = escapeHtml(p.display_name || p.username);
+    const card = document.createElement("div");
+    card.className = "suggested-profile-card";
+    card.innerHTML = `
+      <img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}" onclick="openUserProfile('${p.id}')">
+      <span class="suggested-name" onclick="openUserProfile('${p.id}')">${name}</span>
+      <span class="suggested-followers">${formatCompactCount(p.followers_count)} seguidores</span>
+      <button class="btn-follow-primary" style="width:100%; height:22px; font-size:0.6rem; margin-top:2px;" onclick="followSuggestedProfile('${p.id}', '${p.username}', this)">+ Seguir</button>
+    `;
+    row.appendChild(card);
+  });
+}
+
+async function followSuggestedProfile(userId, username, btn) {
+  if (!requireAuth()) return;
+  btn.disabled = true;
+  try {
+    await DB.follow(username);
+    STATE.followedStreamers.push(username);
+    btn.closest(".suggested-profile-card").remove();
+    if (document.getElementById("suggested-profiles-row").children.length === 0) {
+      document.getElementById("suggested-profiles-section").style.display = "none";
+    }
+    showToast("Seguindo!");
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível seguir agora.");
+  }
+}
 
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM REAL)
 // Entra numa transmissão de verdade (pessoa real, vídeo real via LiveKit) —
@@ -1366,6 +1416,7 @@ async function openPrivateChat(partnerId, name, avatar) {
   DOM.privateChatHistory.innerHTML = "";
   clearTimeout(typingIndicatorTimeout);
   renderChatPartnerStatus();
+  cancelEditMessage();
 
   navigateTo("private-chat");
 
@@ -1419,23 +1470,42 @@ function appendPrivateChatBubble(msg, myUserId) {
     ? `<span class="chat-bubble-status${msg.read_at ? " read" : ""}">${msg.read_at ? "Visto" : "Enviado"}</span>`
     : "";
 
+  const editedSuffix = msg.edited_at && !msg.is_deleted ? " · editada" : "";
+
   bubble.innerHTML = `
     ${msg.is_deleted ? "" : optionsBtn}
     ${vipSuffix}
     ${bodyHtml}
-    <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
+    <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}${editedSuffix}</span>
     ${statusHtml}
   `;
   DOM.privateChatHistory.appendChild(bubble);
   DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
 }
 
+// Atualiza o texto de uma mensagem já na tela depois de editar — usado tanto
+// pela edição otimista (a minha própria) quanto pelo aviso em tempo real
+// quando é a OUTRA pessoa que edita uma mensagem que eu recebi.
+function applyEditedTextToBubble(msgId, newText, editedAt) {
+  const bubble = DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!bubble) return;
+  const textEl = bubble.querySelector(".chat-bubble-text");
+  if (textEl) textEl.textContent = newText;
+  const timeEl = bubble.querySelector(".chat-bubble-time");
+  if (timeEl && editedAt && !timeEl.textContent.includes("editada")) {
+    timeEl.textContent += " · editada";
+  }
+}
+
 // Chamado quando chega, via Realtime, uma mensagem que EU recebi sendo
 // editada (hoje só acontece pra tombstone de "apagar para todos") — troca o
 // conteúdo na hora, sem precisar recarregar a conversa.
 function handlePrivateChatMessageEdited(row) {
-  if (!row.is_deleted) return;
-  applyDeletedTombstoneToBubble(row.id, "Mensagem apagada");
+  if (row.is_deleted) {
+    applyDeletedTombstoneToBubble(row.id, "Mensagem apagada");
+  } else if (row.edited_at) {
+    applyEditedTextToBubble(row.id, row.text, row.edited_at);
+  }
 }
 
 // Reaproveitado pela edição em tempo real (mensagem recebida) e pelo "apagar
@@ -1512,6 +1582,24 @@ function handlePrivateChatKey(event) {
   }
 }
 
+function startEditMessage() {
+  const msgId = STATE.messageOptionsTargetId;
+  const bubble = msgId && DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  const textEl = bubble && bubble.querySelector(".chat-bubble-text");
+  if (!bubble || !textEl) return;
+  closeMessageOptions();
+  STATE.editingMessageId = msgId;
+  DOM.privateChatInput.value = textEl.textContent;
+  DOM.privateChatInput.focus();
+  document.getElementById("private-chat-editing-bar").style.display = "flex";
+}
+
+function cancelEditMessage() {
+  STATE.editingMessageId = null;
+  DOM.privateChatInput.value = "";
+  document.getElementById("private-chat-editing-bar").style.display = "none";
+}
+
 async function sendPrivateChatMessage() {
   const text = DOM.privateChatInput.value.trim();
   if (text === "") return;
@@ -1519,6 +1607,20 @@ async function sendPrivateChatMessage() {
 
   const partnerId = STATE.activeChatPartner;
   if (!partnerId) return;
+
+  if (STATE.editingMessageId) {
+    const msgId = STATE.editingMessageId;
+    DOM.privateChatInput.value = "";
+    document.getElementById("private-chat-editing-bar").style.display = "none";
+    STATE.editingMessageId = null;
+    try {
+      const updated = await DB.editMyMessage(msgId, text);
+      applyEditedTextToBubble(msgId, updated.text, updated.edited_at);
+    } catch (err) {
+      showToast(err.message || "Não foi possível editar a mensagem.");
+    }
+    return;
+  }
 
   DOM.privateChatInput.value = "";
   try {
@@ -1547,6 +1649,8 @@ function openMessageOptions(msgId) {
   STATE.messageOptionsTargetId = msgId;
   const isMine = bubble.classList.contains("sent");
   const withinWindow = isMine && (Date.now() - new Date(bubble.dataset.createdAt).getTime()) < DM_DELETE_FOR_EVERYONE_WINDOW_MS;
+  const isTextOnly = !bubble.querySelector(".chat-bubble-image");
+  document.getElementById("btn-edit-message").style.display = withinWindow && isTextOnly ? "block" : "none";
   document.getElementById("btn-delete-for-everyone").style.display = withinWindow ? "block" : "none";
   document.getElementById("modal-message-options").style.display = "flex";
 }
@@ -4682,14 +4786,25 @@ function buildCommentItem(c, myUserId) {
   item.className = "lightbox-comment-item" + (c.parent_id ? " is-reply" : "");
   item.dataset.commentId = c.id;
   const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
-  const ownActions = c.user_id === myUserId
-    ? `<span class="comment-own-actions">
+  // Quem escreveu pode editar/excluir; o dono do POST (mesmo não sendo autor
+  // do comentário) só pode excluir — moderar a própria publicação sem
+  // depender de denúncia + revisão do admin (0108).
+  let ownActions;
+  if (c.user_id === myUserId) {
+    ownActions = `<span class="comment-own-actions">
         <button onclick="editCommentClick('${c.id}')" title="Editar">✏️</button>
         <button onclick="deleteCommentClick('${c.id}')" title="Excluir">🗑️</button>
-      </span>`
-    : `<span class="comment-own-actions">
+      </span>`;
+  } else if (STATE.activeLightboxPostIsMine) {
+    ownActions = `<span class="comment-own-actions">
+        <button onclick="openReportCommentPrompt('${c.id}')" title="Denunciar comentário">🚩</button>
+        <button onclick="deleteCommentClick('${c.id}')" title="Remover comentário do meu post">🗑️</button>
+      </span>`;
+  } else {
+    ownActions = `<span class="comment-own-actions">
         <button onclick="openReportCommentPrompt('${c.id}')" title="Denunciar comentário">🚩</button>
       </span>`;
+  }
   // Resposta a resposta não é permitida (thread de uma camada só) — o botão
   // só aparece em comentários de topo.
   const replyBtn = !c.parent_id
@@ -4886,6 +5001,24 @@ async function addLightboxComment() {
 // ==========================================================================
 // 23. EDICÃO DE PERFIL E EXCLUSÃO DE CONTA (SETTINGS)
 // ==========================================================================
+
+async function toggleDmPrivacySetting() {
+  const newMode = STATE.dmPrivacy === "followers_only" ? "everyone" : "followers_only";
+  try {
+    await DB.updateDmPrivacy(newMode);
+    STATE.dmPrivacy = newMode;
+    updateDmPrivacyButtonUI();
+    showToast(newMode === "everyone" ? "Agora qualquer pessoa pode te mandar DM." : "Agora só quem você segue pode te mandar DM.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+function updateDmPrivacyButtonUI() {
+  const btn = document.getElementById("btn-dm-privacy-toggle");
+  if (!btn) return;
+  btn.textContent = `✉️ Quem pode te mandar DM: ${STATE.dmPrivacy === "followers_only" ? "Só quem eu sigo" : "Todo mundo"}`;
+}
 
 function openProfileSettingsModal() {
   document.getElementById("modal-profile-settings").style.display = "flex";
@@ -7113,6 +7246,9 @@ async function applyProfileToUI(profile) {
   refreshProfileStats(profile.id, profile.username);
   renderProfileHighlights();
   renderDailyCheckinState();
+  renderSuggestedProfiles();
+  STATE.dmPrivacy = profile.dm_privacy || "everyone";
+  updateDmPrivacyButtonUI();
 
   // Inscreve no canal global de DMs recebidas (uma vez por sessão, não a cada
   // chamada — applyProfileToUI roda depois de toda ação de carteira) e carrega

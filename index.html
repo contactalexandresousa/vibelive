@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722n">
+  <link rel="stylesheet" href="styles.css?v=20260722o">
 </head>
 <body>
 
@@ -215,6 +215,14 @@
                   <p id="discover-empty-text">Quando alguém começar uma live de verdade, ela aparece aqui.</p>
                   <button class="btn-follow-primary" onclick="navigateTo('go-live')">Ir Ao Vivo</button>
                 </div>
+              </section>
+
+              <!-- Sugestões de contas pra seguir — só some se não tiver nenhuma sugestão -->
+              <section class="discover-section" id="suggested-profiles-section" style="display: none;">
+                <div class="section-header">
+                  <h2>✨ Sugestões pra você</h2>
+                </div>
+                <div class="suggested-profiles-row" id="suggested-profiles-row"></div>
               </section>
             </main>
           </section>
@@ -399,6 +407,12 @@
             <!-- Histórico de Mensagens Privadas -->
             <div class="private-chat-history" id="private-chat-history">
               <!-- Mensagens geradas via JS -->
+            </div>
+
+            <!-- Indicador de "editando mensagem" -->
+            <div class="lightbox-replying-to" id="private-chat-editing-bar" style="display: none;">
+              <span>Editando mensagem</span>
+              <button type="button" onclick="cancelEditMessage()">Cancelar</button>
             </div>
 
             <!-- Barra de Input de Mensagem -->
@@ -1145,6 +1159,10 @@
                 ⬇️ Baixar Meus Dados
               </button>
 
+              <button class="btn-publish-post" id="btn-dm-privacy-toggle" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="toggleDmPrivacySetting()">
+                ✉️ Quem pode te mandar DM: Todo mundo
+              </button>
+
               <button class="btn-publish-post" style="margin-top: 10px; background: var(--overlay-06); border: 1px solid var(--glass-border); color: var(--text-primary);" onclick="openBlockedUsersPanel()">
                 🚫 Contas Bloqueadas
               </button>
@@ -1334,10 +1352,11 @@
           <div class="new-post-overlay" onclick="closeMessageOptions()"></div>
           <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
             <header class="new-post-header" style="margin-bottom: 4px;">
-              <h3>Apagar mensagem</h3>
+              <h3>Opções da mensagem</h3>
               <button class="btn-close-new-post" onclick="closeMessageOptions()">×</button>
             </header>
-            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" onclick="confirmDeleteMessage(false)">Apagar para mim</button>
+            <button class="profile-action-btn secondary" id="btn-edit-message" style="margin-top: 14px; width: 100%; display: none;" onclick="startEditMessage()">✏️ Editar mensagem</button>
+            <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%;" onclick="confirmDeleteMessage(false)">Apagar para mim</button>
             <button class="profile-action-btn secondary" id="btn-delete-for-everyone" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger); display: none;" onclick="confirmDeleteMessage(true)">Apagar para todos</button>
           </div>
         </div>
@@ -2258,9 +2277,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722n"></script>
+  <script src="supabase-client.js?v=20260722o"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722n"></script>
+  <script src="app.js?v=20260722o"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

@@ -1029,6 +1029,26 @@ const DB = {
     return data.map(r => r.followed_handle);
   },
 
+  async getSuggestedProfiles(limit = 10) {
+    const { data, error } = await sb.rpc("get_suggested_profiles", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
+  // dm_privacy não está na lista de colunas revogadas (0001) — a policy de
+  // update do próprio perfil já cobre, sem precisar de RPC.
+  async updateDmPrivacy(mode) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("profiles").update({ dm_privacy: mode }).eq("id", user.id);
+    if (error) throw error;
+  },
+
+  async editMyMessage(messageId, newText) {
+    const { data, error } = await sb.rpc("edit_my_message", { p_message_id: messageId, p_new_text: newText });
+    if (error) throw error;
+    return data;
+  },
+
   async follow(handle) {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from("follows").insert({ follower_id: user.id, followed_handle: handle });
