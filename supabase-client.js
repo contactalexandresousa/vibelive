@@ -909,8 +909,8 @@ const DB = {
     return data;
   },
 
-  async addComment(postId, text) {
-    const { data, error } = await sb.rpc("add_post_comment", { p_post_id: postId, p_text: text });
+  async addComment(postId, text, parentId = null) {
+    const { data, error } = await sb.rpc("add_post_comment", { p_post_id: postId, p_text: text, p_parent_id: parentId });
     if (error) throw error;
     return data;
   },
@@ -1325,6 +1325,65 @@ const DB = {
     const { data } = sb.storage.from("dm-media").getPublicUrl(path);
     await moderateOrRemove("dm-media", path, data.publicUrl, userId, "dm");
     return data.publicUrl;
+  },
+
+  // Vídeo não passa pela checagem de moderação (só imagem, mesma decisão já
+  // tomada pra post/carrossel em 0076/0079).
+  async uploadStoryMedia(userId, file) {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: uploadError } = await sb.storage.from("stories").upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type || "image/jpeg"
+    });
+    if (uploadError) throw uploadError;
+
+    const { data } = sb.storage.from("stories").getPublicUrl(path);
+    if ((file.type || "").startsWith("image/")) {
+      await moderateOrRemove("stories", path, data.publicUrl, userId, "story");
+    }
+    return data.publicUrl;
+  },
+
+  async createStory(mediaUrl, mediaType) {
+    const { data: { user } } = await sb.auth.getUser();
+    const { data, error } = await sb.from("stories").insert({
+      user_id: user.id, media_url: mediaUrl, media_type: mediaType
+    }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getStoriesFeed() {
+    const { data, error } = await sb.rpc("get_stories_feed");
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserStories(userId) {
+    const { data, error } = await sb.rpc("get_user_stories", { p_user_id: userId });
+    if (error) throw error;
+    return data;
+  },
+
+  async markStoryViewed(storyId) {
+    const { error } = await sb.rpc("mark_story_viewed", { p_story_id: storyId });
+    if (error) throw error;
+  },
+
+  async deleteStory(storyId) {
+    const { error } = await sb.from("stories").delete().eq("id", storyId);
+    if (error) throw error;
+  },
+
+  async getStoryViewers(storyId) {
+    const { data, error } = await sb
+      .from("story_views")
+      .select("viewed_at, profiles(id, username, display_name, avatar_url)")
+      .eq("story_id", storyId)
+      .order("viewed_at", { ascending: false });
+    if (error) throw error;
+    return data;
   },
 
   async markConversationRead(partnerId) {

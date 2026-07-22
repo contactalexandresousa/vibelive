@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722h">
+  <link rel="stylesheet" href="styles.css?v=20260722i">
 </head>
 <body>
 
@@ -178,6 +178,10 @@
                 </button>
               </div>
             </header>
+
+            <!-- Stories (conteúdo de 24h) — "Seu story" + quem eu sigo -->
+            <div class="stories-rail" id="stories-rail"></div>
+            <input type="file" id="story-file-input" accept="image/*,video/*" style="display: none;" onchange="handleStoryFileSelected(event)">
 
             <!-- Categorias de Live — filtram a grade abaixo, atualiza na hora do clique -->
             <div class="vibe-categories-row">
@@ -923,10 +927,49 @@
               <div class="lightbox-comments-list" id="lightbox-comments-list">
                 <!-- Comentários gerados via JS -->
               </div>
+              <div class="lightbox-replying-to" id="lightbox-replying-to" style="display: none;">
+                <span>Respondendo a <strong id="lightbox-replying-to-name"></strong></span>
+                <button type="button" onclick="cancelReplyToComment()">Cancelar</button>
+              </div>
               <div class="lightbox-comment-input-row">
                 <input type="text" id="lightbox-new-comment" placeholder="Adicione um comentário...">
                 <button onclick="addLightboxComment()">Publicar</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visualizador de Stories (tela cheia, empilha sobre tudo) -->
+        <div class="story-viewer-modal" id="modal-story-viewer" style="display: none;">
+          <div class="story-viewer-progress-row" id="story-viewer-progress-row"></div>
+          <div class="story-viewer-header">
+            <img id="story-viewer-avatar" class="story-viewer-avatar" src="" alt="">
+            <span id="story-viewer-username" class="story-viewer-username"></span>
+            <span id="story-viewer-time" class="story-viewer-time"></span>
+            <button class="story-viewer-close" onclick="closeStoryViewer()">×</button>
+          </div>
+          <div class="story-viewer-media-wrapper" id="story-viewer-media-wrapper">
+            <img id="story-viewer-img" class="story-viewer-media" style="display: none;" alt="Story">
+            <video id="story-viewer-video" class="story-viewer-media" style="display: none;" playsinline></video>
+            <div class="story-viewer-nav-zone left" onclick="storyViewerPrev()"></div>
+            <div class="story-viewer-nav-zone right" onclick="storyViewerNext()"></div>
+          </div>
+          <div class="story-viewer-own-actions" id="story-viewer-own-actions" style="display: none;">
+            <button onclick="openStoryViewersList()">👁 <span id="story-viewer-views-count">0</span> visualizações</button>
+            <button class="danger" onclick="handleDeleteCurrentStory()">🗑️ Excluir</button>
+          </div>
+        </div>
+
+        <!-- Modal: Quem viu meu story -->
+        <div class="new-post-modal" id="modal-story-viewers" style="display: none;">
+          <div class="new-post-overlay" onclick="closeStoryViewersList()"></div>
+          <div class="new-post-content" style="height: 60%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>👁 Visualizações</h3>
+              <button class="btn-close-new-post" onclick="closeStoryViewersList()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="story-viewers-list-container"></div>
             </div>
           </div>
         </div>
@@ -2036,9 +2079,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722h"></script>
+  <script src="supabase-client.js?v=20260722i"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722h"></script>
+  <script src="app.js?v=20260722i"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

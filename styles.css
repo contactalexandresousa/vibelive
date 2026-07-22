@@ -3476,8 +3476,19 @@ input:-webkit-autofill:focus {
 
 .lightbox-comment-item {
   font-size: 0.72rem;
-  color: #fff;
+  color: var(--text-primary);
   line-height: 1.25;
+  padding: 4px 0;
+}
+
+.lightbox-comment-item.is-reply {
+  margin-left: 20px;
+  opacity: 0.88;
+}
+
+.lightbox-comment-item .reply-arrow {
+  color: var(--light-gray);
+  font-size: 0.68rem;
 }
 
 .lightbox-comment-item strong {
@@ -3502,6 +3513,50 @@ input:-webkit-autofill:focus {
 
 .comment-own-actions button:hover {
   opacity: 1;
+}
+
+.comment-actions-row {
+  margin-top: 1px;
+}
+
+.btn-reply-comment {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-reply-comment:hover {
+  color: var(--primary);
+}
+
+.lightbox-replying-to {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--overlay-06);
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-bottom: 6px;
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+}
+
+.lightbox-replying-to strong {
+  color: var(--primary);
+}
+
+.lightbox-replying-to button {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .lightbox-load-more-comments-btn {
@@ -5125,6 +5180,200 @@ input:-webkit-autofill:focus {
 /* ==========================================================================
    31. CATEGORIAS DE LIVE (VIBE HOT / NOVA / PRIVADA) + CONTEÚDO PAGO
    ========================================================================== */
+/* Carrossel de Stories */
+.stories-rail {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px 2px;
+  overflow-x: auto;
+}
+
+.story-ring-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 60px;
+}
+
+.story-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: var(--overlay-10);
+}
+
+.story-ring.unseen {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+}
+
+.story-ring-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--bg-deep);
+}
+
+.story-ring-plus {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-deep);
+}
+
+.story-ring-label {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Visualizador de Stories — mundo de vídeo em tela cheia, fica escuro
+   independente do tema (mesma decisão já tomada pra live-room). */
+.story-viewer-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 1030;
+  display: flex;
+  flex-direction: column;
+}
+
+.story-viewer-progress-row {
+  display: flex;
+  gap: 4px;
+  padding: 10px 8px 0;
+}
+
+.story-viewer-progress-row .segment {
+  flex: 1;
+  height: 2.5px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.story-viewer-progress-row .segment .fill {
+  height: 100%;
+  width: 0%;
+  background: #fff;
+}
+
+.story-viewer-progress-row .segment.done .fill {
+  width: 100%;
+}
+
+.story-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.story-viewer-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.story-viewer-username {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex: 1;
+}
+
+.story-viewer-time {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.68rem;
+}
+
+.story-viewer-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.story-viewer-media-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.story-viewer-media {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.story-viewer-nav-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 35%;
+}
+
+.story-viewer-nav-zone.left {
+  left: 0;
+}
+
+.story-viewer-nav-zone.right {
+  right: 0;
+}
+
+.story-viewer-own-actions {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  justify-content: center;
+}
+
+.story-viewer-own-actions button {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.story-viewer-own-actions button.danger {
+  color: var(--danger);
+}
+
 .vibe-categories-row {
   display: flex;
   gap: 10px;

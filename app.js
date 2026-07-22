@@ -335,6 +335,7 @@ function navigateTo(screenId) {
   // Ações de tela específicas ao entrar
   if (screenId === "discover") {
     renderCoins();
+    if (STATE.isLoggedIn) renderStoriesRail();
   } else if (screenId === "profile") {
     renderCoins();
     renderProfilePosts();
@@ -477,6 +478,13 @@ function renderNotificationsList() {
       const giftLabel = GIFT_LABELS_BY_CODE[n.metadata && n.metadata.gift_code] || "uma Rosa";
       text = `${actorName} te enviou ${giftLabel}`;
       icon = "🎁";
+    } else if (n.type === "subscription_renewing_soon") {
+      const price = (n.metadata && n.metadata.price_coins) || "?";
+      text = `Sua assinatura de ${actorName} renova em ~24h (🪙${price})`;
+      icon = "⭐";
+    } else if (n.type === "subscription_expired") {
+      text = `Sua assinatura de ${actorName} expirou por falta de saldo`;
+      icon = "⭐";
     } else {
       text = `${actorName} está ao vivo agora!`;
       icon = "🔴";
@@ -1910,6 +1918,7 @@ const PUSH_PREFERENCE_LABELS = {
   post_like: "Curtida no meu post",
   post_comment: "Comentário no meu post",
   gift_received: "Presente recebido",
+  subscription_renewing_soon: "Assinatura renovando em breve",
 };
 
 async function openPushPreferencesModal() {
@@ -2181,7 +2190,7 @@ async function handleReviewAppeal(appealId, approve, btn) {
   }
 }
 
-const MODERATION_CONTEXT_LABELS = { avatar: "Foto de perfil", post: "Publicação", dm: "Foto em DM" };
+const MODERATION_CONTEXT_LABELS = { avatar: "Foto de perfil", post: "Publicação", dm: "Foto em DM", story: "Story" };
 
 async function openAdminModerationPanel() {
   if (!STATE.isAdmin) return;
@@ -3886,6 +3895,7 @@ function closePostLightbox() {
   document.getElementById("lightbox-video").pause();
   STATE.activeLightboxPostId = null;
   cancelLightboxPostEdit();
+  cancelReplyToComment();
 }
 
 function editLightboxPost() {
@@ -4020,7 +4030,7 @@ const LIGHTBOX_COMMENTS_PAGE_SIZE = 30;
 
 function buildCommentItem(c, myUserId) {
   const item = document.createElement("div");
-  item.className = "lightbox-comment-item";
+  item.className = "lightbox-comment-item" + (c.parent_id ? " is-reply" : "");
   item.dataset.commentId = c.id;
   const authorName = c.profiles ? (c.profiles.display_name || c.profiles.username) : "Usuário";
   const ownActions = c.user_id === myUserId
@@ -4029,8 +4039,33 @@ function buildCommentItem(c, myUserId) {
         <button onclick="deleteCommentClick('${c.id}')" title="Excluir">🗑️</button>
       </span>`
     : "";
-  item.innerHTML = `<strong>${escapeHtml(authorName)}</strong> <span class="comment-text">${escapeHtml(c.text)}</span>${ownActions}`;
+  // Resposta a resposta não é permitida (thread de uma camada só) — o botão
+  // só aparece em comentários de topo.
+  const replyBtn = !c.parent_id
+    ? `<button class="btn-reply-comment" onclick="startReplyToComment('${c.id}')">Responder</button>`
+    : "";
+  item.innerHTML = `
+    ${c.parent_id ? '<span class="reply-arrow">↳</span> ' : ""}<strong>${escapeHtml(authorName)}</strong> <span class="comment-text">${escapeHtml(c.text)}</span>${ownActions}
+    ${replyBtn ? `<div class="comment-actions-row">${replyBtn}</div>` : ""}
+  `;
   return item;
+}
+
+// Estado de "respondendo a X" — guarda só o id, o nome é lido de volta do
+// próprio DOM do comentário pra não precisar escapar texto livre dentro de
+// um atributo onclick.
+function startReplyToComment(commentId) {
+  const item = document.querySelector(`.lightbox-comment-item[data-comment-id="${commentId}"]`);
+  const authorName = item ? item.querySelector("strong").textContent : "";
+  STATE.replyingToCommentId = commentId;
+  document.getElementById("lightbox-replying-to-name").textContent = authorName;
+  document.getElementById("lightbox-replying-to").style.display = "flex";
+  document.getElementById("lightbox-new-comment").focus();
+}
+
+function cancelReplyToComment() {
+  STATE.replyingToCommentId = null;
+  document.getElementById("lightbox-replying-to").style.display = "none";
 }
 
 function renderLightboxComments(comments, myUserId) {
@@ -4146,8 +4181,9 @@ async function addLightboxComment() {
   if (!postId) return;
 
   try {
-    const newComment = await DB.addComment(postId, text); // xp é concedido atomicamente pela RPC
+    const newComment = await DB.addComment(postId, text, STATE.replyingToCommentId); // xp é concedido atomicamente pela RPC
     input.value = "";
+    cancelReplyToComment();
 
     const user = await Auth.getUser();
     const list = document.getElementById("lightbox-comments-list");
@@ -5594,15 +5630,29 @@ function jumpToHashtagSearch(tag) {
 
 // Digitar "#algo" na busca troca de "achar pessoas" pra "achar posts com
 // essa hashtag" — reaproveita o mesmo campo/overlay, sem uma tela nova.
+// Antes, "#algo" só buscava posts com a hashtag — perfil e live com esse
+// texto no nome/título ficavam invisíveis nesse modo, mesmo já aparecendo
+// juntos numa busca sem "#". Busca os três em paralelo pra unificar de vez.
 async function performHashtagSearch(query, container) {
   const tag = query.replace(/^#/, "").trim();
   if (!tag) return;
 
   container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.72rem;">Buscando #${escapeHtml(tag)}...</div>`;
 
-  let posts;
+  let posts = [];
+  let profileMatches = [];
+  let liveMatches = [];
   try {
-    posts = await DB.searchPostsByHashtag(tag, 40);
+    const [postResults, profileResults] = await Promise.all([
+      DB.searchPostsByHashtag(tag, 40),
+      DB.searchProfiles(tag),
+    ]);
+    posts = postResults;
+    profileMatches = profileResults.filter(p => !STATE.blockedUsers.includes(p.id));
+    const tagLower = tag.toLowerCase();
+    liveMatches = STATE.realLiveSessions.filter(s =>
+      s.title && s.title.toLowerCase().includes(tagLower) && !STATE.blockedUsers.includes(s.user_id)
+    );
   } catch (err) {
     container.innerHTML = `
       <div class="discover-empty-state" style="display: flex;">
@@ -5613,15 +5663,30 @@ async function performHashtagSearch(query, container) {
     return;
   }
 
-  if (posts.length === 0) {
+  if (posts.length === 0 && profileMatches.length === 0 && liveMatches.length === 0) {
     container.innerHTML = `
       <div class="discover-empty-state" style="display: flex;">
         <div class="discover-empty-icon">#️⃣</div>
-        <h3>Nenhum post com #${escapeHtml(tag)}</h3>
+        <h3>Nada encontrado para #${escapeHtml(tag)}</h3>
       </div>
     `;
     return;
   }
+
+  if (profileMatches.length > 0) {
+    renderProfileSearchResults(container, profileMatches);
+  } else {
+    container.innerHTML = "";
+  }
+  if (liveMatches.length > 0) {
+    renderLiveSearchResults(container, liveMatches);
+  }
+  if (posts.length === 0) return;
+
+  const tagLabel = document.createElement("p");
+  tagLabel.textContent = `Posts com #${tag}`;
+  tagLabel.style.cssText = "font-size:0.65rem;color:var(--light-gray);text-transform:uppercase;letter-spacing:0.3px;margin:14px 0 6px;";
+  container.appendChild(tagLabel);
 
   const grid = document.createElement("div");
   grid.className = "profile-posts-grid";
@@ -5642,8 +5707,275 @@ async function performHashtagSearch(query, container) {
     };
     grid.appendChild(item);
   });
-  container.innerHTML = "";
   container.appendChild(grid);
+}
+
+// ==========================================================================
+// 24.5. STORIES (CONTEÚDO DE 24H)
+// ==========================================================================
+const STORY_IMAGE_DURATION_MS = 5000;
+
+async function renderStoriesRail() {
+  const rail = document.getElementById("stories-rail");
+  if (!rail) return;
+
+  let feed = [];
+  try {
+    feed = await DB.getStoriesFeed();
+  } catch (err) {
+    console.error("Falha ao carregar stories:", err);
+  }
+  STATE.storiesFeed = feed;
+
+  const myEntry = feed.find(f => f.user_id === STATE.myUserId);
+  rail.innerHTML = "";
+
+  // "Seu story" é sempre o primeiro item — mostra o anel de "tem story" se
+  // eu já tiver um ativo, senão só o "+" pra adicionar.
+  const mine = document.createElement("div");
+  mine.className = "story-ring-item";
+  mine.onclick = () => {
+    if (myEntry) openStoryViewer(feed.indexOf(myEntry));
+    else document.getElementById("story-file-input").click();
+  };
+  mine.innerHTML = `
+    <div class="story-ring ${myEntry ? "unseen" : ""}">
+      <img src="${STATE.myAvatarUrl || DEFAULT_AVATAR_DATA_URI}" class="story-ring-avatar" alt="Seu story">
+      <span class="story-ring-plus" onclick="event.stopPropagation(); document.getElementById('story-file-input').click();">+</span>
+    </div>
+    <span class="story-ring-label">Seu story</span>
+  `;
+  rail.appendChild(mine);
+
+  feed.filter(f => f.user_id !== STATE.myUserId).forEach(f => {
+    const item = document.createElement("div");
+    item.className = "story-ring-item";
+    item.onclick = () => openStoryViewer(feed.indexOf(f));
+    item.innerHTML = `
+      <div class="story-ring ${f.has_unseen ? "unseen" : ""}">
+        <img src="${f.avatar_url || DEFAULT_AVATAR_DATA_URI}" class="story-ring-avatar" alt="${escapeHtml(f.username)}">
+      </div>
+      <span class="story-ring-label">${escapeHtml(f.display_name || f.username)}</span>
+    `;
+    rail.appendChild(item);
+  });
+}
+
+async function handleStoryFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file || !requireAuth()) return;
+
+  const isImage = file.type.startsWith("image/");
+  const isVideo = file.type.startsWith("video/");
+  if (!isImage && !isVideo) { showToast("Escolha uma foto ou vídeo."); return; }
+  const maxSize = isImage ? 8 * 1024 * 1024 : 25 * 1024 * 1024;
+  if (file.size > maxSize) { showToast(`Arquivo muito grande (máximo ${isImage ? "8MB" : "25MB"}).`); return; }
+
+  showToast("Publicando story...");
+  try {
+    const user = await Auth.getUser();
+    const fileToUpload = isImage ? await compressImageFile(file) : file;
+    const mediaUrl = await DB.uploadStoryMedia(user.id, fileToUpload);
+    await DB.createStory(mediaUrl, isImage ? "image" : "video");
+    showToast("Story publicado! Some em 24h.");
+    renderStoriesRail();
+  } catch (err) {
+    showToast(err.message || "Não foi possível publicar o story agora.");
+  }
+}
+
+async function openStoryViewer(feedIndex) {
+  STATE.storyViewerAuthorIndex = feedIndex;
+  const author = STATE.storiesFeed[feedIndex];
+  if (!author) return;
+
+  try {
+    STATE.storyViewerStories = await DB.getUserStories(author.user_id);
+  } catch (err) {
+    showToast(err.message || "Não foi possível carregar esse story agora.");
+    return;
+  }
+  if (STATE.storyViewerStories.length === 0) { storyViewerAdvanceAuthor(1); return; }
+
+  STATE.storyViewerIndex = 0;
+  document.getElementById("modal-story-viewer").style.display = "flex";
+  document.getElementById("story-viewer-avatar").src = author.avatar_url || DEFAULT_AVATAR_DATA_URI;
+  document.getElementById("story-viewer-username").textContent = author.display_name || author.username;
+
+  const progressRow = document.getElementById("story-viewer-progress-row");
+  progressRow.innerHTML = STATE.storyViewerStories.map(() => `<div class="segment"><div class="fill"></div></div>`).join("");
+
+  showCurrentStory();
+}
+
+function showCurrentStory() {
+  clearStoryTimer();
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  if (!story) { closeStoryViewer(); return; }
+
+  const img = document.getElementById("story-viewer-img");
+  const video = document.getElementById("story-viewer-video");
+  document.getElementById("story-viewer-time").textContent = formatMessageTime(story.created_at);
+
+  // Marca os segmentos de progresso: anteriores cheios, atual anima, futuros vazios.
+  const segments = document.querySelectorAll("#story-viewer-progress-row .segment");
+  segments.forEach((seg, i) => {
+    seg.classList.toggle("done", i < STATE.storyViewerIndex);
+    const fill = seg.querySelector(".fill");
+    if (i === STATE.storyViewerIndex) {
+      fill.style.transition = "none";
+      fill.style.width = "0%";
+    } else if (i > STATE.storyViewerIndex) {
+      fill.style.transition = "none";
+      fill.style.width = "0%";
+    }
+  });
+
+  const isMine = STATE.storiesFeed[STATE.storyViewerAuthorIndex]?.user_id === STATE.myUserId;
+  document.getElementById("story-viewer-own-actions").style.display = isMine ? "flex" : "none";
+  if (isMine) {
+    DB.getStoryViewers(story.id)
+      .then(views => { document.getElementById("story-viewer-views-count").textContent = views.length; })
+      .catch(() => {});
+  }
+
+  DB.markStoryViewed(story.id).catch(() => {});
+
+  if (story.media_type === "image") {
+    video.pause();
+    video.style.display = "none";
+    img.style.display = "block";
+    img.src = story.media_url;
+    animateCurrentSegment(STORY_IMAGE_DURATION_MS);
+    STATE.storyViewerTimer = setTimeout(() => storyViewerNext(), STORY_IMAGE_DURATION_MS);
+  } else {
+    img.style.display = "none";
+    video.style.display = "block";
+    video.src = story.media_url;
+    video.currentTime = 0;
+    video.play().catch(() => {});
+    video.onloadedmetadata = () => animateCurrentSegment((video.duration || 8) * 1000);
+    video.onended = () => storyViewerNext();
+  }
+}
+
+function animateCurrentSegment(durationMs) {
+  const segments = document.querySelectorAll("#story-viewer-progress-row .segment");
+  const fill = segments[STATE.storyViewerIndex]?.querySelector(".fill");
+  if (!fill) return;
+  fill.style.transition = "none";
+  fill.style.width = "0%";
+  // força reflow antes de trocar a transição, senão o navegador não anima
+  void fill.offsetWidth;
+  fill.style.transition = `width ${durationMs}ms linear`;
+  fill.style.width = "100%";
+}
+
+function clearStoryTimer() {
+  if (STATE.storyViewerTimer) { clearTimeout(STATE.storyViewerTimer); STATE.storyViewerTimer = null; }
+  const video = document.getElementById("story-viewer-video");
+  video.onended = null;
+  video.onloadedmetadata = null;
+}
+
+function storyViewerNext() {
+  if (STATE.storyViewerIndex < STATE.storyViewerStories.length - 1) {
+    STATE.storyViewerIndex += 1;
+    showCurrentStory();
+  } else {
+    storyViewerAdvanceAuthor(1);
+  }
+}
+
+function storyViewerPrev() {
+  if (STATE.storyViewerIndex > 0) {
+    STATE.storyViewerIndex -= 1;
+    showCurrentStory();
+  } else {
+    storyViewerAdvanceAuthor(-1);
+  }
+}
+
+function storyViewerAdvanceAuthor(direction) {
+  const nextIndex = STATE.storyViewerAuthorIndex + direction;
+  if (nextIndex < 0 || nextIndex >= STATE.storiesFeed.length) {
+    closeStoryViewer();
+    return;
+  }
+  openStoryViewer(nextIndex);
+}
+
+function closeStoryViewer() {
+  clearStoryTimer();
+  document.getElementById("story-viewer-video").pause();
+  document.getElementById("modal-story-viewer").style.display = "none";
+  STATE.storyViewerAuthorIndex = -1;
+  STATE.storyViewerStories = [];
+  renderStoriesRail();
+}
+
+async function openStoryViewersList() {
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  if (!story) return;
+  clearStoryTimer();
+  const container = document.getElementById("story-viewers-list-container");
+  document.getElementById("modal-story-viewers").style.display = "flex";
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const views = await DB.getStoryViewers(story.id);
+    if (views.length === 0) {
+      container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Ninguém viu esse story ainda.</p>`;
+      return;
+    }
+    container.innerHTML = "";
+    views.forEach(v => {
+      const p = v.profiles;
+      if (!p) return;
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${escapeHtml(p.username)}"></div>
+        <div class="inbox-details">
+          <span class="inbox-name">${escapeHtml(p.display_name || p.username)}</span>
+          <span class="inbox-message">${formatMessageTime(v.viewed_at)}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="font-size:0.72rem;color:var(--light-gray);text-align:center;padding:16px 0;">Não foi possível carregar agora.</p>`;
+  }
+}
+
+function closeStoryViewersList() {
+  document.getElementById("modal-story-viewers").style.display = "none";
+  // o story tava pausado enquanto a lista tava aberta — retoma do zero (mais
+  // simples que guardar o tempo restante exato).
+  if (document.getElementById("modal-story-viewer").style.display === "flex") showCurrentStory();
+}
+
+async function handleDeleteCurrentStory() {
+  const story = STATE.storyViewerStories[STATE.storyViewerIndex];
+  if (!story) return;
+  if (!confirm("Excluir este story?")) return;
+  clearStoryTimer();
+
+  try {
+    await DB.deleteStory(story.id);
+    STATE.storyViewerStories.splice(STATE.storyViewerIndex, 1);
+    if (STATE.storyViewerStories.length === 0) {
+      storyViewerAdvanceAuthor(1);
+    } else {
+      if (STATE.storyViewerIndex >= STATE.storyViewerStories.length) STATE.storyViewerIndex = STATE.storyViewerStories.length - 1;
+      const progressRow = document.getElementById("story-viewer-progress-row");
+      progressRow.innerHTML = STATE.storyViewerStories.map(() => `<div class="segment"><div class="fill"></div></div>`).join("");
+      showCurrentStory();
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível excluir o story agora.");
+  }
 }
 
 // ==========================================================================
@@ -5881,6 +6213,7 @@ async function applyProfileToUI(profile) {
   STATE.level = profile.level;
   STATE.isVIP = profile.is_vip;
   STATE.profileName = profile.display_name || profile.username;
+  STATE.myUserId = profile.id;
   STATE.myUsername = profile.username;
   STATE.myAvatarUrl = profile.avatar_url;
   STATE.myPrivateContentPrice = profile.private_content_price;
