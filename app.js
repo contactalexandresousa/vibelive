@@ -6607,6 +6607,7 @@ async function applyProfileToUI(profile) {
   updateXPProgressUI();
   refreshProfileStats(profile.id, profile.username);
   renderProfileHighlights();
+  renderDailyCheckinState();
 
   // Inscreve no canal global de DMs recebidas (uma vez por sessão, não a cada
   // chamada — applyProfileToUI roda depois de toda ação de carteira) e carrega
@@ -7081,6 +7082,74 @@ function updateXPProgressUI() {
   if (nextLabel) nextLabel.textContent = `Próximo nível: +${xpNeeded - STATE.xp} XP`;
 }
 
+// Marca visualmente um dia (1-7) como já resgatado — usado tanto na hora do
+// resgate quanto pra restaurar o estado real ao carregar/recarregar a
+// página (antes disso não existia restauração nenhuma: a tela sempre
+// nascia com a semana zerada e o botão liberado, então dava pra clicar de
+// novo depois de um reload mesmo já tendo resgatado — bug real relatado
+// pelo usuário, corrigido junto com a trava de 20h no servidor).
+function markCheckinBoxClaimed(day) {
+  const box = document.getElementById(`chk-day-${day}`);
+  if (!box) return;
+  box.style.background = "rgba(52, 211, 153, 0.12)";
+  box.style.border = "1.5px solid var(--success)";
+  box.style.color = "#fff";
+  box.style.position = "relative";
+
+  if (!box.querySelector(".chk-check")) {
+    const chk = document.createElement("div");
+    chk.className = "chk-check";
+    chk.style.position = "absolute";
+    chk.style.top = "-3px";
+    chk.style.right = "-3px";
+    chk.style.background = "var(--success)";
+    chk.style.width = "10px";
+    chk.style.height = "10px";
+    chk.style.borderRadius = "50%";
+    chk.style.fontSize = "0.45rem";
+    chk.style.display = "flex";
+    chk.style.alignItems = "center";
+    chk.style.justifyContent = "center";
+    chk.style.color = "#000";
+    chk.style.fontWeight = "900";
+    chk.textContent = "✓";
+    box.appendChild(chk);
+  }
+}
+
+const CHECKIN_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+
+async function renderDailyCheckinState() {
+  const btn = document.getElementById("btn-claim-daily");
+  if (!btn || !STATE.isLoggedIn) return;
+
+  let state;
+  try {
+    state = await DB.getDailyCheckinState();
+  } catch (err) {
+    console.error("Falha ao carregar estado do check-in:", err);
+    return;
+  }
+  if (!state) return;
+
+  for (let day = 1; day < state.next_day; day++) markCheckinBoxClaimed(day);
+
+  const onCooldown = state.last_claimed_at && (Date.now() - new Date(state.last_claimed_at).getTime()) < CHECKIN_COOLDOWN_MS;
+  if (state.next_day > 7) {
+    btn.disabled = true;
+    btn.textContent = "Completo ✓";
+    btn.style.opacity = "0.6";
+  } else if (onCooldown) {
+    btn.disabled = true;
+    btn.textContent = "Volte mais tarde";
+    btn.style.opacity = "0.6";
+  } else {
+    btn.disabled = false;
+    btn.textContent = "Resgatar";
+    btn.style.opacity = "1";
+  }
+}
+
 async function claimDailyCheckIn() {
   if (!requireAuth()) return;
 
@@ -7089,6 +7158,7 @@ async function claimDailyCheckIn() {
     result = await DB.claimDailyCheckin(); // { profile, day, reward } — servidor decide tudo
   } catch (err) {
     showToast(err.message || "Você já completou todo o calendário semanal! 🗓️");
+    await renderDailyCheckinState(); // reflete o estado real (ex: já resgatou hoje) na tela
     return;
   }
 
@@ -7112,40 +7182,7 @@ async function claimDailyCheckIn() {
     showToast(`Check-in de hoje feito! Ganhou 🪙 ${coinsReward} moedas e +100 XP!`);
   }
 
-  const box = document.getElementById(`chk-day-${nextDay}`);
-  if (box) {
-    box.style.background = "rgba(52, 211, 153, 0.12)";
-    box.style.border = "1.5px solid var(--success)";
-    box.style.color = "#fff";
-    box.style.position = "relative";
-    
-    if (!box.querySelector(".chk-check")) {
-      const chk = document.createElement("div");
-      chk.className = "chk-check";
-      chk.style.position = "absolute";
-      chk.style.top = "-3px";
-      chk.style.right = "-3px";
-      chk.style.background = "var(--success)";
-      chk.style.width = "10px";
-      chk.style.height = "10px";
-      chk.style.borderRadius = "50%";
-      chk.style.fontSize = "0.45rem";
-      chk.style.display = "flex";
-      chk.style.alignItems = "center";
-      chk.style.justifyContent = "center";
-      chk.style.color = "#000";
-      chk.style.fontWeight = "900";
-      chk.textContent = "✓";
-      box.appendChild(chk);
-    }
-  }
-
-  const btn = document.getElementById("btn-claim-daily");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Resgatado";
-    btn.style.opacity = "0.6";
-  }
+  await renderDailyCheckinState();
 }
 
 async function purchaseVIPBadge() {

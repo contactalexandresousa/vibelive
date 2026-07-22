@@ -698,6 +698,21 @@ const DB = {
     return data; // { profile, prize }
   },
 
+  // Estado real do check-in (dia atual da sequência + quando foi o último
+  // resgate) — usado pra restaurar a tela certa ao carregar/recarregar a
+  // página, em vez de sempre mostrar a semana zerada com o botão liberado.
+  async getDailyCheckinState() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await sb
+      .from("daily_checkin_state")
+      .select("next_day, last_claimed_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw error;
+    return data || { next_day: 1, last_claimed_at: null };
+  },
+
   async claimDailyCheckin() {
     const { data, error } = await sb.rpc("claim_daily_checkin");
     if (error) throw error;
