@@ -392,6 +392,22 @@ const DB = {
     return data;
   },
 
+  async generateMyBackupCodes() {
+    const { data, error } = await sb.rpc("generate_my_backup_codes");
+    if (error) throw error;
+    return data;
+  },
+
+  async verifyMyBackupCode(code) {
+    const { error } = await sb.rpc("verify_my_backup_code", { p_code: code });
+    if (error) throw error;
+  },
+
+  async clearMyBackupCodes() {
+    const { error } = await sb.rpc("clear_my_backup_codes");
+    if (error) throw error;
+  },
+
   async getMySessions() {
     const { data, error } = await sb.rpc("get_my_sessions");
     if (error) throw error;
@@ -475,6 +491,12 @@ const DB = {
   async submitAccountAppeal(username, message) {
     const { error } = await sb.rpc("submit_account_appeal", { p_username: username, p_message: message });
     if (error) throw error;
+  },
+
+  async getModerationBlocks(limit = 50) {
+    const { data, error } = await sb.rpc("get_moderation_blocks", { p_limit: limit });
+    if (error) throw error;
+    return data;
   },
 
   async getAccountAppeals() {
@@ -721,10 +743,14 @@ const DB = {
   },
 
   // Posts / curtidas / comentários
-  async createPost(mediaUrl, mediaType, caption, isPrivate = false) {
+  // mediaUrls (opcional) é o conjunto completo de um carrossel de fotos —
+  // mediaUrl/mediaType continuam sendo a "capa", igual sempre foram, então
+  // toda leitura existente (grades, busca) não precisa saber que carrossel existe.
+  async createPost(mediaUrl, mediaType, caption, isPrivate = false, mediaUrls = null) {
     const { data: { user } } = await sb.auth.getUser();
     const { data, error } = await sb.from("posts").insert({
-      user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption, is_private: isPrivate
+      user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption, is_private: isPrivate,
+      media_urls: mediaUrls && mediaUrls.length > 1 ? mediaUrls : null
     }).select().single();
     if (error) throw error;
     return data;
@@ -1298,12 +1324,19 @@ const DB = {
   // Um único canal por sessão: qualquer mensagem que EU receber (de quem for)
   // passa por aqui. Quem chamar decide o que fazer (atualizar inbox, anexar
   // na conversa aberta etc.) — mesmo padrão de canal único usado na sala de live.
-  subscribeToDirectMessages(myUserId, onMessage) {
+  // onReadReceipt é opcional: dispara quando uma mensagem que EU enviei é
+  // marcada como lida (UPDATE em read_at) — é o que liga o indicador de
+  // "visto" em tempo real, sem precisar recarregar a conversa.
+  subscribeToDirectMessages(myUserId, onMessage, onReadReceipt) {
     const channel = sb.channel(`dm_inbox:${myUserId}`)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "direct_messages",
         filter: `recipient_id=eq.${myUserId}`
       }, (payload) => onMessage(payload.new))
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "direct_messages",
+        filter: `sender_id=eq.${myUserId}`
+      }, (payload) => { if (onReadReceipt) onReadReceipt(payload.new); })
       .subscribe();
     return channel;
   },

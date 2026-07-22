@@ -1312,6 +1312,7 @@ function appendPrivateChatBubble(msg, myUserId) {
   const bubble = document.createElement("div");
   const isMine = msg.sender_id === myUserId;
   bubble.className = isMine ? "chat-bubble sent" : "chat-bubble received";
+  if (isMine) bubble.dataset.msgId = msg.id;
 
   let vipSuffix = "";
   if (isMine && STATE.isVIP) {
@@ -1320,15 +1321,31 @@ function appendPrivateChatBubble(msg, myUserId) {
 
   const imageHtml = msg.image_url ? `<img src="${msg.image_url}" alt="Foto" class="chat-bubble-image" onclick="openLightboxImage('${msg.image_url}')">` : "";
   const textHtml = msg.text ? `<span>${escapeHtml(msg.text)}</span>` : "";
+  const statusHtml = isMine
+    ? `<span class="chat-bubble-status${msg.read_at ? " read" : ""}">${msg.read_at ? "Visto" : "Enviado"}</span>`
+    : "";
 
   bubble.innerHTML = `
     ${vipSuffix}
     ${imageHtml}
     ${textHtml}
     <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}</span>
+    ${statusHtml}
   `;
   DOM.privateChatHistory.appendChild(bubble);
   DOM.privateChatHistory.scrollTop = DOM.privateChatHistory.scrollHeight;
+}
+
+// Chamado quando chega, via Realtime, a confirmação de que uma mensagem que
+// EU enviei foi lida — troca "Enviado" por "Visto" na hora, sem recarregar.
+function updateChatBubbleReadStatus(msgId, readAt) {
+  if (!readAt) return;
+  const bubble = DOM.privateChatHistory.querySelector(`[data-msg-id="${msgId}"]`);
+  const statusEl = bubble && bubble.querySelector(".chat-bubble-status");
+  if (statusEl) {
+    statusEl.textContent = "Visto";
+    statusEl.classList.add("read");
+  }
 }
 
 function openLightboxImage(url) {
@@ -2097,6 +2114,46 @@ async function handleReviewAppeal(appealId, approve, btn) {
     btn.disabled = false;
     showToast(err.message || "Não foi possível revisar agora.");
   }
+}
+
+const MODERATION_CONTEXT_LABELS = { avatar: "Foto de perfil", post: "Publicação", dm: "Foto em DM" };
+
+async function openAdminModerationPanel() {
+  if (!STATE.isAdmin) return;
+  document.getElementById("modal-admin-moderation").style.display = "flex";
+  const container = document.getElementById("admin-moderation-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+
+  try {
+    const blocks = await DB.getModerationBlocks(50);
+    if (blocks.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Nenhuma imagem bloqueada ainda.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    blocks.forEach(b => {
+      const name = escapeHtml(b.display_name || b.username || "Conta removida");
+      const contextLabel = MODERATION_CONTEXT_LABELS[b.context] || b.context;
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.style.alignItems = "flex-start";
+      item.innerHTML = `
+        <div class="inbox-avatar" style="display:flex; align-items:center; justify-content:center; background:rgba(241,85,76,0.1); font-size:1.2rem;">🚫</div>
+        <div class="inbox-details" style="flex: 1;">
+          <span class="inbox-name">${name} <span style="font-weight:400; color:var(--light-gray);">· ${escapeHtml(contextLabel)}</span></span>
+          <span class="inbox-message">Motivo: ${escapeHtml(b.reason)} — imagem removida automaticamente, não fica retida pra revisão.</span>
+          <span class="inbox-time">${formatMessageTime(b.created_at)}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+function closeAdminModerationPanel() {
+  document.getElementById("modal-admin-moderation").style.display = "none";
 }
 
 async function openAdminStatsPanel() {
@@ -3362,6 +3419,9 @@ function appendPostsToProfileGrid(posts, container) {
 
     if (post.media_type === "image") {
       mediaHtml = `<img src="${post.media_url}" alt="Post">`;
+      if (post.media_urls && post.media_urls.length > 1) {
+        indicatorHtml = `<div class="post-video-indicator">🖼 ${post.media_urls.length}</div>`;
+      }
     } else {
       mediaHtml = `<video src="${post.media_url}" muted playsinline></video>`;
       indicatorHtml = `<div class="post-video-indicator">▶ Video</div>`;
@@ -3463,6 +3523,8 @@ async function loadMoreProfilePosts() {
   }
 }
 
+const MAX_POST_PHOTOS = 10;
+
 function openNewPostModal() {
   document.getElementById("modal-new-post").style.display = "flex";
   // Reset fields
@@ -3470,7 +3532,7 @@ function openNewPostModal() {
   document.getElementById("post-file-input").value = "";
   document.getElementById("post-media-preview-container").style.display = "none";
   document.getElementById("post-is-private-input").checked = false;
-  STATE.selectedPostFile = null;
+  STATE.selectedPostFiles = [];
   setPostType("image");
 }
 
@@ -3484,54 +3546,107 @@ function setPostType(type) {
   const btnPhoto = document.getElementById("post-type-photo");
   const btnVideo = document.getElementById("post-type-video");
   const fileInput = document.getElementById("post-file-input");
+  const label = document.getElementById("post-file-input-label");
 
   btnPhoto.classList.toggle("active", type === "image");
   btnVideo.classList.toggle("active", type === "video");
   fileInput.accept = type === "image" ? "image/*" : "video/*";
+  // Carrossel é só pra foto — vídeo continua um arquivo só, igual sempre foi.
+  if (type === "image") {
+    fileInput.setAttribute("multiple", "");
+    label.textContent = `Escolha até ${MAX_POST_PHOTOS} fotos:`;
+  } else {
+    fileInput.removeAttribute("multiple");
+    label.textContent = "Escolha um vídeo:";
+  }
 
   // Trocar o tipo depois de já ter escolhido um arquivo descarta a escolha
   // anterior — evita publicar um vídeo marcado como foto (ou vice-versa).
-  STATE.selectedPostFile = null;
+  STATE.selectedPostFiles = [];
   fileInput.value = "";
   document.getElementById("post-media-preview-container").style.display = "none";
 }
 
 function handlePostFileSelected(event) {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
 
   const isImage = STATE.currentPostType === "image";
-  if (isImage && !file.type.startsWith("image/")) {
-    showToast("Escolha um arquivo de imagem.");
-    return;
-  }
-  if (!isImage && !file.type.startsWith("video/")) {
-    showToast("Escolha um arquivo de vídeo.");
-    return;
-  }
   const maxSize = isImage ? 8 * 1024 * 1024 : 25 * 1024 * 1024;
-  if (file.size > maxSize) {
-    showToast(`Arquivo muito grande (máximo ${isImage ? "8MB" : "25MB"}).`);
-    return;
+
+  for (const file of files) {
+    if (isImage && !file.type.startsWith("image/")) {
+      showToast("Escolha só arquivos de imagem.");
+      return;
+    }
+    if (!isImage && !file.type.startsWith("video/")) {
+      showToast("Escolha um arquivo de vídeo.");
+      return;
+    }
+    if (file.size > maxSize) {
+      showToast(`Arquivo muito grande (máximo ${isImage ? "8MB" : "25MB"}).`);
+      return;
+    }
   }
 
-  STATE.selectedPostFile = file;
-  const url = URL.createObjectURL(file);
+  if (!isImage) {
+    STATE.selectedPostFiles = [files[0]];
+  } else {
+    STATE.selectedPostFiles = [...STATE.selectedPostFiles, ...files].slice(0, MAX_POST_PHOTOS);
+    if (STATE.selectedPostFiles.length >= MAX_POST_PHOTOS) {
+      showToast(`Máximo de ${MAX_POST_PHOTOS} fotos por publicação.`);
+    }
+  }
+  event.target.value = ""; // permite escolher os mesmos arquivos de novo se remover e re-adicionar
+
+  renderPostPreview();
+}
+
+function removePostPreviewFile(index) {
+  STATE.selectedPostFiles.splice(index, 1);
+  renderPostPreview();
+}
+
+function renderPostPreview() {
+  const files = STATE.selectedPostFiles;
+  const container = document.getElementById("post-media-preview-container");
   const imgPreview = document.getElementById("post-preview-img");
   const videoPreview = document.getElementById("post-preview-video");
-  document.getElementById("post-media-preview-container").style.display = "block";
+  const strip = document.getElementById("post-preview-strip");
 
-  if (isImage) {
-    imgPreview.style.display = "block";
-    videoPreview.style.display = "none";
-    videoPreview.pause();
-    imgPreview.src = url;
-  } else {
+  if (files.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "block";
+
+  if (STATE.currentPostType === "video") {
+    strip.style.display = "none";
     imgPreview.style.display = "none";
     videoPreview.style.display = "block";
-    videoPreview.src = url;
+    videoPreview.src = URL.createObjectURL(files[0]);
     videoPreview.play().catch(e => console.log(e));
+    return;
   }
+
+  videoPreview.pause();
+  videoPreview.style.display = "none";
+
+  if (files.length === 1) {
+    strip.style.display = "none";
+    imgPreview.style.display = "block";
+    imgPreview.src = URL.createObjectURL(files[0]);
+    return;
+  }
+
+  imgPreview.style.display = "none";
+  strip.style.display = "flex";
+  strip.innerHTML = files.map((f, i) => `
+    <div class="preview-thumb">
+      <img src="${URL.createObjectURL(f)}" alt="Foto ${i + 1}">
+      <button type="button" class="btn-remove-thumb" onclick="removePostPreviewFile(${i})">×</button>
+    </div>
+  `).join("");
 }
 
 // Redimensiona pro lado maior caber em maxDimension e reencoda como JPEG —
@@ -3587,10 +3702,10 @@ function compressImageFile(file, maxDimension = 1600, quality = 0.82) {
 async function publishNewPost() {
   if (!requireAuth()) return;
   const caption = document.getElementById("post-caption-input").value.trim();
-  const file = STATE.selectedPostFile;
+  const files = STATE.selectedPostFiles;
   const isPrivate = document.getElementById("post-is-private-input").checked;
 
-  if (!file) {
+  if (!files || files.length === 0) {
     showToast("Escolha uma foto ou vídeo para publicar.");
     return;
   }
@@ -3603,10 +3718,14 @@ async function publishNewPost() {
   if (btn) { btn.disabled = true; btn.textContent = "Publicando..."; }
 
   try {
-    const fileToUpload = STATE.currentPostType === "image" ? await compressImageFile(file) : file;
     const user = await Auth.getUser();
-    const mediaUrl = await DB.uploadPostMedia(user.id, fileToUpload);
-    await DB.createPost(mediaUrl, STATE.currentPostType, caption || "Sem legenda.", isPrivate);
+    const mediaUrls = [];
+    for (let i = 0; i < files.length; i++) {
+      if (btn && files.length > 1) btn.textContent = `Publicando (${i + 1}/${files.length})...`;
+      const fileToUpload = STATE.currentPostType === "image" ? await compressImageFile(files[i]) : files[i];
+      mediaUrls.push(await DB.uploadPostMedia(user.id, fileToUpload));
+    }
+    await DB.createPost(mediaUrls[0], STATE.currentPostType, caption || "Sem legenda.", isPrivate, mediaUrls);
     await renderProfilePosts();
     closeNewPostModal();
     showToast("Publicação realizada com sucesso!");
@@ -3643,16 +3762,36 @@ async function openPostLightbox(postId) {
   if (authorName) authorName.textContent = STATE.profileName || "";
   if (authorHandle) authorHandle.textContent = "@" + (STATE.myUsername || "");
 
-  if (post.media_type === "image") {
-    img.style.display = "block";
+  const carousel = document.getElementById("lightbox-carousel");
+  const dots = document.getElementById("lightbox-carousel-dots");
+
+  if (post.media_urls && post.media_urls.length > 1) {
+    img.style.display = "none";
     video.style.display = "none";
     video.pause();
-    img.src = post.media_url;
+    carousel.style.display = "flex";
+    dots.style.display = "flex";
+    carousel.innerHTML = post.media_urls.map((u, i) => `<img src="${u}" alt="Foto ${i + 1}">`).join("");
+    dots.innerHTML = post.media_urls.map((_, i) => `<span class="dot${i === 0 ? " active" : ""}"></span>`).join("");
+    carousel.scrollLeft = 0;
+    carousel.onscroll = () => {
+      const idx = Math.round(carousel.scrollLeft / carousel.clientWidth);
+      dots.querySelectorAll(".dot").forEach((d, i) => d.classList.toggle("active", i === idx));
+    };
   } else {
-    img.style.display = "none";
-    video.style.display = "block";
-    video.src = post.media_url;
-    video.play().catch(e => console.log(e));
+    carousel.style.display = "none";
+    dots.style.display = "none";
+    if (post.media_type === "image") {
+      img.style.display = "block";
+      video.style.display = "none";
+      video.pause();
+      img.src = post.media_url;
+    } else {
+      img.style.display = "none";
+      video.style.display = "block";
+      video.src = post.media_url;
+      video.play().catch(e => console.log(e));
+    }
   }
 
   STATE.lightboxCommentsOffset = 0;
@@ -4087,6 +4226,12 @@ async function confirm2faEnrollment() {
     showToast("Autenticação em duas etapas ativada!");
     await open2faModal();
     signOutOtherSessionsQuietly();
+    try {
+      const codes = await DB.generateMyBackupCodes();
+      showBackupCodesModal(codes);
+    } catch (err) {
+      console.error("Falha ao gerar códigos de backup:", err);
+    }
   } catch (err) {
     errorEl.textContent = "Código inválido. Confira o horário do seu celular e tente de novo.";
   }
@@ -4098,6 +4243,7 @@ async function disable2fa() {
     const factors = await Auth.mfaListFactors();
     const verified = factors.totp.find(f => f.status === "verified");
     if (verified) await Auth.mfaUnenroll(verified.id);
+    await DB.clearMyBackupCodes().catch(() => {});
     showToast("Autenticação em duas etapas desativada.");
     await open2faModal();
     signOutOtherSessionsQuietly();
@@ -4106,10 +4252,42 @@ async function disable2fa() {
   }
 }
 
+async function regenerateBackupCodes() {
+  if (!confirm("Gerar novos códigos de backup? Os códigos antigos deixam de funcionar.")) return;
+  try {
+    const codes = await DB.generateMyBackupCodes();
+    showBackupCodesModal(codes);
+  } catch (err) {
+    showToast(err.message || "Não foi possível gerar novos códigos agora.");
+  }
+}
+
+function showBackupCodesModal(codes) {
+  STATE.lastBackupCodes = codes;
+  document.getElementById("backup-codes-list").innerHTML = codes.map(c => `<span>${c}</span>`).join("");
+  document.getElementById("modal-2fa-backup-codes").style.display = "flex";
+}
+
+function closeBackupCodesModal() {
+  document.getElementById("modal-2fa-backup-codes").style.display = "none";
+  STATE.lastBackupCodes = null;
+}
+
+async function copyBackupCodes() {
+  if (!STATE.lastBackupCodes) return;
+  try {
+    await navigator.clipboard.writeText(STATE.lastBackupCodes.join("\n"));
+    showToast("Códigos copiados!");
+  } catch (err) {
+    showToast("Não foi possível copiar automaticamente — selecione e copie manualmente.");
+  }
+}
+
 // Chamado no meio do login (handleAuthSubmit) quando a conta tem 2FA ativo —
 // bloqueia o acesso até confirmar o código, mesmo já com a senha certa.
 function showMfaChallenge(factorId) {
   pendingMfaFactorId = factorId;
+  if (STATE.mfaChallengeUsingBackupCode) toggleBackupCodeMode(); // sempre começa no modo TOTP normal
   document.getElementById("twofa-challenge-code-input").value = "";
   document.getElementById("twofa-challenge-error").textContent = "";
   document.getElementById("modal-2fa-challenge").style.display = "flex";
@@ -4119,6 +4297,23 @@ async function submit2faChallenge() {
   const code = document.getElementById("twofa-challenge-code-input").value.trim();
   const errorEl = document.getElementById("twofa-challenge-error");
   errorEl.textContent = "";
+
+  if (STATE.mfaChallengeUsingBackupCode) {
+    if (!code) {
+      errorEl.textContent = "Digite um código de backup.";
+      return;
+    }
+    try {
+      await DB.verifyMyBackupCode(code);
+      document.getElementById("modal-2fa-challenge").style.display = "none";
+      pendingMfaFactorId = null;
+      STATE.mfaChallengeUsingBackupCode = false;
+      await finishLoginAfterAuth("Login realizado com sucesso!");
+    } catch (err) {
+      errorEl.textContent = err.message || "Código de backup inválido.";
+    }
+    return;
+  }
 
   if (!/^\d{6}$/.test(code)) {
     errorEl.textContent = "Digite os 6 dígitos do código.";
@@ -4141,8 +4336,35 @@ async function submit2faChallenge() {
   }
 }
 
+// Alterna o desafio de login entre "código do app autenticador" (6 dígitos)
+// e "código de backup" (formato XXXX-XXXX) — mesmo modal, muda só o que o
+// input aceita e qual verificação submit2faChallenge chama.
+function toggleBackupCodeMode() {
+  STATE.mfaChallengeUsingBackupCode = !STATE.mfaChallengeUsingBackupCode;
+  const input = document.getElementById("twofa-challenge-code-input");
+  const toggleBtn = document.getElementById("btn-toggle-backup-code-mode");
+  const helpText = document.getElementById("twofa-challenge-help-text");
+  document.getElementById("twofa-challenge-error").textContent = "";
+  input.value = "";
+
+  if (STATE.mfaChallengeUsingBackupCode) {
+    input.placeholder = "XXXX-XXXX";
+    input.setAttribute("maxlength", "9");
+    input.removeAttribute("inputmode");
+    toggleBtn.textContent = "Usar código do app autenticador";
+    helpText.textContent = "Digite um dos seus códigos de backup (formato XXXX-XXXX).";
+  } else {
+    input.placeholder = "Código de 6 dígitos";
+    input.setAttribute("maxlength", "6");
+    input.setAttribute("inputmode", "numeric");
+    toggleBtn.textContent = "Usar código de backup";
+    helpText.textContent = "Digite o código de 6 dígitos do seu app autenticador.";
+  }
+}
+
 async function cancel2faChallenge() {
   pendingMfaFactorId = null;
+  STATE.mfaChallengeUsingBackupCode = false;
   document.getElementById("modal-2fa-challenge").style.display = "none";
   await Auth.signOut();
   showToast("Login cancelado.");
@@ -5572,6 +5794,8 @@ async function applyProfileToUI(profile) {
   if (adminBannedWordsBtn) adminBannedWordsBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminAppealsBtn = document.getElementById("btn-admin-appeals");
   if (adminAppealsBtn) adminAppealsBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminModerationBtn = document.getElementById("btn-admin-moderation");
+  if (adminModerationBtn) adminModerationBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();
@@ -5587,6 +5811,10 @@ async function applyProfileToUI(profile) {
         DB.markConversationRead(row.sender_id).catch(() => {});
       }
       renderInboxList();
+    }, (row) => {
+      if (STATE.activeScreen === "private-chat" && STATE.activeChatPartner === row.recipient_id) {
+        updateChatBubbleReadStatus(row.id, row.read_at);
+      }
     });
     renderInboxList();
   }

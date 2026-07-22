@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722e">
+  <link rel="stylesheet" href="styles.css?v=20260722f">
 </head>
 <body>
 
@@ -857,12 +857,13 @@
                 </div>
               </div>
               <div class="form-group-post">
-                <label>Escolha um arquivo:</label>
-                <input type="file" id="post-file-input" accept="image/*" onchange="handlePostFileSelected(event)">
+                <label id="post-file-input-label">Escolha até 10 fotos:</label>
+                <input type="file" id="post-file-input" accept="image/*" multiple onchange="handlePostFileSelected(event)">
               </div>
               <div class="post-media-preview-container" id="post-media-preview-container" style="display: none;">
                 <img id="post-preview-img" src="" alt="Preview" style="display: none;">
                 <video id="post-preview-video" style="display: none;" loop muted controls></video>
+                <div id="post-preview-strip" class="post-preview-strip" style="display: none;"></div>
               </div>
               <div class="form-group-post">
                 <label for="post-caption-input">Legenda:</label>
@@ -885,6 +886,8 @@
             <div class="lightbox-media-wrapper">
               <img id="lightbox-img" src="" style="display: none;" alt="Media">
               <video id="lightbox-video" src="" style="display: none;" controls autoplay loop></video>
+              <div id="lightbox-carousel" class="lightbox-carousel" style="display: none;"></div>
+              <div id="lightbox-carousel-dots" class="lightbox-carousel-dots" style="display: none;"></div>
             </div>
             <div class="lightbox-details">
               <div class="lightbox-author-row">
@@ -1051,6 +1054,10 @@
 
               <button class="btn-publish-post" id="btn-admin-appeals" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminAppealsPanel()">
                 📋 Recursos de Suspensão (Admin)
+              </button>
+
+              <button class="btn-publish-post" id="btn-admin-moderation" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminModerationPanel()">
+                🖼️ Imagens Bloqueadas (Admin)
               </button>
 
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
@@ -1363,6 +1370,21 @@
             </header>
             <div class="search-results-scroll">
               <div class="inbox-list" id="admin-appeals-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Imagens Bloqueadas por Moderação -->
+        <div class="new-post-modal" id="modal-admin-moderation" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminModerationPanel()"></div>
+          <div class="new-post-content" style="height: 75%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🖼️ Imagens Bloqueadas</h3>
+              <button class="btn-close-new-post" onclick="closeAdminModerationPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <p style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 14px;">Uploads recusados pela moderação de conteúdo, mais recentes primeiro. Útil pra pegar falso positivo.</p>
+              <div class="inbox-list" id="admin-moderation-list-container"></div>
             </div>
           </div>
         </div>
@@ -1778,7 +1800,8 @@
               <div id="twofa-status-active" style="display: none; text-align: center; padding: 10px 0;">
                 <div style="font-size: 2rem; margin-bottom: 10px;">✅</div>
                 <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 18px;">A verificação em duas etapas está ativada nessa conta.</p>
-                <button class="btn-follow-primary" style="width: 100%; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="disable2fa()">Desativar</button>
+                <button class="btn-follow-primary" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="regenerateBackupCodes()">🔑 Gerar códigos de backup</button>
+                <button class="btn-follow-primary" style="width: 100%; margin-top: 10px; background: rgba(241,85,76,0.1); color: var(--danger);" onclick="disable2fa()">Desativar</button>
               </div>
               <div id="twofa-status-inactive" style="display: none;">
                 <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Escaneie o QR Code com um app autenticador (Google Authenticator, Authy etc.) e digite o código de 6 dígitos pra confirmar.</p>
@@ -1799,11 +1822,29 @@
               <h3>🔐 Confirme o código</h3>
             </header>
             <div class="new-post-body">
-              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;">Digite o código de 6 dígitos do seu app autenticador.</p>
+              <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px;" id="twofa-challenge-help-text">Digite o código de 6 dígitos do seu app autenticador.</p>
               <input type="text" id="twofa-challenge-code-input" class="onboarding-input" placeholder="Código de 6 dígitos" maxlength="6" inputmode="numeric">
               <span class="onboarding-error" id="twofa-challenge-error"></span>
               <button class="btn-follow-primary" style="width: 100%; margin-top: 12px;" onclick="submit2faChallenge()">Confirmar</button>
-              <button type="button" class="onboarding-skip-btn" style="margin-top: 8px;" onclick="cancel2faChallenge()">Cancelar login</button>
+              <button type="button" class="onboarding-skip-btn" style="margin-top: 8px;" id="btn-toggle-backup-code-mode" onclick="toggleBackupCodeMode()">Usar código de backup</button>
+              <button type="button" class="onboarding-skip-btn" style="margin-top: 4px;" onclick="cancel2faChallenge()">Cancelar login</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Códigos de backup do 2FA (mostrados uma única vez) -->
+        <div class="new-post-modal" id="modal-2fa-backup-codes" style="display: none;">
+          <div class="new-post-overlay" onclick="closeBackupCodesModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🔑 Códigos de backup</h3>
+              <button class="btn-close-new-post" onclick="closeBackupCodesModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 14px;">Guarde esses 10 códigos num lugar seguro — cada um funciona uma única vez pra entrar caso você perca acesso ao app autenticador. Eles só aparecem aqui agora; gerar novos invalida esses.</p>
+              <div id="backup-codes-list" style="font-family: monospace; font-size: 0.85rem; font-weight: 700; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; text-align: center;"></div>
+              <button class="btn-follow-primary" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);" onclick="copyBackupCodes()">📋 Copiar todos</button>
+              <button class="btn-follow-primary" style="width: 100%; margin-top: 8px;" onclick="closeBackupCodesModal()">Já salvei, pode fechar</button>
             </div>
           </div>
         </div>
@@ -1969,9 +2010,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722e"></script>
+  <script src="supabase-client.js?v=20260722f"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722e"></script>
+  <script src="app.js?v=20260722f"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
