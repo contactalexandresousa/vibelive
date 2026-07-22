@@ -244,7 +244,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error("Falha ao checar sessão:", err);
       STATE.isLoggedIn = false;
-      if (/suspensa/.test(err.message || "")) showToast(err.message);
+      if (err.suspendedUsername) openSuspendedAccountModal(err.suspendedUsername, err.message);
     }
     // Navegação sem login continua permitida (dados mockados); ações que gravam
     // dado real checam STATE.isLoggedIn e pedem login na hora, via requireAuth().
@@ -425,6 +425,9 @@ function renderNotificationsList() {
   if (!container) return;
   container.innerHTML = "";
 
+  const clearBtn = document.getElementById("btn-clear-notifications");
+  if (clearBtn) clearBtn.style.display = STATE.notifications.length > 0 ? "block" : "none";
+
   if (STATE.notifications.length === 0) {
     container.innerHTML = `
       <div class="discover-empty-state" style="display: flex;">
@@ -479,9 +482,36 @@ function renderNotificationsList() {
         <span class="inbox-name">${icon} ${text}</span>
         <span class="inbox-message">${formatMessageTime(n.created_at)}</span>
       </div>
+      <div class="inbox-right">
+        <button class="btn-notification-delete" onclick="event.stopPropagation(); deleteNotificationClick('${n.id}', this)" aria-label="Apagar notificação">✕</button>
+      </div>
     `;
     container.appendChild(item);
   });
+}
+
+async function deleteNotificationClick(id, btn) {
+  btn.disabled = true;
+  try {
+    await DB.deleteNotification(id);
+    STATE.notifications = STATE.notifications.filter(n => n.id !== id);
+    renderNotificationsList();
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível apagar agora.");
+  }
+}
+
+async function clearAllNotifications() {
+  if (STATE.notifications.length === 0) return;
+  if (!confirm("Apagar todas as notificações? Essa ação não pode ser desfeita.")) return;
+  try {
+    await DB.deleteAllNotifications();
+    STATE.notifications = [];
+    renderNotificationsList();
+  } catch (err) {
+    showToast(err.message || "Não foi possível limpar as notificações agora.");
+  }
 }
 
 function handleNotificationClick(index) {
@@ -1953,6 +1983,92 @@ async function handleToggleVerified(userId, newValue) {
   }
 }
 
+// Recurso de suspensão (lado do usuário suspenso) — a conta já está sem
+// sessão nesse ponto (applyProfileToUI desloga antes de lançar o erro), por
+// isso submitAccountAppeal identifica pelo @usuário, não por auth.uid().
+STATE.suspendedUsername = null;
+
+function openSuspendedAccountModal(username, message) {
+  STATE.suspendedUsername = username;
+  document.getElementById("suspended-account-message").textContent = message;
+  document.getElementById("suspended-appeal-form").style.display = "block";
+  document.getElementById("suspended-appeal-sent").style.display = "none";
+  document.getElementById("suspended-appeal-text").value = "";
+  document.getElementById("modal-suspended-account").style.display = "flex";
+}
+
+function closeSuspendedAccountModal() {
+  document.getElementById("modal-suspended-account").style.display = "none";
+}
+
+async function submitAccountAppeal() {
+  const text = document.getElementById("suspended-appeal-text").value.trim();
+  if (!text) { showToast("Escreva uma mensagem antes de enviar."); return; }
+  try {
+    await DB.submitAccountAppeal(STATE.suspendedUsername, text);
+    document.getElementById("suspended-appeal-form").style.display = "none";
+    document.getElementById("suspended-appeal-sent").style.display = "block";
+  } catch (err) {
+    showToast(err.message || "Não foi possível enviar o recurso agora.");
+  }
+}
+
+// Painel Admin: revisar recursos de suspensão pendentes
+async function openAdminAppealsPanel() {
+  if (!STATE.isAdmin) return;
+  document.getElementById("modal-admin-appeals").style.display = "flex";
+  await renderAdminAppealsList();
+}
+
+function closeAdminAppealsPanel() {
+  document.getElementById("modal-admin-appeals").style.display = "none";
+}
+
+async function renderAdminAppealsList() {
+  const container = document.getElementById("admin-appeals-list-container");
+  container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.8rem;">Carregando...</div>`;
+  try {
+    const appeals = await DB.getAccountAppeals();
+    if (appeals.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Nenhum recurso pendente.</div>`;
+      return;
+    }
+    container.innerHTML = "";
+    appeals.forEach(a => {
+      const name = escapeHtml(a.profile ? (a.profile.display_name || a.profile.username) : "Conta removida");
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.style.alignItems = "flex-start";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${a.profile ? (a.profile.avatar_url || DEFAULT_AVATAR_DATA_URI) : DEFAULT_AVATAR_DATA_URI}" alt="${name}" style="border-radius:50%;"></div>
+        <div class="inbox-details" style="flex: 1;">
+          <span class="inbox-name">${name}</span>
+          <span class="inbox-message" style="white-space: normal;">${escapeHtml(a.message)}</span>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn-follow-primary" style="height:28px; font-size:0.62rem; padding:0 12px; background:var(--success);" onclick="handleReviewAppeal('${a.id}', true, this)">Aprovar</button>
+            <button class="btn-follow-primary" style="height:28px; font-size:0.62rem; padding:0 12px; background:var(--danger);" onclick="handleReviewAppeal('${a.id}', false, this)">Negar</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--light-gray);font-size:0.78rem;">Não foi possível carregar agora.</div>`;
+  }
+}
+
+async function handleReviewAppeal(appealId, approve, btn) {
+  btn.disabled = true;
+  try {
+    await DB.adminReviewAppeal(appealId, approve);
+    showToast(approve ? "Recurso aprovado — conta reativada." : "Recurso negado.");
+    await renderAdminAppealsList();
+  } catch (err) {
+    btn.disabled = false;
+    showToast(err.message || "Não foi possível revisar agora.");
+  }
+}
+
 async function openAdminStatsPanel() {
   if (!STATE.isAdmin) return;
   const container = document.getElementById("admin-stats-cards");
@@ -2041,6 +2157,8 @@ const ADMIN_AUDIT_ACTION_LABELS = {
   unverify_user: "removeu o selo de",
   review_withdrawal: "revisou um saque de",
   review_report: "revisou uma denúncia sobre",
+  appeal_approved: "aprovou o recurso de suspensão de",
+  appeal_denied: "negou o recurso de suspensão de",
 };
 
 async function openAdminAuditLogPanel() {
@@ -3978,6 +4096,12 @@ async function submit2faChallenge() {
     pendingMfaFactorId = null;
     await finishLoginAfterAuth("Login realizado com sucesso!");
   } catch (err) {
+    if (err.suspendedUsername) {
+      document.getElementById("modal-2fa-challenge").style.display = "none";
+      pendingMfaFactorId = null;
+      openSuspendedAccountModal(err.suspendedUsername, err.message);
+      return;
+    }
     errorEl.textContent = "Código inválido. Tente de novo.";
   }
 }
@@ -5225,7 +5349,8 @@ async function submitNewPassword() {
     await applyProfileToUI(profile);
     navigateTo("discover");
   } catch (err) {
-    showToast(translateAuthError(err));
+    if (err.suspendedUsername) openSuspendedAccountModal(err.suspendedUsername, err.message);
+    else showToast(translateAuthError(err));
   }
 }
 
@@ -5238,9 +5363,11 @@ async function applyProfileToUI(profile) {
   if (profile.is_suspended) {
     await Auth.signOut();
     STATE.isLoggedIn = false;
-    throw new Error(profile.suspended_reason
+    const err = new Error(profile.suspended_reason
       ? `Sua conta foi suspensa: ${profile.suspended_reason}`
       : "Sua conta foi suspensa. Entre em contato com o suporte.");
+    err.suspendedUsername = profile.username;
+    throw err;
   }
 
   const previousLevel = STATE.level;
@@ -5289,6 +5416,8 @@ async function applyProfileToUI(profile) {
   if (adminAuditBtn) adminAuditBtn.style.display = STATE.isAdmin ? "flex" : "none";
   const adminBannedWordsBtn = document.getElementById("btn-admin-banned-words");
   if (adminBannedWordsBtn) adminBannedWordsBtn.style.display = STATE.isAdmin ? "flex" : "none";
+  const adminAppealsBtn = document.getElementById("btn-admin-appeals");
+  if (adminAppealsBtn) adminAppealsBtn.style.display = STATE.isAdmin ? "flex" : "none";
 
   renderCoins();
   updateXPProgressUI();
@@ -5411,7 +5540,8 @@ async function handleAuthSubmit() {
 
     await finishLoginAfterAuth(STATE.authMode === "login" ? "Login realizado com sucesso!" : "Conta criada com sucesso!");
   } catch (err) {
-    showToast(translateAuthError(err));
+    if (err.suspendedUsername) openSuspendedAccountModal(err.suspendedUsername, err.message);
+    else showToast(translateAuthError(err));
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -5489,6 +5619,8 @@ function openOnboardingWizard() {
   document.getElementById("onboarding-username-input").value = "";
   document.getElementById("onboarding-bio-input").value = "";
   document.getElementById("onboarding-username-error").textContent = "";
+  document.getElementById("onboarding-username-status").textContent = "";
+  document.getElementById("onboarding-username-status").className = "onboarding-username-status";
   document.getElementById("onboarding-avatar-preview").src = STATE.myAvatarUrl || "";
   showOnboardingStep(1);
   document.getElementById("modal-onboarding").style.display = "flex";
@@ -5516,6 +5648,43 @@ function handleOnboardingAvatarSelected(event) {
   }
   STATE.onboardingAvatarFile = file;
   document.getElementById("onboarding-avatar-preview").src = URL.createObjectURL(file);
+}
+
+// Feedback de disponibilidade enquanto digita — onboardingNext() continua
+// checando de novo no clique (nunca confia só no resultado daqui: a pessoa
+// pode digitar, ver "disponível", e outra conta pegar o mesmo @ antes de
+// clicar Próximo).
+let onboardingUsernameCheckTimer = null;
+function checkOnboardingUsernameAvailability() {
+  const statusEl = document.getElementById("onboarding-username-status");
+  const raw = document.getElementById("onboarding-username-input").value.trim().toLowerCase();
+  clearTimeout(onboardingUsernameCheckTimer);
+
+  if (!raw) {
+    statusEl.textContent = "";
+    statusEl.className = "onboarding-username-status";
+    return;
+  }
+  if (!/^[a-z0-9_.]{3,24}$/.test(raw)) {
+    statusEl.textContent = "Só letras minúsculas, números, ponto ou underline (3-24 caracteres)";
+    statusEl.className = "onboarding-username-status unavailable";
+    return;
+  }
+
+  statusEl.textContent = "Verificando...";
+  statusEl.className = "onboarding-username-status checking";
+  onboardingUsernameCheckTimer = setTimeout(async () => {
+    try {
+      const available = await DB.isUsernameAvailable(raw);
+      // A pessoa pode ter continuado digitando enquanto a checagem rodava.
+      if (document.getElementById("onboarding-username-input").value.trim().toLowerCase() !== raw) return;
+      statusEl.textContent = available ? `@${raw} disponível` : `@${raw} já está em uso`;
+      statusEl.className = `onboarding-username-status ${available ? "available" : "unavailable"}`;
+    } catch (err) {
+      statusEl.textContent = "";
+      statusEl.className = "onboarding-username-status";
+    }
+  }, 400);
 }
 
 async function onboardingNext() {

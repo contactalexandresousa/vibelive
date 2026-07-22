@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260722a">
+  <link rel="stylesheet" href="styles.css?v=20260722b">
 </head>
 <body>
 
@@ -1088,6 +1088,10 @@
                 🚫 Palavras Bloqueadas (Admin)
               </button>
 
+              <button class="btn-publish-post" id="btn-admin-appeals" style="display: none; margin-top: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: #fff;" onclick="openAdminAppealsPanel()">
+                📋 Recursos de Suspensão (Admin)
+              </button>
+
               <div style="border-top: 1px solid var(--glass-border); margin: 20px 0 10px; padding-top: 14px;"></div>
 
               <div class="form-group-post">
@@ -1215,7 +1219,10 @@
           <div class="new-post-content" style="height: 75%; align-items: stretch;">
             <header class="new-post-header" style="margin-bottom: 12px;">
               <h3>Notificações</h3>
-              <button class="btn-close-new-post" onclick="closeNotificationPanel()">×</button>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn-clear-notifications" id="btn-clear-notifications" onclick="clearAllNotifications()" style="display: none;">Limpar tudo</button>
+                <button class="btn-close-new-post" onclick="closeNotificationPanel()">×</button>
+              </div>
             </header>
             <div class="search-results-scroll" style="flex: 1; overflow-y: auto;">
               <div class="inbox-list" id="notifications-list-container">
@@ -1381,6 +1388,20 @@
             </div>
             <div class="search-results-scroll">
               <div class="inbox-list" id="banned-words-list-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Painel Admin: Recursos de Suspensão -->
+        <div class="new-post-modal" id="modal-admin-appeals" style="display: none;">
+          <div class="new-post-overlay" onclick="closeAdminAppealsPanel()"></div>
+          <div class="new-post-content" style="height: 75%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>📋 Recursos de Suspensão</h3>
+              <button class="btn-close-new-post" onclick="closeAdminAppealsPanel()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="admin-appeals-list-container"></div>
             </div>
           </div>
         </div>
@@ -1614,7 +1635,8 @@
 
             <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
               <p class="onboarding-hint">Escolha seu @ (único, só letras minúsculas/números/ponto/underline)</p>
-              <input type="text" id="onboarding-username-input" class="onboarding-input" placeholder="seu_usuario" maxlength="24">
+              <input type="text" id="onboarding-username-input" class="onboarding-input" placeholder="seu_usuario" maxlength="24" oninput="checkOnboardingUsernameAvailability()">
+              <span class="onboarding-username-status" id="onboarding-username-status"></span>
               <span class="onboarding-error" id="onboarding-username-error"></span>
               <div class="onboarding-actions">
                 <button class="btn-follow-primary" onclick="onboardingNext()">Próximo</button>
@@ -1714,6 +1736,28 @@
                 <button class="btn-follow-primary" style="flex: 1;" onclick="acceptCohostInvite()">Aceitar e entrar</button>
                 <button type="button" class="onboarding-skip-btn" onclick="declineCohostInvite()">Recusar</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Conta Suspensa (recurso) — sem overlay de propósito, só
+             fecha pelo botão explícito, igual ao convite de co-transmissão. -->
+        <div class="new-post-modal" id="modal-suspended-account" style="display: none;">
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🚫 Conta Suspensa</h3>
+            </header>
+            <div class="new-post-body">
+              <p id="suspended-account-message" style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 16px;"></p>
+              <div id="suspended-appeal-form">
+                <label style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px;">Por que acha que foi um engano?</label>
+                <textarea id="suspended-appeal-text" rows="4" style="width: 100%; margin-top: 6px; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; color: var(--text-primary); font-family: var(--font-body); font-size: 0.78rem; resize: vertical;" placeholder="Escreva seu recurso aqui..."></textarea>
+                <button class="btn-follow-primary" style="width: 100%; margin-top: 12px;" onclick="submitAccountAppeal()">Enviar recurso</button>
+              </div>
+              <div id="suspended-appeal-sent" style="display: none; text-align: center; padding: 10px 0;">
+                <p style="font-size: 0.82rem; color: var(--success);">✅ Recurso enviado! Vamos analisar e você poderá entrar de novo se for aprovado.</p>
+              </div>
+              <button type="button" class="onboarding-skip-btn" style="width: 100%; margin-top: 10px;" onclick="closeSuspendedAccountModal()">Fechar</button>
             </div>
           </div>
         </div>
@@ -1946,9 +1990,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260722a"></script>
+  <script src="supabase-client.js?v=20260722b"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260722a"></script>
+  <script src="app.js?v=20260722b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

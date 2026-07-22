@@ -417,6 +417,28 @@ const DB = {
     return data;
   },
 
+  // Recurso de suspensão — chamável sem sessão (conta suspensa é deslogada
+  // antes de qualquer coisa), identifica a conta pelo @usuário.
+  async submitAccountAppeal(username, message) {
+    const { error } = await sb.rpc("submit_account_appeal", { p_username: username, p_message: message });
+    if (error) throw error;
+  },
+
+  async getAccountAppeals() {
+    const { data, error } = await sb
+      .from("account_appeals")
+      .select("*, profile:profiles!account_appeals_user_id_fkey(username, display_name, avatar_url)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  async adminReviewAppeal(appealId, approve, adminNotes) {
+    const { error } = await sb.rpc("admin_review_appeal", { p_appeal_id: appealId, p_approve: approve, p_admin_notes: adminNotes || null });
+    if (error) throw error;
+  },
+
   async getBannedWords() {
     const { data, error } = await sb.from("banned_words").select("word").order("word");
     if (error) throw error;
@@ -1341,6 +1363,17 @@ const DB = {
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", user.id)
       .is("read_at", null);
+    if (error) throw error;
+  },
+
+  async deleteNotification(id) {
+    const { error } = await sb.from("notifications").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async deleteAllNotifications() {
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from("notifications").delete().eq("user_id", user.id);
     if (error) throw error;
   },
 

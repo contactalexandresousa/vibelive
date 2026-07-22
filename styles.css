@@ -2386,6 +2386,30 @@ body {
   transition: var(--transition-smooth);
 }
 
+.btn-clear-notifications {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-notification-delete {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+}
+
+.btn-notification-delete:hover {
+  color: var(--danger);
+}
+
 .section-header .view-all:hover {
   color: var(--primary);
 }
@@ -5380,6 +5404,18 @@ input:-webkit-autofill:focus {
   min-height: 14px;
   text-align: center;
 }
+
+.onboarding-username-status {
+  display: block;
+  font-size: 0.68rem;
+  min-height: 14px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.onboarding-username-status.available { color: var(--success); }
+.onboarding-username-status.unavailable { color: var(--danger); }
+.onboarding-username-status.checking { color: var(--light-gray); }
 
 .onboarding-actions {
   display: flex;
