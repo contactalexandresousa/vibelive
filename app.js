@@ -90,7 +90,11 @@ const STATE = {
   xp: 150,
   level: 1,
   isVIP: false,
-  claimedDays: [1]
+  claimedDays: [1],
+
+  // Lives com desafio (0116)
+  selectedChallengeType: null, // escolhido no setup, antes de ir ao vivo
+  activePollIsChallenge: false // a enquete aberta agora É a votação decisiva do desafio?
 };
 
 
@@ -369,10 +373,13 @@ function navigateTo(screenId) {
     STATE.liveInviteeIds = [];
     STATE.mutualFollowersCache = null;
     STATE.selectedLiveCategory = null;
+    STATE.selectedChallengeType = null;
     const privacyIcon = document.getElementById("setup-privacy-icon");
     if (privacyIcon) privacyIcon.textContent = "🌐";
     const categoryIcon = document.getElementById("setup-category-icon");
     if (categoryIcon) categoryIcon.textContent = "🏷️";
+    const challengeIcon = document.getElementById("setup-challenge-icon");
+    if (challengeIcon) challengeIcon.textContent = "🏆";
   }
 }
 
@@ -625,6 +632,17 @@ const LIVE_CATEGORIES = {
   outros: { icon: "✨", label: "Outros" },
 };
 
+// Lives com desafio (0116) — mesma sala de sempre, só marcada como uma
+// "batalha" com convidados co-transmitindo e votação da audiência decidindo.
+const CHALLENGE_TYPES = {
+  danca: { icon: "💃", label: "Batalha de Dança" },
+  desenho: { icon: "🎨", label: "Batalha de Desenho" },
+  karaoke: { icon: "🎤", label: "Karaokê" },
+  culinaria: { icon: "🍳", label: "Desafio de Cozinha" },
+  improviso: { icon: "🎭", label: "Improviso" },
+  melhor_momento: { icon: "⭐", label: "Quem Faz Melhor" },
+};
+
 function setDiscoverFilter(mode) {
   STATE.discoverFilter = mode;
   document.querySelectorAll(".vibe-category-card").forEach(el => {
@@ -715,7 +733,10 @@ function createRealLiveCardElement(session) {
       ? `<span class="card-restricted-badge">🔒 Com senha</span>`
       : "";
   const categoryInfo = session.category && LIVE_CATEGORIES[session.category];
-  const categoryBadge = categoryInfo ? `<span class="card-category-inline-badge">${categoryInfo.icon} ${categoryInfo.label}</span>` : "";
+  const challengeInfo = session.is_challenge && CHALLENGE_TYPES[session.challenge_type];
+  const categoryBadge = challengeInfo
+    ? `<span class="card-category-inline-badge" style="background: var(--secondary); color: #1a1200;">⚔️ ${challengeInfo.label}</span>`
+    : categoryInfo ? `<span class="card-category-inline-badge">${categoryInfo.icon} ${categoryInfo.label}</span>` : "";
   const viewerCount = session.viewer_count || 0;
 
   const card = document.createElement("div");
@@ -3819,6 +3840,25 @@ function selectLiveCategory(key) {
   closeLiveCategoryModal();
 }
 
+function openLiveChallengeModal() {
+  const list = document.getElementById("live-challenge-picker-list");
+  list.innerHTML = Object.entries(CHALLENGE_TYPES).map(([key, c]) => `
+    <button class="live-category-chip${STATE.selectedChallengeType === key ? " active" : ""}" onclick="selectLiveChallengeType('${key}')">${c.icon} ${c.label}</button>
+  `).join("");
+  document.getElementById("modal-live-challenge").style.display = "flex";
+}
+
+function closeLiveChallengeModal() {
+  document.getElementById("modal-live-challenge").style.display = "none";
+}
+
+function selectLiveChallengeType(key) {
+  STATE.selectedChallengeType = STATE.selectedChallengeType === key ? null : key;
+  const icon = document.getElementById("setup-challenge-icon");
+  if (icon) icon.textContent = STATE.selectedChallengeType ? CHALLENGE_TYPES[STATE.selectedChallengeType].icon : "🏆";
+  closeLiveChallengeModal();
+}
+
 async function updateLivePrivacyUI() {
   const mode = document.querySelector('input[name="live-privacy"]:checked')?.value || "public";
   document.getElementById("live-privacy-password-group").style.display = mode === "password" ? "block" : "none";
@@ -4137,7 +4177,11 @@ async function launchBroadcastingSession() {
 
     const titleInput = document.getElementById("live-title-input");
     const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
-    await DB.startLiveSession(roomName, title, STATE.selectedLiveCategory || null);
+    const isChallenge = !!STATE.selectedChallengeType;
+    await DB.startLiveSession(roomName, title, STATE.selectedLiveCategory || null, isChallenge, STATE.selectedChallengeType);
+    STATE.activePollIsChallenge = false;
+    const challengeVoteBtn = document.getElementById("btn-start-challenge-vote");
+    if (challengeVoteBtn) challengeVoteBtn.style.display = isChallenge ? "inline-flex" : "none";
 
     // Aplica a privacidade escolhida (pública por padrão) — feito depois de
     // criar a sessão porque as funções de senha/convite trabalham em cima da
@@ -4239,6 +4283,9 @@ async function stopOwnLiveStream() {
     STATE.myLiveGiftsChannel = null;
   }
   clearLivePoll("my-live-poll-card");
+  STATE.activePollIsChallenge = false;
+  const challengeVoteBtn = document.getElementById("btn-start-challenge-vote");
+  if (challengeVoteBtn) challengeVoteBtn.style.display = "none";
   if (wasBroadcasting) {
     try {
       const session = await DB.getMyActiveLiveSession();
@@ -5985,6 +6032,7 @@ STATE.livePolls = {}; // containerId -> { poll, votes: { counts, total, myVote }
 
 function openCreatePollModal() {
   if (!requireAuth()) return;
+  STATE.activePollIsChallenge = false;
   document.getElementById("poll-question-input").value = "";
   document.getElementById("poll-option-1").value = "";
   document.getElementById("poll-option-2").value = "";
@@ -5992,6 +6040,32 @@ function openCreatePollModal() {
   document.getElementById("poll-option-4").value = "";
   document.getElementById("create-poll-error").textContent = "";
   document.getElementById("modal-create-poll").style.display = "flex";
+}
+
+// Abre o mesmo modal de enquete, mas já marcado como a votação decisiva do
+// desafio e com as opções pré-preenchidas com quem está de verdade
+// co-transmitindo agora — o anfitrião só ajusta a pergunta se quiser.
+async function openChallengePollSetup() {
+  if (!requireAuth()) return;
+  openCreatePollModal();
+  STATE.activePollIsChallenge = true;
+  document.getElementById("poll-question-input").value = "Quem está mandando melhor?";
+
+  try {
+    const session = await DB.getMyActiveLiveSession();
+    if (!session) return;
+    const cohosts = await DB.getActiveCohosts(session.id);
+    const names = [`@${STATE.myUsername}`, ...cohosts.map(c => `@${c.username}`)].slice(0, 4);
+    names.forEach((name, i) => {
+      const input = document.getElementById(`poll-option-${i + 1}`);
+      if (input) input.value = name;
+    });
+    if (cohosts.length === 0) {
+      showToast("Ninguém co-transmitindo ainda — convide alguém ou edite as opções à mão.");
+    }
+  } catch (err) {
+    console.error("Falha ao carregar participantes do desafio:", err);
+  }
 }
 
 function closeCreatePollModal() {
@@ -6016,9 +6090,9 @@ async function submitCreatePoll() {
   }
 
   try {
-    await DB.createLivePoll(STATE.myUsername, question, options);
+    await DB.createLivePoll(STATE.myUsername, question, options, STATE.activePollIsChallenge);
     closeCreatePollModal();
-    showToast("Enquete lançada!");
+    showToast(STATE.activePollIsChallenge ? "Votação do desafio lançada! 🏆" : "Enquete lançada!");
   } catch (err) {
     errorEl.textContent = err.message || "Não foi possível criar a enquete agora.";
   }
@@ -6049,11 +6123,34 @@ function renderLivePollCard(containerId) {
     `;
   }).join("");
 
+  const closeChallengeBtn = (containerId === "my-live-poll-card" && poll.is_challenge)
+    ? `<button class="btn-live-sfx" style="margin-top: 6px; width: 100%;" onclick="endChallengePoll('${containerId}')">🏆 Encerrar votação e anunciar vencedor</button>`
+    : "";
+
   container.innerHTML = `
-    <div class="live-poll-question">📊 ${escapeHtml(poll.question)}</div>
+    <div class="live-poll-question">${poll.is_challenge ? "🏆" : "📊"} ${escapeHtml(poll.question)}</div>
     ${optionsHtml}
     <div class="live-poll-meta"><span>${total} voto${total === 1 ? "" : "s"}</span></div>
+    ${closeChallengeBtn}
   `;
+}
+
+async function endChallengePoll(containerId) {
+  const state = STATE.livePolls[containerId];
+  if (!state || !state.poll) return;
+  try {
+    const result = await DB.closeLivePoll(state.poll.id);
+    clearLivePoll(containerId);
+    if (result && result.winner_username) {
+      showToast(`🏆 @${result.winner_username} venceu o desafio! +${result.xp_awarded} XP`);
+    } else if (result && result.tie) {
+      showToast("Empate na votação — sem vencedor dessa vez.");
+    } else {
+      showToast("Votação encerrada — ninguém votou a tempo.");
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível encerrar a votação.");
+  }
 }
 
 async function voteOnPoll(containerId, optionIndex) {

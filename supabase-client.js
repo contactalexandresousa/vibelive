@@ -1196,12 +1196,15 @@ const DB = {
   },
 
   // Quem está transmitindo de verdade agora (separado dos streamers mockados).
-  async startLiveSession(roomName, title, category = null) {
+  async startLiveSession(roomName, title, category = null, isChallenge = false, challengeType = null) {
     const { data: { user } } = await sb.auth.getUser();
     // Encerra qualquer sessão própria anterior que tenha ficado pendurada
     // (ex: fechou a aba sem clicar em "Encerrar") antes de abrir uma nova.
     await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
-    const { error } = await sb.from("live_sessions").insert({ user_id: user.id, room_name: roomName, title: title || null, category: category || null });
+    const { error } = await sb.from("live_sessions").insert({
+      user_id: user.id, room_name: roomName, title: title || null, category: category || null,
+      is_challenge: isChallenge, challenge_type: isChallenge ? challengeType : null
+    });
     if (error) throw error;
   },
 
@@ -1333,9 +1336,9 @@ const DB = {
     return channel;
   },
 
-  async createLivePoll(broadcasterHandle, question, options) {
+  async createLivePoll(broadcasterHandle, question, options, isChallenge = false) {
     const { data, error } = await sb.rpc("create_live_poll", {
-      p_broadcaster_handle: broadcasterHandle, p_question: question, p_options: options
+      p_broadcaster_handle: broadcasterHandle, p_question: question, p_options: options, p_is_challenge: isChallenge
     });
     if (error) throw error;
     return data;
@@ -1346,9 +1349,25 @@ const DB = {
     if (error) throw error;
   },
 
+  // Retorna jsonb: { is_challenge, winner_username, winner_display_name, xp_awarded }
+  // quando a enquete encerrada era a votação decisiva de um desafio (0116).
   async closeLivePoll(pollId) {
-    const { error } = await sb.rpc("close_live_poll", { p_poll_id: pollId });
+    const { data, error } = await sb.rpc("close_live_poll", { p_poll_id: pollId });
     if (error) throw error;
+    return data;
+  },
+
+  // Participantes já confirmados (aceitaram o convite) do desafio atual —
+  // usado pra pré-preencher as opções da votação com quem está de verdade
+  // co-transmitindo, em vez do anfitrião digitar nome à mão.
+  async getActiveCohosts(liveSessionId) {
+    const { data, error } = await sb
+      .from("live_cohost_invites")
+      .select("invited_user_id, profiles!live_cohost_invites_invited_user_id_fkey(username, display_name)")
+      .eq("live_session_id", liveSessionId)
+      .eq("status", "accepted");
+    if (error) throw error;
+    return (data || []).map(row => row.profiles).filter(Boolean);
   },
 
   // Enquete ativa (se houver) + contagem de votos por opção + o que o

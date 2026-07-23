@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723c">
+  <link rel="stylesheet" href="styles.css?v=20260723d">
 </head>
 <body>
 
@@ -841,6 +841,10 @@
                    <div class="setup-action-icon" id="setup-category-icon">🏷️</div>
                    <span>Categoria</span>
                  </button>
+                 <button class="setup-action-item" onclick="openLiveChallengeModal()">
+                   <div class="setup-action-icon" id="setup-challenge-icon">🏆</div>
+                   <span>Desafio</span>
+                 </button>
                </div>
 
                <!-- Botão de Transmissão -->
@@ -895,6 +899,7 @@
                       <button class="btn-live-sfx" onclick="triggerMyLiveSfx('🎺', 'Fanfarra!')">🎺 Fanfarra</button>
                       <button class="btn-live-sfx" onclick="openCreatePollModal()">📊 Enquete</button>
                       <button class="btn-live-sfx" onclick="openCohostInviteModal()">👥 Co-transmitir</button>
+                      <button class="btn-live-sfx" id="btn-start-challenge-vote" style="display: none;" onclick="openChallengePollSetup()">🏆 Votação do Desafio</button>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                       <div class="system-status-msg">Transmissão estável • 1080p</div>
@@ -1891,6 +1896,19 @@
           </div>
         </div>
 
+        <!-- Modal: transformar a live num desafio (batalha com votação da audiência) -->
+        <div class="new-post-modal" id="modal-live-challenge" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLiveChallengeModal()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header">
+              <h3>🏆 Modo Desafio</h3>
+              <button class="btn-close-new-post" onclick="closeLiveChallengeModal()">×</button>
+            </header>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin: 10px 0;">Chame convidados pra co-transmitir e deixe a audiência votar em quem manda melhor, em tempo real. Escolha de novo pra desativar.</p>
+            <div id="live-challenge-picker-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+        </div>
+
         <!-- Modal: pedir senha pra entrar numa live protegida -->
         <div class="new-post-modal" id="modal-live-password-gate" style="display: none;">
           <div class="new-post-overlay" onclick="closeLivePasswordGate()"></div>
@@ -2363,9 +2381,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723c"></script>
+  <script src="supabase-client.js?v=20260723d"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723c"></script>
+  <script src="app.js?v=20260723d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

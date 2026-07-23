@@ -172,6 +172,14 @@ test.describe("Gasto real (staging)", () => {
 });
 
 test.describe("Saque real (staging)", () => {
+  // fullyParallel:true deixa cada teste ir pra um worker diferente por
+  // padrão — como os dois testes aqui dividem o MESMO usuário criado uma vez
+  // em beforeAll, cada worker reimportaria este arquivo e geraria seu próprio
+  // Date.now(), correndo o risco de duas criações simultâneas com e-mails
+  // colididos (mesma millisecond) ou dois usuários que o segundo teste não
+  // enxerga. "serial" garante os dois na mesma instância de worker.
+  test.describe.configure({ mode: "serial" });
+
   let userId;
   const email = `withdraw-test-${Date.now()}@gmail.com`;
   const password = "TestSenha123!";
