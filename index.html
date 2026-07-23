@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723b">
+  <link rel="stylesheet" href="styles.css?v=20260723c">
 </head>
 <body>
 
@@ -367,16 +367,33 @@
           <section id="screen-messages" class="screen">
             <header class="chat-header">
               <h1 class="chat-header-title no-dropdown">Mensagens</h1>
-              <button class="chat-new-btn" onclick="openSearchOverlay()">
+              <button class="chat-new-btn" onclick="openCreateGroupModal()" title="Novo grupo">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              </button>
+              <button class="chat-new-btn" onclick="openSearchOverlay()" title="Nova conversa">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
               </button>
             </header>
 
-
+            <div class="profile-tabs">
+              <button class="profile-tab-header-btn active" id="messages-tab-dm-btn" onclick="switchMessagesTab('dm')">
+                <span>Conversas</span>
+              </button>
+              <button class="profile-tab-header-btn" id="messages-tab-group-btn" onclick="switchMessagesTab('group')">
+                <span>Grupos</span>
+              </button>
+            </div>
 
             <!-- Lista de Conversas Recentes -->
-            <div class="inbox-section">
+            <div class="inbox-section" id="messages-dm-section">
               <div class="inbox-list" id="inbox-list-container">
+                <!-- Inserido via JS -->
+              </div>
+            </div>
+
+            <!-- Lista de Grupos -->
+            <div class="inbox-section" id="messages-group-section" style="display: none;">
+              <div class="inbox-list" id="group-inbox-list-container">
                 <!-- Inserido via JS -->
               </div>
             </div>
@@ -388,7 +405,7 @@
               <button class="btn-back-chat" onclick="navigateTo('messages')">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
               </button>
-              <div class="chat-partner-info" style="cursor: pointer;" onclick="openUserProfile(STATE.activeChatPartner)">
+              <div class="chat-partner-info" style="cursor: pointer;" onclick="openChatHeaderInfo()">
                 <img id="chat-partner-avatar" src="" alt="Avatar">
                 <div class="chat-partner-text">
                   <span id="chat-partner-name">Nome</span>
@@ -396,7 +413,7 @@
                 </div>
               </div>
               <div class="chat-header-actions">
-                <button class="chat-action-btn" onclick="startVideoCall()">
+                <button class="chat-action-btn" id="btn-chat-video-call" onclick="startVideoCall()">
                   <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
                 </button>
                 <button class="chat-action-btn" onclick="openChatPartnerOptions()">
@@ -419,7 +436,7 @@
             <!-- Barra de Input de Mensagem -->
             <div class="private-chat-input-bar">
               <input type="file" id="private-chat-media-input" accept="image/*" style="display: none;" onchange="handlePrivateChatImageSelected(event)">
-              <button class="chat-media-btn" onclick="document.getElementById('private-chat-media-input').click()">
+              <button class="chat-media-btn" id="btn-chat-media" onclick="document.getElementById('private-chat-media-input').click()">
                 <svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
               </button>
               <input type="text" id="private-chat-input" placeholder="Mensagem..." onkeydown="handlePrivateChatKey(event)" oninput="handlePrivateChatTyping()">
@@ -1366,6 +1383,52 @@
           </div>
         </div>
 
+        <!-- Modal: Criar Grupo -->
+        <div class="new-post-modal" id="modal-create-group" style="display: none;">
+          <div class="new-post-overlay" onclick="closeCreateGroupModal()"></div>
+          <div class="new-post-content" style="height: 78%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>Novo grupo</h3>
+              <button class="btn-close-new-post" onclick="closeCreateGroupModal()">×</button>
+            </header>
+            <input type="text" id="create-group-name-input" placeholder="Nome do grupo" maxlength="60" style="background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); padding: 12px; font-family: var(--font-body); font-size: 0.85rem; margin: 4px 0 12px;">
+            <p style="font-size: 0.68rem; color: var(--light-gray); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Escolha quem participa</p>
+            <div class="search-results-scroll" style="flex: 1;">
+              <div class="inbox-list" id="create-group-members-list">
+                <!-- Preenchido via JS -->
+              </div>
+            </div>
+            <button class="btn-publish-post" onclick="submitCreateGroup()" style="margin-top: 14px;">Criar grupo</button>
+          </div>
+        </div>
+
+        <!-- Modal: Opções do Grupo -->
+        <div class="new-post-modal" id="modal-group-options" style="display: none;">
+          <div class="new-post-overlay" onclick="closeGroupOptionsMenu()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header" style="margin-bottom: 4px;">
+              <h3 id="group-options-title">Opções do grupo</h3>
+              <button class="btn-close-new-post" onclick="closeGroupOptionsMenu()">×</button>
+            </header>
+            <button class="profile-action-btn secondary" style="margin-top: 14px; width: 100%;" onclick="openGroupMembersModal()">Ver participantes</button>
+            <button class="profile-action-btn secondary" style="margin-top: 10px; width: 100%; color: var(--danger); border-color: var(--danger);" onclick="confirmLeaveGroup()">Sair do grupo</button>
+          </div>
+        </div>
+
+        <!-- Modal: Participantes do Grupo -->
+        <div class="new-post-modal" id="modal-group-members" style="display: none;">
+          <div class="new-post-overlay" onclick="closeGroupMembersModal()"></div>
+          <div class="new-post-content" style="height: 70%; align-items: stretch;">
+            <header class="new-post-header">
+              <h3>Participantes</h3>
+              <button class="btn-close-new-post" onclick="closeGroupMembersModal()">×</button>
+            </header>
+            <div class="search-results-scroll">
+              <div class="inbox-list" id="group-members-list-container"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal de Notificações Reais -->
         <div class="new-post-modal" id="modal-notifications" style="display: none;">
           <div class="new-post-overlay" onclick="closeNotificationPanel()"></div>
@@ -2300,9 +2363,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723b"></script>
+  <script src="supabase-client.js?v=20260723c"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723b"></script>
+  <script src="app.js?v=20260723c"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

@@ -1944,5 +1944,79 @@ const DB = {
       }, (payload) => handlers.onCallUpdate(payload.new))
       .subscribe();
     return channel;
+  },
+
+  // DMs em grupo (0114). Modelo paralelo ao chat 1:1 — conversa com N membros.
+  async getMyFollowedRealProfiles() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data: followRows, error: followErr } = await sb.from("follows").select("followed_handle").eq("follower_id", user.id);
+    if (followErr) throw followErr;
+    const handles = (followRows || []).map(r => r.followed_handle);
+    if (handles.length === 0) return [];
+    const { data, error } = await sb.from("profiles").select("id, username, display_name, avatar_url").in("username", handles);
+    if (error) throw error;
+    return data;
+  },
+
+  async createGroupConversation(name, memberIds) {
+    const { data, error } = await sb.rpc("create_group_conversation", { p_name: name, p_member_ids: memberIds });
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyGroupConversations() {
+    const { data, error } = await sb.rpc("get_my_group_conversations");
+    if (error) throw error;
+    return data;
+  },
+
+  async getGroupMembers(conversationId) {
+    const { data, error } = await sb
+      .from("group_conversation_members")
+      .select("user_id, is_admin, joined_at, profiles!group_conversation_members_user_id_fkey(id, username, display_name, avatar_url)")
+      .eq("conversation_id", conversationId);
+    if (error) throw error;
+    return data;
+  },
+
+  async getGroupMessages(conversationId, limit = 50) {
+    const { data, error } = await sb
+      .from("group_messages")
+      .select("id, conversation_id, sender_id, text, created_at, profiles!group_messages_sender_id_fkey(username, display_name, avatar_url)")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).reverse();
+  },
+
+  async sendGroupMessage(conversationId, text) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const { data, error } = await sb
+      .from("group_messages")
+      .insert({ conversation_id: conversationId, sender_id: user.id, text })
+      .select("id, conversation_id, sender_id, text, created_at, profiles!group_messages_sender_id_fkey(username, display_name, avatar_url)")
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async leaveGroupConversation(conversationId) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const { error } = await sb.from("group_conversation_members").delete().eq("conversation_id", conversationId).eq("user_id", user.id);
+    if (error) throw error;
+  },
+
+  subscribeToGroupMessages(conversationId, onMessage) {
+    const channel = sb.channel(`group_messages:${conversationId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "group_messages",
+        filter: `conversation_id=eq.${conversationId}`
+      }, (payload) => onMessage(payload.new))
+      .subscribe();
+    return channel;
   }
 };

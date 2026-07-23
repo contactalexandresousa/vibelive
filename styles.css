@@ -4740,6 +4740,35 @@ input:-webkit-autofill:focus {
   color: var(--light-gray);
 }
 
+/* Nome do remetente numa mensagem de grupo recebida — só existe quando
+   STATE.activeChatMode === "group" (0114), já que 1:1 não precisa. */
+.chat-bubble-sender-name {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.group-member-pick-item {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.group-member-pick-check {
+  opacity: 0;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: opacity 0.15s ease;
+}
+
+.group-member-pick-item.selected {
+  background: var(--primary-soft);
+}
+
+.group-member-pick-item.selected .group-member-pick-check {
+  opacity: 1;
+}
+
 .chat-bubble-image {
   max-width: 100%;
   max-height: 240px;

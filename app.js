@@ -50,6 +50,15 @@ const STATE = {
   activeChatPartner: null, // id (uuid) da pessoa com quem a conversa privada está aberta
   dmsList: [], // conversas reais, carregadas de direct_messages
   dmInboxChannel: null, // canal Supabase Realtime único p/ toda mensagem recebida
+
+  // Chat em grupo (0114) — reaproveita a tela #screen-private-chat com um
+  // modo alternativo em vez de duplicar toda a UI de chat.
+  activeChatMode: "dm", // "dm" | "group"
+  activeGroupConversationId: null,
+  activeGroupMembersById: {}, // cache do roster do grupo aberto, p/ resolver nome/avatar de mensagem chegando via Realtime
+  groupMessagesChannel: null, // canal por conversa, aberto ao entrar no grupo e fechado ao sair
+  groupsList: [],
+  pendingGroupMemberIds: [], // seleção em andamento no modal de criar grupo
   notifications: [], // notificações reais (novo seguidor, foi ao vivo)
   notificationsChannel: null,
   unreadNotificationCount: 0,
@@ -305,6 +314,9 @@ function navigateTo(screenId) {
   }
   if (previousScreen === "go-live" && screenId !== "go-live") {
     stopOwnLiveStream();
+  }
+  if (previousScreen === "private-chat" && screenId !== "private-chat") {
+    closeActiveGroupChannel();
   }
 
   // Ocultar todas as telas
@@ -1408,6 +1420,11 @@ async function renderInboxList() {
 async function openPrivateChat(partnerId, name, avatar) {
   if (!requireAuth()) return;
 
+  closeActiveGroupChannel();
+  STATE.activeChatMode = "dm";
+  document.getElementById("btn-chat-video-call").style.display = "";
+  document.getElementById("btn-chat-media").style.display = "";
+
   STATE.activeChatPartner = partnerId;
   STATE.activeChatPartnerLastSeen = null;
   DOM.chatPartnerAvatar.src = avatar;
@@ -1461,19 +1478,28 @@ function appendPrivateChatBubble(msg, myUserId) {
     vipSuffix = `<span style="font-size: 0.58rem; display: block; color: var(--secondary); font-weight: bold; margin-bottom: 2px;">👑 VIP Ouro</span>`;
   }
 
-  const optionsBtn = `<button class="chat-bubble-options-btn" onclick="openMessageOptions('${msg.id}')" title="Opções">⋯</button>`;
+  const isGroup = STATE.activeChatMode === "group";
+  const optionsBtn = (!isGroup && !msg.is_deleted) ? `<button class="chat-bubble-options-btn" onclick="openMessageOptions('${msg.id}')" title="Opções">⋯</button>` : "";
   const bodyHtml = msg.is_deleted
     ? `<span class="chat-bubble-text">${isMine ? "Você apagou esta mensagem" : "Mensagem apagada"}</span>`
     : `${msg.image_url ? `<img src="${msg.image_url}" alt="Foto" class="chat-bubble-image" onclick="openLightboxImage('${msg.image_url}')">` : ""}${msg.text ? `<span class="chat-bubble-text">${escapeHtml(msg.text)}</span>` : ""}`;
-  const statusHtml = isMine
+  const statusHtml = (isMine && !isGroup)
     ? `<span class="chat-bubble-status${msg.read_at ? " read" : ""}">${msg.read_at ? "Visto" : "Enviado"}</span>`
     : "";
+
+  let senderNameHtml = "";
+  if (isGroup && !isMine) {
+    const p = msg.profiles || STATE.activeGroupMembersById[msg.sender_id];
+    const senderName = p ? (p.display_name || p.username) : "Alguém";
+    senderNameHtml = `<span class="chat-bubble-sender-name">${escapeHtml(senderName)}</span>`;
+  }
 
   const editedSuffix = msg.edited_at && !msg.is_deleted ? " · editada" : "";
 
   bubble.innerHTML = `
-    ${msg.is_deleted ? "" : optionsBtn}
+    ${optionsBtn}
     ${vipSuffix}
+    ${senderNameHtml}
     ${bodyHtml}
     <span class="chat-bubble-time">${formatMessageTime(msg.created_at)}${editedSuffix}</span>
     ${statusHtml}
@@ -1604,6 +1630,20 @@ async function sendPrivateChatMessage() {
   if (text === "") return;
   if (!requireAuth()) return;
 
+  if (STATE.activeChatMode === "group") {
+    const conversationId = STATE.activeGroupConversationId;
+    if (!conversationId) return;
+    DOM.privateChatInput.value = "";
+    try {
+      const sent = await DB.sendGroupMessage(conversationId, text);
+      const user = await Auth.getUser();
+      appendPrivateChatBubble(sent, user.id);
+    } catch (err) {
+      showToast(err.message || "Não foi possível enviar a mensagem.");
+    }
+    return;
+  }
+
   const partnerId = STATE.activeChatPartner;
   if (!partnerId) return;
 
@@ -1634,6 +1674,244 @@ async function sendPrivateChatMessage() {
 
 function simulatePrivateVideoCall() {
   showToast("Chamada de vídeo ainda não disponível nesta versão.");
+}
+
+// 11.1 DMS EM GRUPO — reaproveita a tela #screen-private-chat (STATE.activeChatMode
+// decide o comportamento), só o header/tabs de #screen-messages são novos de fato.
+function switchMessagesTab(tab) {
+  const isGroup = tab === "group";
+  document.getElementById("messages-tab-dm-btn").classList.toggle("active", !isGroup);
+  document.getElementById("messages-tab-group-btn").classList.toggle("active", isGroup);
+  document.getElementById("messages-dm-section").style.display = isGroup ? "none" : "block";
+  document.getElementById("messages-group-section").style.display = isGroup ? "block" : "none";
+  if (isGroup) renderGroupsList();
+}
+
+async function renderGroupsList() {
+  const container = document.getElementById("group-inbox-list-container");
+  let groups = [];
+  if (STATE.isLoggedIn) {
+    try {
+      groups = await DB.getMyGroupConversations();
+    } catch (err) {
+      console.error("Falha ao carregar grupos:", err);
+    }
+  }
+  STATE.groupsList = groups;
+  container.innerHTML = "";
+
+  if (groups.length === 0) {
+    container.innerHTML = `
+      <div class="discover-empty-state" style="display: flex;">
+        <div class="discover-empty-icon">👥</div>
+        <h3>Nenhum grupo ainda</h3>
+        <p>Crie um grupo com quem você segue pra conversar junto.</p>
+        <button class="btn-follow-primary" onclick="openCreateGroupModal()">Criar Grupo</button>
+      </div>
+    `;
+    return;
+  }
+
+  groups.forEach(g => {
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.onclick = () => openGroupChat(g.conversation_id, g.name, g.avatar_url);
+    const safeName = escapeHtml(g.name);
+    item.innerHTML = `
+      <div class="inbox-avatar">
+        <img src="${g.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}">
+      </div>
+      <div class="inbox-details">
+        <span class="inbox-name">${safeName}</span>
+        <span class="inbox-message">${g.last_message ? escapeHtml(g.last_message) : `${g.member_count} participantes`}</span>
+      </div>
+      <div class="inbox-right">
+        <span class="inbox-time">${g.last_message_at ? formatMessageTime(g.last_message_at) : ""}</span>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+async function openCreateGroupModal() {
+  if (!requireAuth()) return;
+  STATE.pendingGroupMemberIds = [];
+  document.getElementById("create-group-name-input").value = "";
+  const container = document.getElementById("create-group-members-list");
+  container.innerHTML = `<p style="color: var(--light-gray); font-size: 0.8rem; text-align: center; padding: 20px 0;">Carregando...</p>`;
+  document.getElementById("modal-create-group").style.display = "flex";
+
+  try {
+    const profiles = await DB.getMyFollowedRealProfiles();
+    container.innerHTML = "";
+    if (profiles.length === 0) {
+      container.innerHTML = `<p style="color: var(--light-gray); font-size: 0.8rem; text-align: center; padding: 20px 0;">Siga pessoas reais pra poder chamar pra um grupo.</p>`;
+      return;
+    }
+    profiles.forEach(p => {
+      const item = document.createElement("div");
+      item.className = "inbox-item group-member-pick-item";
+      const safeName = escapeHtml(p.display_name || p.username);
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+        <div class="inbox-details"><span class="inbox-name">${safeName}</span></div>
+        <div class="inbox-right"><span class="group-member-pick-check">✓</span></div>
+      `;
+      item.onclick = () => toggleGroupMemberChip(p.id, item);
+      container.appendChild(item);
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="color: var(--light-gray); font-size: 0.8rem; text-align: center; padding: 20px 0;">Não foi possível carregar quem você segue.</p>`;
+  }
+}
+
+function closeCreateGroupModal() {
+  document.getElementById("modal-create-group").style.display = "none";
+}
+
+function toggleGroupMemberChip(userId, itemEl) {
+  const idx = STATE.pendingGroupMemberIds.indexOf(userId);
+  if (idx === -1) {
+    STATE.pendingGroupMemberIds.push(userId);
+    itemEl.classList.add("selected");
+  } else {
+    STATE.pendingGroupMemberIds.splice(idx, 1);
+    itemEl.classList.remove("selected");
+  }
+}
+
+async function submitCreateGroup() {
+  const name = document.getElementById("create-group-name-input").value.trim();
+  if (!name) {
+    showToast("Dê um nome ao grupo.");
+    return;
+  }
+  if (STATE.pendingGroupMemberIds.length === 0) {
+    showToast("Escolha pelo menos 1 pessoa.");
+    return;
+  }
+  try {
+    const conversationId = await DB.createGroupConversation(name, STATE.pendingGroupMemberIds);
+    closeCreateGroupModal();
+    showToast("Grupo criado!");
+    openGroupChat(conversationId, name, null);
+  } catch (err) {
+    showToast(err.message || "Não foi possível criar o grupo.");
+  }
+}
+
+async function openGroupChat(conversationId, name, avatarUrl) {
+  if (!requireAuth()) return;
+
+  closeActiveGroupChannel();
+  STATE.activeChatMode = "group";
+  STATE.activeGroupConversationId = conversationId;
+  document.getElementById("btn-chat-video-call").style.display = "none";
+  document.getElementById("btn-chat-media").style.display = "none";
+
+  DOM.chatPartnerAvatar.src = avatarUrl || DEFAULT_AVATAR_DATA_URI;
+  DOM.chatPartnerName.textContent = name;
+  document.getElementById("chat-partner-status").textContent = "";
+  DOM.privateChatHistory.innerHTML = "";
+  clearTimeout(typingIndicatorTimeout);
+  cancelEditMessage();
+
+  navigateTo("private-chat");
+
+  try {
+    const user = await Auth.getUser();
+    const members = await DB.getGroupMembers(conversationId);
+    STATE.activeGroupMembersById = {};
+    members.forEach(m => { STATE.activeGroupMembersById[m.user_id] = m.profiles; });
+    if (STATE.activeGroupConversationId === conversationId) {
+      document.getElementById("chat-partner-status").textContent = `${members.length} participantes`;
+    }
+
+    const history = await DB.getGroupMessages(conversationId);
+    if (history.length === 0) {
+      DOM.privateChatHistory.innerHTML = `
+        <div class="discover-empty-state" style="display: flex;">
+          <div class="discover-empty-icon">👋</div>
+          <h3>Comece a conversa</h3>
+          <p>Envie a primeira mensagem para o grupo ${escapeHtml(name)}.</p>
+        </div>
+      `;
+    } else {
+      history.forEach(msg => appendPrivateChatBubble(msg, user.id));
+    }
+
+    STATE.groupMessagesChannel = DB.subscribeToGroupMessages(conversationId, (row) => {
+      if (STATE.activeChatMode === "group" && STATE.activeGroupConversationId === conversationId && row.sender_id !== user.id) {
+        appendPrivateChatBubble(row, user.id);
+      }
+    });
+  } catch (err) {
+    console.error("Falha ao carregar grupo:", err);
+  }
+}
+
+function closeActiveGroupChannel() {
+  if (STATE.groupMessagesChannel) {
+    sb.removeChannel(STATE.groupMessagesChannel);
+    STATE.groupMessagesChannel = null;
+  }
+  STATE.activeChatMode = "dm";
+  STATE.activeGroupConversationId = null;
+  STATE.activeGroupMembersById = {};
+}
+
+function openChatHeaderInfo() {
+  if (STATE.activeChatMode === "group") {
+    openGroupMembersModal();
+  } else {
+    openUserProfile(STATE.activeChatPartner);
+  }
+}
+
+function openGroupChatOptions() {
+  if (!STATE.activeGroupConversationId) return;
+  document.getElementById("group-options-title").textContent = DOM.chatPartnerName.textContent;
+  document.getElementById("modal-group-options").style.display = "flex";
+}
+
+function closeGroupOptionsMenu() {
+  document.getElementById("modal-group-options").style.display = "none";
+}
+
+function openGroupMembersModal() {
+  const container = document.getElementById("group-members-list-container");
+  container.innerHTML = "";
+  Object.entries(STATE.activeGroupMembersById).forEach(([userId, p]) => {
+    if (!p) return;
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    const safeName = escapeHtml(p.display_name || p.username);
+    item.onclick = () => { closeGroupMembersModal(); closeGroupOptionsMenu(); openUserProfile(userId); };
+    item.innerHTML = `
+      <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+      <div class="inbox-details"><span class="inbox-name">${safeName}</span></div>
+    `;
+    container.appendChild(item);
+  });
+  document.getElementById("modal-group-members").style.display = "flex";
+}
+
+function closeGroupMembersModal() {
+  document.getElementById("modal-group-members").style.display = "none";
+}
+
+async function confirmLeaveGroup() {
+  const conversationId = STATE.activeGroupConversationId;
+  if (!conversationId) return;
+  try {
+    await DB.leaveGroupConversation(conversationId);
+    closeGroupOptionsMenu();
+    showToast("Você saiu do grupo.");
+    navigateTo("messages");
+    switchMessagesTab("group");
+  } catch (err) {
+    showToast(err.message || "Não foi possível sair do grupo.");
+  }
 }
 
 // Apagar mensagem: "para mim" sempre disponível (some só do meu lado);
@@ -1878,6 +2156,10 @@ function openUserProfileOptions() {
 
 // 12.1 BLOQUEAR E DENUNCIAR USUÁRIOS
 function openChatPartnerOptions() {
+  if (STATE.activeChatMode === "group") {
+    openGroupChatOptions();
+    return;
+  }
   if (!STATE.activeChatPartner) return;
   openUserOptionsMenu(STATE.activeChatPartner, DOM.chatPartnerName.textContent);
 }
