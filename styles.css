@@ -179,6 +179,7 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+
 /* 4. CONTÊINER E SISTEMA DE TRANSIÇÃO DE TELAS */
 .app-container {
   flex: 1;
@@ -6181,4 +6182,63 @@ input:-webkit-autofill:focus {
 :root[data-theme="light"] .form-group-post input,
 :root[data-theme="light"] .form-group-post select {
   color-scheme: light;
+}
+
+/* ==========================================================================
+   RESPONSIVO — fase 2 do redesign
+   Até aqui o app ficava travado numa faixa de 480px em qualquer viewport
+   maior, com o resto virando fundo vazio (zero breakpoint em todo o
+   arquivo). Fica de propósito no FIM do arquivo: várias regras aqui viram
+   por cima de componentes definidos lá em cima com a mesma especificidade
+   (mesma classe), e em CSS quem vem depois no arquivo ganha em empate —
+   colocar no topo faria essas overrides nunca surtirem efeito.
+   ========================================================================== */
+@media (min-width: 700px) {
+  body {
+    padding: 32px 20px;
+  }
+
+  /* Em telas maiores o "telefone" vira um cartão de app de verdade (altura
+     contida, cantos arredondados, sombra de elevação) em vez de esticar até
+     100vh como uma coluna fina e comprida. */
+  .phone-screen {
+    max-width: 640px;
+    height: min(880px, 94vh);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-premium);
+  }
+
+  /* Grades ganham mais colunas pra usar o espaço extra, em vez de só
+     esticar os mesmos 2-3 itens por linha. */
+  .lives-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .profile-posts-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .suggested-profile-card {
+    width: 108px;
+  }
+
+  /* Modal de baixo pra cima faz sentido no formato de celular; num cartão
+     mais largo vira diálogo centralizado, com os 4 cantos arredondados em
+     vez de só os de cima. */
+  .new-post-modal {
+    align-items: center;
+  }
+  .new-post-content {
+    max-width: 440px;
+    border-radius: var(--radius-lg);
+    max-height: 82%;
+  }
+}
+
+@media (min-width: 1080px) {
+  .phone-screen {
+    max-width: 920px;
+  }
+  .lives-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
