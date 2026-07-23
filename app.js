@@ -94,7 +94,11 @@ const STATE = {
 
   // Lives com desafio (0116)
   selectedChallengeType: null, // escolhido no setup, antes de ir ao vivo
-  activePollIsChallenge: false // a enquete aberta agora É a votação decisiva do desafio?
+  activePollIsChallenge: false, // a enquete aberta agora É a votação decisiva do desafio?
+
+  // Drops surpresa ao vivo (0118)
+  activeLiveDrop: null, // { id, expires_at } do drop visível agora (lado de quem assiste)
+  liveDropHideTimeout: null
 };
 
 
@@ -1003,6 +1007,8 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
     onPollInsert: (poll) => handlePollRealtimeInsert("live-poll-card", poll),
     onPollUpdate: (poll) => handlePollRealtimeUpdate("live-poll-card", poll),
     onPollVote: (vote) => handlePollRealtimeVote("live-poll-card", vote),
+    onDropInsert: (drop) => showLiveDropWidget(drop),
+    onDropClaim: (claim) => updateLiveDropClaimCount(claim),
   }, { avatar_url: STATE.myAvatarUrl || "" });
 
   initLivePollForRoom("live-poll-card", b.username);
@@ -1070,6 +1076,7 @@ function closeLiveRoom() {
 
   if (STATE.liveChatChannel) {
     if (STATE.liveChatChannel._pollChannel) sb.removeChannel(STATE.liveChatChannel._pollChannel);
+    if (STATE.liveChatChannel._dropChannel) sb.removeChannel(STATE.liveChatChannel._dropChannel);
     sb.removeChannel(STATE.liveChatChannel);
     STATE.liveChatChannel = null;
   }
@@ -1079,6 +1086,7 @@ function closeLiveRoom() {
   }
   clearLivePoll("live-poll-card");
   clearAllCohostTiles("live-cohost-tiles");
+  hideLiveDropWidget();
 
   STATE.currentLiveBroadcaster = null;
   STATE.currentLiveIsReal = false;
@@ -4317,6 +4325,7 @@ async function stopOwnLiveStream() {
   }
   if (STATE.myLiveGiftsChannel) {
     if (STATE.myLiveGiftsChannel._pollChannel) sb.removeChannel(STATE.myLiveGiftsChannel._pollChannel);
+    if (STATE.myLiveGiftsChannel._dropChannel) sb.removeChannel(STATE.myLiveGiftsChannel._dropChannel);
     sb.removeChannel(STATE.myLiveGiftsChannel);
     STATE.myLiveGiftsChannel = null;
   }
@@ -6252,6 +6261,73 @@ function clearLivePoll(containerId) {
   STATE.livePolls[containerId] = null;
   const container = document.getElementById(containerId);
   if (container) { container.style.display = "none"; container.innerHTML = ""; }
+}
+
+// ==========================================================================
+// DROPS SURPRESA AO VIVO (0118)
+// ==========================================================================
+
+// Só o anfitrião chama — quem assiste recebe o widget via Realtime
+// (onDropInsert), nunca chama isso diretamente.
+async function triggerMyLiveDrop() {
+  try {
+    await DB.triggerLiveDrop(STATE.myUsername);
+    showToast("Drop lançado! 🎁 Quem estiver assistindo pode pegar.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível soltar um drop agora.");
+  }
+}
+
+// Widget tocável que aparece pra quem está ASSISTINDO (não pro próprio
+// anfitrião — drop premia audiência, não quem transmite). Some sozinho
+// quando expira, mesmo que ninguém toque.
+function showLiveDropWidget(drop) {
+  STATE.activeLiveDrop = drop;
+  const widget = document.getElementById("live-drop-widget");
+  if (!widget) return;
+  widget.style.display = "flex";
+  widget.querySelector(".live-drop-text").textContent = "Um drop apareceu! Toque para pegar";
+  document.getElementById("live-drop-claims-count").textContent = `0/${drop.max_claims}`;
+
+  clearTimeout(STATE.liveDropHideTimeout);
+  const msLeft = new Date(drop.expires_at).getTime() - Date.now();
+  STATE.liveDropHideTimeout = setTimeout(hideLiveDropWidget, Math.max(0, msLeft));
+}
+
+function hideLiveDropWidget() {
+  clearTimeout(STATE.liveDropHideTimeout);
+  STATE.activeLiveDrop = null;
+  const widget = document.getElementById("live-drop-widget");
+  if (widget) widget.style.display = "none";
+}
+
+function updateLiveDropClaimCount(claim) {
+  if (!STATE.activeLiveDrop || claim.drop_id !== STATE.activeLiveDrop.id) return;
+  DB.getDropClaimCount(claim.drop_id).then(count => {
+    const el = document.getElementById("live-drop-claims-count");
+    if (el && STATE.activeLiveDrop && STATE.activeLiveDrop.id === claim.drop_id) {
+      el.textContent = `${count}/${STATE.activeLiveDrop.max_claims}`;
+    }
+  }).catch(() => {});
+}
+
+async function claimActiveLiveDrop() {
+  if (!requireAuth()) return;
+  const drop = STATE.activeLiveDrop;
+  if (!drop) return;
+  const widget = document.getElementById("live-drop-widget");
+  if (widget) widget.style.pointerEvents = "none"; // evita duplo-toque enquanto a RPC está em voo
+
+  try {
+    const result = await DB.claimLiveDrop(drop.id);
+    await applyProfileToUI(result.profile);
+    showToast(`🎁 Você ganhou ${result.reward_coins} moedas!`);
+    hideLiveDropWidget();
+  } catch (err) {
+    showToast(err.message || "Não foi possível pegar esse drop.");
+  } finally {
+    if (widget) widget.style.pointerEvents = "";
+  }
 }
 
 // ==========================================================================

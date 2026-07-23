@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723f">
+  <link rel="stylesheet" href="styles.css?v=20260723g">
 </head>
 <body>
 
@@ -268,6 +268,13 @@
 
               <!-- Enquete ao vivo (aparece só quando o transmissor cria uma) -->
               <div class="live-poll-card" id="live-poll-card" style="display: none;"></div>
+
+              <!-- Drop surpresa (aparece só quando o anfitrião solta um, some sozinho) -->
+              <div class="live-drop-widget" id="live-drop-widget" style="display: none;" onclick="claimActiveLiveDrop()">
+                <span class="live-drop-icon">🎁</span>
+                <span class="live-drop-text">Um drop apareceu! Toque para pegar</span>
+                <span class="live-drop-claims" id="live-drop-claims-count"></span>
+              </div>
 
               <!-- Rodapé da Live: Comentários e Ações -->
               <div class="live-footer">
@@ -912,6 +919,7 @@
                       <button class="btn-live-sfx" onclick="openCreatePollModal()">📊 Enquete</button>
                       <button class="btn-live-sfx" onclick="openCohostInviteModal()">👥 Co-transmitir</button>
                       <button class="btn-live-sfx" id="btn-start-challenge-vote" style="display: none;" onclick="openChallengePollSetup()">🏆 Votação do Desafio</button>
+                      <button class="btn-live-sfx" onclick="triggerMyLiveDrop()">🎁 Soltar Drop</button>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                       <div class="system-status-msg">Transmissão estável • 1080p</div>
@@ -2393,9 +2401,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723f"></script>
+  <script src="supabase-client.js?v=20260723g"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723f"></script>
+  <script src="app.js?v=20260723g"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

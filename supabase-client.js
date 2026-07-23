@@ -1308,7 +1308,7 @@ const DB = {
   // Inscreve num único canal por sala: mensagens novas (postgres_changes) +
   // contagem e avatares reais de quem está conectado agora (Presence). Quem
   // chamar é responsável por dar sb.removeChannel(canal) ao sair da sala.
-  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange, onPollInsert, onPollUpdate, onPollVote }, myPresence = {}) {
+  subscribeToLiveRoom(broadcasterHandle, { onMessage, onViewerCountChange, onPollInsert, onPollUpdate, onPollVote, onDropInsert, onDropClaim }, myPresence = {}) {
     const channel = sb.channel(`live_chat:${broadcasterHandle}`, {
       config: { presence: { key: crypto.randomUUID() } }
     })
@@ -1350,7 +1350,23 @@ const DB = {
         .subscribe();
     }
 
+    // Drop também usa canal separado, mesmo motivo da enquete: live_drop_claims
+    // não tem broadcaster_handle pra filtrar por (o cliente decide pelo drop_id).
+    let dropChannel = null;
+    if (onDropInsert || onDropClaim) {
+      dropChannel = sb.channel(`live_drops:${broadcasterHandle}`)
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "live_drops",
+          filter: `broadcaster_handle=eq.${broadcasterHandle}`
+        }, (payload) => onDropInsert && onDropInsert(payload.new))
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "live_drop_claims"
+        }, (payload) => onDropClaim && onDropClaim(payload.new))
+        .subscribe();
+    }
+
     channel._pollChannel = pollChannel;
+    channel._dropChannel = dropChannel;
     return channel;
   },
 
@@ -1373,6 +1389,25 @@ const DB = {
     const { data, error } = await sb.rpc("close_live_poll", { p_poll_id: pollId });
     if (error) throw error;
     return data;
+  },
+
+  // Drops surpresa ao vivo (0118)
+  async triggerLiveDrop(broadcasterHandle) {
+    const { data, error } = await sb.rpc("trigger_live_drop", { p_broadcaster_handle: broadcasterHandle });
+    if (error) throw error;
+    return data;
+  },
+
+  async claimLiveDrop(dropId) {
+    const { data, error } = await sb.rpc("claim_live_drop", { p_drop_id: dropId });
+    if (error) throw error;
+    return data;
+  },
+
+  async getDropClaimCount(dropId) {
+    const { count, error } = await sb.from("live_drop_claims").select("*", { count: "exact", head: true }).eq("drop_id", dropId);
+    if (error) throw error;
+    return count;
   },
 
   // Participantes já confirmados (aceitaram o convite) do desafio atual —
