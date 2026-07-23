@@ -813,11 +813,12 @@ const DB = {
   // mediaUrls (opcional) é o conjunto completo de um carrossel de fotos —
   // mediaUrl/mediaType continuam sendo a "capa", igual sempre foram, então
   // toda leitura existente (grades, busca) não precisa saber que carrossel existe.
-  async createPost(mediaUrl, mediaType, caption, isPrivate = false, mediaUrls = null) {
+  async createPost(mediaUrl, mediaType, caption, isPrivate = false, mediaUrls = null, communitySlug = null) {
     const { data: { user } } = await sb.auth.getUser();
     const { data, error } = await sb.from("posts").insert({
       user_id: user.id, media_url: mediaUrl, media_type: mediaType, caption, is_private: isPrivate,
-      media_urls: mediaUrls && mediaUrls.length > 1 ? mediaUrls : null
+      media_urls: mediaUrls && mediaUrls.length > 1 ? mediaUrls : null,
+      community_slug: communitySlug || null
     }).select().single();
     if (error) throw error;
     return data;
@@ -1214,14 +1215,15 @@ const DB = {
   },
 
   // Quem está transmitindo de verdade agora (separado dos streamers mockados).
-  async startLiveSession(roomName, title, category = null, isChallenge = false, challengeType = null) {
+  async startLiveSession(roomName, title, category = null, isChallenge = false, challengeType = null, communitySlug = null) {
     const { data: { user } } = await sb.auth.getUser();
     // Encerra qualquer sessão própria anterior que tenha ficado pendurada
     // (ex: fechou a aba sem clicar em "Encerrar") antes de abrir uma nova.
     await sb.from("live_sessions").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
     const { error } = await sb.from("live_sessions").insert({
       user_id: user.id, room_name: roomName, title: title || null, category: category || null,
-      is_challenge: isChallenge, challenge_type: isChallenge ? challengeType : null
+      is_challenge: isChallenge, challenge_type: isChallenge ? challengeType : null,
+      community_slug: communitySlug || null
     });
     if (error) throw error;
   },
@@ -2090,5 +2092,54 @@ const DB = {
       }, (payload) => onMessage(payload.new))
       .subscribe();
     return channel;
+  },
+
+  // Comunidades (0119)
+  async getCommunitiesWithCounts() {
+    const { data, error } = await sb.rpc("get_communities_with_counts");
+    if (error) throw error;
+    return data;
+  },
+
+  async getCommunityRanking(slug, limit = 20) {
+    const { data, error } = await sb.rpc("get_community_ranking", { p_slug: slug, p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
+  async joinCommunity(slug) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const { error } = await sb.from("community_members").insert({ community_slug: slug, user_id: user.id });
+    if (error) throw error;
+  },
+
+  async leaveCommunity(slug) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const { error } = await sb.from("community_members").delete().eq("community_slug", slug).eq("user_id", user.id);
+    if (error) throw error;
+  },
+
+  async getCommunityLiveSessions(slug) {
+    const { data, error } = await sb
+      .from("live_sessions")
+      .select("*, profiles!live_sessions_user_id_fkey(username, display_name, avatar_url, created_at)")
+      .eq("community_slug", slug)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async getCommunityPosts(slug, offset = 0, limit = 24) {
+    const { data, error } = await sb
+      .from("posts")
+      .select("*")
+      .eq("community_slug", slug)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return data;
   }
 };

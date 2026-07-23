@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723g">
+  <link rel="stylesheet" href="styles.css?v=20260723h">
 </head>
 <body>
 
@@ -205,6 +205,14 @@
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
+              <!-- Comunidades — entrar por interesse, não por pessoa -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>🌐 Comunidades</h2>
+                </div>
+                <div class="live-category-chips-row" id="communities-chips-row"></div>
+              </section>
+
               <section class="discover-section">
                 <div class="section-header">
                   <h2 id="discover-section-title">🔥 Vibe Hot</h2>
@@ -516,6 +524,64 @@
               <div class="discover-empty-state" id="user-profile-posts-empty" style="display: none;">
                 <div class="discover-empty-icon">🎬</div>
                 <h3>Nenhuma publicação ainda</h3>
+              </div>
+            </div>
+          </section>
+
+          <!-- 5.5 TELA DE COMUNIDADE (feed agregado por interesse) -->
+          <section id="screen-community" class="screen">
+            <header class="private-chat-header">
+              <button class="btn-back-chat" onclick="navigateTo('discover')">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+              </button>
+              <div class="chat-partner-info">
+                <span id="community-hero-icon" style="font-size: 1.4rem;">🌐</span>
+                <div class="chat-partner-text">
+                  <span id="community-header-name">Comunidade</span>
+                  <span class="chat-partner-status" id="community-member-count"></span>
+                </div>
+              </div>
+              <div class="chat-header-actions">
+                <button class="btn-follow-primary" id="community-join-btn" style="height: 30px; padding: 0 14px; font-size: 0.68rem;" onclick="toggleCommunityMembership()">Participar</button>
+              </div>
+            </header>
+
+            <div class="profile-tabs">
+              <button class="profile-tab-header-btn active" id="community-tab-live-btn" onclick="switchCommunityTab('live')">
+                <span>🔴 Ao Vivo</span>
+              </button>
+              <button class="profile-tab-header-btn" id="community-tab-posts-btn" onclick="switchCommunityTab('posts')">
+                <span>Posts</span>
+              </button>
+              <button class="profile-tab-header-btn" id="community-tab-ranking-btn" onclick="switchCommunityTab('ranking')">
+                <span>Ranking</span>
+              </button>
+            </div>
+
+            <div class="profile-tabs-content" style="overflow-y: auto; flex: 1;">
+              <div class="tab-pane active" id="community-tab-live" style="display: flex; flex-direction: column; padding: 12px;">
+                <div class="lives-grid" id="community-lives-grid"></div>
+                <div class="discover-empty-state" id="community-lives-empty" style="display: none;">
+                  <div class="discover-empty-icon">📡</div>
+                  <h3>Nenhuma live marcada agora</h3>
+                  <p>Quem transmitir e marcar essa comunidade aparece aqui.</p>
+                </div>
+              </div>
+              <div class="tab-pane" id="community-tab-posts" style="display: none; padding: 12px;">
+                <div class="profile-posts-grid" id="community-posts-grid"></div>
+                <div class="discover-empty-state" id="community-posts-empty" style="display: none;">
+                  <div class="discover-empty-icon">🎬</div>
+                  <h3>Nenhum post marcado ainda</h3>
+                  <p>Publique algo e marque essa comunidade pra aparecer aqui.</p>
+                </div>
+              </div>
+              <div class="tab-pane" id="community-tab-ranking" style="display: none; padding: 12px;">
+                <div class="inbox-list" id="community-ranking-list"></div>
+                <div class="discover-empty-state" id="community-ranking-empty" style="display: none;">
+                  <div class="discover-empty-icon">🏆</div>
+                  <h3>Ninguém no ranking ainda</h3>
+                  <p>Participe e comece a subir de nível pra aparecer aqui.</p>
+                </div>
               </div>
             </div>
           </section>
@@ -864,6 +930,10 @@
                    <div class="setup-action-icon" id="setup-challenge-icon">🏆</div>
                    <span>Desafio</span>
                  </button>
+                 <button class="setup-action-item" onclick="openLiveCommunityModal()">
+                   <div class="setup-action-icon" id="setup-community-icon">👥</div>
+                   <span>Comunidade</span>
+                 </button>
                </div>
 
                <!-- Botão de Transmissão -->
@@ -1021,6 +1091,12 @@
               <div class="form-group-post">
                 <label for="post-caption-input">Legenda:</label>
                 <textarea id="post-caption-input" placeholder="Escreva uma legenda..." oninput="handleMentionAutocompleteInput(event)" onblur="setTimeout(hideMentionAutocomplete, 150)"></textarea>
+              </div>
+              <div class="form-group-post">
+                <label for="post-community-select">Comunidade (opcional):</label>
+                <select id="post-community-select" style="width:100%; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem;">
+                  <option value="">Nenhuma</option>
+                </select>
               </div>
               <label class="invite-checkbox-item" style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;">
                 <input type="checkbox" id="post-is-private-input">
@@ -1929,6 +2005,19 @@
           </div>
         </div>
 
+        <!-- Modal: marcar a live com uma comunidade -->
+        <div class="new-post-modal" id="modal-live-community" style="display: none;">
+          <div class="new-post-overlay" onclick="closeLiveCommunityModal()"></div>
+          <div class="new-post-content" style="height: auto; align-items: stretch; padding: 20px;">
+            <header class="new-post-header">
+              <h3>🌐 Comunidade da live</h3>
+              <button class="btn-close-new-post" onclick="closeLiveCommunityModal()">×</button>
+            </header>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin: 10px 0;">Aparece no feed de "Ao Vivo" de quem participa dessa comunidade. Escolha de novo pra desativar.</p>
+            <div id="live-community-picker-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+          </div>
+        </div>
+
         <!-- Modal: pedir senha pra entrar numa live protegida -->
         <div class="new-post-modal" id="modal-live-password-gate" style="display: none;">
           <div class="new-post-overlay" onclick="closeLivePasswordGate()"></div>
@@ -2401,9 +2490,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723g"></script>
+  <script src="supabase-client.js?v=20260723h"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723g"></script>
+  <script src="app.js?v=20260723h"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

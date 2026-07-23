@@ -98,7 +98,12 @@ const STATE = {
 
   // Drops surpresa ao vivo (0118)
   activeLiveDrop: null, // { id, expires_at } do drop visível agora (lado de quem assiste)
-  liveDropHideTimeout: null
+  liveDropHideTimeout: null,
+
+  // Comunidades (0119)
+  selectedCommunitySlug: null, // escolhida no setup, antes de ir ao vivo
+  activeCommunitySlug: null, // comunidade aberta agora em #screen-community
+  activeCommunityIsMember: false
 };
 
 
@@ -112,6 +117,7 @@ const DOM = {
     messages: document.getElementById("screen-messages"),
     "private-chat": document.getElementById("screen-private-chat"),
     "user-profile": document.getElementById("screen-user-profile"),
+    community: document.getElementById("screen-community"),
     profile: document.getElementById("screen-profile"),
     "go-live": document.getElementById("screen-go-live"),
     auth: document.getElementById("screen-auth")
@@ -245,6 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderCoins();
   renderInboxList();
   initRealLiveSessionsFeed();
+  renderCommunitiesRow();
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
@@ -337,7 +344,7 @@ function navigateTo(screenId) {
   STATE.activeScreen = screenId;
 
   // Gerenciamento da navegação inferior
-  const hideNavScreens = ["splash", "live-room", "private-chat", "user-profile", "auth", "go-live"];
+  const hideNavScreens = ["splash", "live-room", "private-chat", "user-profile", "auth", "go-live", "community"];
   if (hideNavScreens.includes(screenId)) {
     DOM.bottomNav.style.display = "none";
   } else {
@@ -378,12 +385,15 @@ function navigateTo(screenId) {
     STATE.mutualFollowersCache = null;
     STATE.selectedLiveCategory = null;
     STATE.selectedChallengeType = null;
+    STATE.selectedCommunitySlug = null;
     const privacyIcon = document.getElementById("setup-privacy-icon");
     if (privacyIcon) privacyIcon.textContent = "🌐";
     const categoryIcon = document.getElementById("setup-category-icon");
     if (categoryIcon) categoryIcon.textContent = "🏷️";
     const challengeIcon = document.getElementById("setup-challenge-icon");
     if (challengeIcon) challengeIcon.textContent = "🏆";
+    const communityIcon = document.getElementById("setup-community-icon");
+    if (communityIcon) communityIcon.textContent = "👥";
   }
 }
 
@@ -636,6 +646,22 @@ const LIVE_CATEGORIES = {
   outros: { icon: "✨", label: "Outros" },
 };
 
+// Comunidades (0119) — lista fixa espelhando a tabela public.communities
+// (não criada pelo usuário, mesmo padrão de LIVE_CATEGORIES/CHALLENGE_TYPES).
+// Duplicar a lista aqui evita um round-trip só pra popular os seletores.
+const COMMUNITIES = {
+  anime: { icon: "🎌", label: "Anime" },
+  funk: { icon: "🎵", label: "Funk" },
+  futebol: { icon: "⚽", label: "Futebol" },
+  academia: { icon: "💪", label: "Academia" },
+  minecraft: { icon: "⛏️", label: "Minecraft" },
+  valorant: { icon: "🎯", label: "Valorant" },
+  games: { icon: "🎮", label: "Games (geral)" },
+  musica: { icon: "🎧", label: "Música" },
+  arte: { icon: "🎨", label: "Arte" },
+  culinaria: { icon: "🍳", label: "Culinária" },
+};
+
 // Lives com desafio (0116) — mesma sala de sempre, só marcada como uma
 // "batalha" com convidados co-transmitindo e votação da audiência decidindo.
 const CHALLENGE_TYPES = {
@@ -822,6 +848,143 @@ async function followSuggestedProfile(userId, username, btn) {
   } catch (err) {
     btn.disabled = false;
     showToast(err.message || "Não foi possível seguir agora.");
+  }
+}
+
+// 8.5 COMUNIDADES (0119) — entrar por interesse, não por pessoa.
+// Reaproveita createRealLiveCardElement (lives) e appendPostToUserProfileGrid
+// (posts) tal como são, já que get_community_* devolve o mesmo formato de
+// linha que os outros carregadores de live/post já usam.
+async function renderCommunitiesRow() {
+  const row = document.getElementById("communities-chips-row");
+  if (!row) return;
+  let communities = [];
+  try {
+    communities = await DB.getCommunitiesWithCounts();
+  } catch (err) {
+    console.error("Falha ao carregar comunidades:", err);
+    return;
+  }
+  row.innerHTML = communities.map(c => `
+    <button class="live-category-chip${c.is_member ? " active" : ""}" onclick="openCommunityScreen('${c.slug}')">${c.icon} ${escapeHtml(c.name)} · ${formatCompactCount(c.member_count)}</button>
+  `).join("");
+}
+
+async function openCommunityScreen(slug) {
+  if (!requireAuth()) return;
+  const meta = COMMUNITIES[slug];
+  if (!meta) return;
+
+  STATE.activeCommunitySlug = slug;
+  document.getElementById("community-hero-icon").textContent = meta.icon;
+  document.getElementById("community-header-name").textContent = meta.label;
+  document.getElementById("community-member-count").textContent = "";
+  navigateTo("community");
+  switchCommunityTab("live");
+
+  try {
+    const communities = await DB.getCommunitiesWithCounts();
+    const info = communities.find(c => c.slug === slug);
+    if (!info || STATE.activeCommunitySlug !== slug) return;
+    STATE.activeCommunityIsMember = info.is_member;
+    document.getElementById("community-member-count").textContent = `${formatCompactCount(info.member_count)} participantes`;
+    const btn = document.getElementById("community-join-btn");
+    btn.textContent = info.is_member ? "Participando ✓" : "Participar";
+    btn.classList.toggle("followed", info.is_member);
+  } catch (err) {
+    console.error("Falha ao carregar dados da comunidade:", err);
+  }
+}
+
+async function toggleCommunityMembership() {
+  if (!requireAuth()) return;
+  const slug = STATE.activeCommunitySlug;
+  if (!slug) return;
+  const btn = document.getElementById("community-join-btn");
+  const wasMember = STATE.activeCommunityIsMember;
+  btn.disabled = true;
+  try {
+    if (wasMember) {
+      await DB.leaveCommunity(slug);
+      STATE.activeCommunityIsMember = false;
+      btn.textContent = "Participar";
+      btn.classList.remove("followed");
+    } else {
+      await DB.joinCommunity(slug);
+      STATE.activeCommunityIsMember = true;
+      btn.textContent = "Participando ✓";
+      btn.classList.add("followed");
+    }
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function switchCommunityTab(tab) {
+  ["live", "posts", "ranking"].forEach(key => {
+    document.getElementById(`community-tab-${key}-btn`).classList.toggle("active", key === tab);
+    document.getElementById(`community-tab-${key}`).style.display = key === tab ? "flex" : "none";
+  });
+  const slug = STATE.activeCommunitySlug;
+  if (!slug) return;
+  if (tab === "live") renderCommunityLives(slug);
+  else if (tab === "posts") renderCommunityPosts(slug);
+  else if (tab === "ranking") renderCommunityRanking(slug);
+}
+
+async function renderCommunityLives(slug) {
+  const grid = document.getElementById("community-lives-grid");
+  const empty = document.getElementById("community-lives-empty");
+  grid.innerHTML = "";
+  try {
+    const sessions = await DB.getCommunityLiveSessions(slug);
+    if (STATE.activeCommunitySlug !== slug) return;
+    empty.style.display = sessions.length === 0 ? "flex" : "none";
+    sessions.forEach(s => grid.appendChild(createRealLiveCardElement(s)));
+  } catch (err) {
+    console.error("Falha ao carregar lives da comunidade:", err);
+  }
+}
+
+async function renderCommunityPosts(slug) {
+  const grid = document.getElementById("community-posts-grid");
+  const empty = document.getElementById("community-posts-empty");
+  grid.innerHTML = "";
+  try {
+    const posts = await DB.getCommunityPosts(slug);
+    if (STATE.activeCommunitySlug !== slug) return;
+    empty.style.display = posts.length === 0 ? "flex" : "none";
+    posts.forEach(p => appendPostToUserProfileGrid(p, grid));
+  } catch (err) {
+    console.error("Falha ao carregar posts da comunidade:", err);
+  }
+}
+
+async function renderCommunityRanking(slug) {
+  const list = document.getElementById("community-ranking-list");
+  const empty = document.getElementById("community-ranking-empty");
+  list.innerHTML = "";
+  try {
+    const ranking = await DB.getCommunityRanking(slug);
+    if (STATE.activeCommunitySlug !== slug) return;
+    empty.style.display = ranking.length === 0 ? "flex" : "none";
+    ranking.forEach((p, i) => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.onclick = () => openUserProfile(p.user_id);
+      const safeName = escapeHtml(p.display_name || p.username);
+      item.innerHTML = `
+        <span style="width: 22px; text-align: center; font-weight: 800; color: var(--secondary); flex-shrink: 0;">${i + 1}º</span>
+        <div class="inbox-avatar"><img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+        <div class="inbox-details"><span class="inbox-name">${safeName}</span><span class="inbox-message">Nível ${p.level}</span></div>
+        <div class="inbox-right"><span class="inbox-time">${p.xp} XP</span></div>
+      `;
+      list.appendChild(item);
+    });
+  } catch (err) {
+    console.error("Falha ao carregar ranking da comunidade:", err);
   }
 }
 
@@ -3905,6 +4068,25 @@ function selectLiveChallengeType(key) {
   closeLiveChallengeModal();
 }
 
+function openLiveCommunityModal() {
+  const list = document.getElementById("live-community-picker-list");
+  list.innerHTML = Object.entries(COMMUNITIES).map(([slug, c]) => `
+    <button class="live-category-chip${STATE.selectedCommunitySlug === slug ? " active" : ""}" onclick="selectLiveCommunity('${slug}')">${c.icon} ${c.label}</button>
+  `).join("");
+  document.getElementById("modal-live-community").style.display = "flex";
+}
+
+function closeLiveCommunityModal() {
+  document.getElementById("modal-live-community").style.display = "none";
+}
+
+function selectLiveCommunity(slug) {
+  STATE.selectedCommunitySlug = STATE.selectedCommunitySlug === slug ? null : slug;
+  const icon = document.getElementById("setup-community-icon");
+  if (icon) icon.textContent = STATE.selectedCommunitySlug ? COMMUNITIES[STATE.selectedCommunitySlug].icon : "👥";
+  closeLiveCommunityModal();
+}
+
 async function updateLivePrivacyUI() {
   const mode = document.querySelector('input[name="live-privacy"]:checked')?.value || "public";
   document.getElementById("live-privacy-password-group").style.display = mode === "password" ? "block" : "none";
@@ -4224,7 +4406,7 @@ async function launchBroadcastingSession() {
     const titleInput = document.getElementById("live-title-input");
     const title = titleInput ? titleInput.value.trim().slice(0, 80) : "";
     const isChallenge = !!STATE.selectedChallengeType;
-    await DB.startLiveSession(roomName, title, STATE.selectedLiveCategory || null, isChallenge, STATE.selectedChallengeType);
+    await DB.startLiveSession(roomName, title, STATE.selectedLiveCategory || null, isChallenge, STATE.selectedChallengeType, STATE.selectedCommunitySlug);
     STATE.activePollIsChallenge = false;
     const challengeVoteBtn = document.getElementById("btn-start-challenge-vote");
     if (challengeVoteBtn) challengeVoteBtn.style.display = isChallenge ? "inline-flex" : "none";
@@ -4686,6 +4868,17 @@ function openNewPostModal() {
   document.getElementById("post-is-private-input").checked = false;
   STATE.selectedPostFiles = [];
   setPostType("image");
+
+  const select = document.getElementById("post-community-select");
+  if (select && select.options.length === 1) {
+    Object.entries(COMMUNITIES).forEach(([slug, c]) => {
+      const opt = document.createElement("option");
+      opt.value = slug;
+      opt.textContent = `${c.icon} ${c.label}`;
+      select.appendChild(opt);
+    });
+  }
+  if (select) select.value = "";
 }
 
 function closeNewPostModal() {
@@ -4877,7 +5070,8 @@ async function publishNewPost() {
       const fileToUpload = STATE.currentPostType === "image" ? await compressImageFile(files[i]) : files[i];
       mediaUrls.push(await DB.uploadPostMedia(user.id, fileToUpload));
     }
-    await DB.createPost(mediaUrls[0], STATE.currentPostType, caption || "Sem legenda.", isPrivate, mediaUrls);
+    const communitySlug = document.getElementById("post-community-select")?.value || null;
+    await DB.createPost(mediaUrls[0], STATE.currentPostType, caption || "Sem legenda.", isPrivate, mediaUrls, communitySlug);
     await renderProfilePosts();
     closeNewPostModal();
     showToast("Publicação realizada com sucesso!");
