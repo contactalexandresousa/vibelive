@@ -2191,11 +2191,23 @@ const DB = {
     return data;
   },
 
+  async getCommunityVoiceRooms(slug) {
+    const { data, error } = await sb.rpc("get_community_voice_rooms", { p_slug: slug });
+    if (error) throw error;
+    return data;
+  },
+
   async startVoiceRoom(title, communitySlug) {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) throw new Error("Não autenticado.");
     const roomName = `voice-${user.id}`;
-    await sb.from("voice_rooms").update({ ended_at: new Date().toISOString() }).eq("host_id", user.id).is("ended_at", null);
+    // Encerra de verdade (via RPC, que também limpa voice_room_participants)
+    // qualquer sala própria que tenha ficado pendurada — um update direto
+    // só em ended_at deixava participantes órfãos pra trás.
+    const { data: staleRoom } = await sb.from("voice_rooms").select("id").eq("host_id", user.id).is("ended_at", null).maybeSingle();
+    if (staleRoom) {
+      try { await sb.rpc("end_voice_room", { p_room_id: staleRoom.id }); } catch (e) { /* melhor esforço */ }
+    }
     const { data, error } = await sb.from("voice_rooms").insert({
       host_id: user.id, room_name: roomName, title, community_slug: communitySlug || null
     }).select().single();

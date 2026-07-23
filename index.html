@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723j">
+  <link rel="stylesheet" href="styles.css?v=20260723k">
 </head>
 <body>
 
@@ -568,6 +568,9 @@
               <button class="profile-tab-header-btn active" id="community-tab-live-btn" onclick="switchCommunityTab('live')">
                 <span>🔴 Ao Vivo</span>
               </button>
+              <button class="profile-tab-header-btn" id="community-tab-voice-btn" onclick="switchCommunityTab('voice')">
+                <span>🎙️ Voz</span>
+              </button>
               <button class="profile-tab-header-btn" id="community-tab-posts-btn" onclick="switchCommunityTab('posts')">
                 <span>Posts</span>
               </button>
@@ -583,6 +586,14 @@
                   <div class="discover-empty-icon">📡</div>
                   <h3>Nenhuma live marcada agora</h3>
                   <p>Quem transmitir e marcar essa comunidade aparece aqui.</p>
+                </div>
+              </div>
+              <div class="tab-pane" id="community-tab-voice" style="display: none; padding: 12px;">
+                <div id="community-voice-rooms-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                <div class="discover-empty-state" id="community-voice-empty" style="display: none;">
+                  <div class="discover-empty-icon">🎙️</div>
+                  <h3>Nenhuma sala de voz agora</h3>
+                  <p>Quem iniciar uma e marcar essa comunidade aparece aqui.</p>
                 </div>
               </div>
               <div class="tab-pane" id="community-tab-posts" style="display: none; padding: 12px;">
@@ -2602,9 +2613,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723j"></script>
+  <script src="supabase-client.js?v=20260723k"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723j"></script>
+  <script src="app.js?v=20260723k"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

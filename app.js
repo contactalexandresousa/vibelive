@@ -933,15 +933,44 @@ async function toggleCommunityMembership() {
 }
 
 function switchCommunityTab(tab) {
-  ["live", "posts", "ranking"].forEach(key => {
+  ["live", "voice", "posts", "ranking"].forEach(key => {
     document.getElementById(`community-tab-${key}-btn`).classList.toggle("active", key === tab);
     document.getElementById(`community-tab-${key}`).style.display = key === tab ? "flex" : "none";
   });
   const slug = STATE.activeCommunitySlug;
   if (!slug) return;
   if (tab === "live") renderCommunityLives(slug);
+  else if (tab === "voice") renderCommunityVoiceRooms(slug);
   else if (tab === "posts") renderCommunityPosts(slug);
   else if (tab === "ranking") renderCommunityRanking(slug);
+}
+
+async function renderCommunityVoiceRooms(slug) {
+  const list = document.getElementById("community-voice-rooms-list");
+  const empty = document.getElementById("community-voice-empty");
+  list.innerHTML = "";
+  try {
+    const rooms = await DB.getCommunityVoiceRooms(slug);
+    if (STATE.activeCommunitySlug !== slug) return;
+    empty.style.display = rooms.length === 0 ? "flex" : "none";
+    rooms.forEach(r => {
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.onclick = () => enterVoiceRoom(r.id, r.room_name, r.title, r.host_id);
+      const safeName = escapeHtml(r.host_display_name || r.host_username);
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${r.host_avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+        <div class="inbox-details">
+          <span class="inbox-name">🎙️ ${escapeHtml(r.title)}</span>
+          <span class="inbox-message">com @${escapeHtml(r.host_username)}</span>
+        </div>
+        <div class="inbox-right"><span class="inbox-time">${r.participant_count} ouvindo</span></div>
+      `;
+      list.appendChild(item);
+    });
+  } catch (err) {
+    console.error("Falha ao carregar salas de voz da comunidade:", err);
+  }
 }
 
 async function renderCommunityLives(slug) {
@@ -1448,14 +1477,7 @@ async function demoteParticipant(userId) {
 }
 
 async function confirmEndVoiceRoom() {
-  const roomId = STATE.activeVoiceRoomId;
-  if (!roomId) return;
-  try {
-    await DB.endVoiceRoom(roomId);
-    showToast("Sala encerrada.");
-  } catch (err) {
-    showToast(err.message || "Não foi possível encerrar agora.");
-  }
+  showToast("Sala encerrada.");
   leaveActiveVoiceRoom();
 }
 
@@ -1464,10 +1486,22 @@ async function confirmEndVoiceRoom() {
 // quanto pelo hook de navigateTo (se a tela mudar por outro caminho
 // enquanto uma sala de voz está ativa), que não deve chamar navigateTo de
 // novo por dentro de si mesmo.
+//
+// Achado em auditoria: se o ANFITRIÃO saísse pelo botão de voltar do
+// cabeçalho (em vez do botão "Encerrar"), essa função só desconectava o
+// LiveKit local e limpava o STATE — a sala ficava "ativa" pra sempre no
+// banco, ninguém mais recebia o aviso de encerramento, e linhas de
+// participante ficavam órfãs. Agora o anfitrião sempre encerra de verdade
+// ao sair, por qualquer caminho — mesma garantia que a live de vídeo já
+// tem (lá nem existe um jeito de "só sair" sem encerrar a transmissão).
 function cleanupVoiceRoomConnection() {
   const roomId = STATE.activeVoiceRoomId;
-  if (roomId && !STATE.voiceRoomIsHost) {
-    DB.leaveVoiceRoom(roomId).catch(() => {});
+  if (roomId) {
+    if (STATE.voiceRoomIsHost) {
+      DB.endVoiceRoom(roomId).catch(() => {});
+    } else {
+      DB.leaveVoiceRoom(roomId).catch(() => {});
+    }
   }
   if (STATE.voiceLiveKitRoom) {
     STATE.voiceLiveKitRoom.disconnect();
