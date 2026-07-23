@@ -696,6 +696,9 @@ function renderRealLiveSessions(allSessions) {
   // mas isso já é decidido do lado de quem bloqueou, não meu).
   const sessions = allSessions.filter(s => !STATE.blockedUsers.includes(s.user_id));
   STATE.realLiveSessions = sessions;
+  if (STATE.viewedUserProfile) renderViewedProfilePresence(STATE.viewedUserProfile.id, STATE.viewedUserProfile.last_seen_at);
+  if (STATE.activeChatMode === "dm") renderChatPartnerStatus();
+  if (STATE.activeScreen === "messages") renderInboxList();
 
   const mode = STATE.discoverFilter || "hot";
   const category = DISCOVER_CATEGORIES[mode];
@@ -787,8 +790,12 @@ async function renderSuggestedProfiles() {
     const name = escapeHtml(p.display_name || p.username);
     const card = document.createElement("div");
     card.className = "suggested-profile-card";
+    const presence = getUserPresenceStatus(p.id, null);
     card.innerHTML = `
-      <img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}" onclick="openUserProfile('${p.id}')">
+      <div class="suggested-avatar-wrap" onclick="openUserProfile('${p.id}')">
+        <img src="${p.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${name}">
+        ${presence.dotClass ? `<div class="online-indicator ${presence.dotClass}"></div>` : ''}
+      </div>
       <span class="suggested-name" onclick="openUserProfile('${p.id}')">${name}</span>
       <span class="suggested-followers">${formatCompactCount(p.followers_count)} seguidores</span>
       <button class="btn-follow-primary" style="width:100%; height:22px; font-size:0.6rem; margin-top:2px;" onclick="followSuggestedProfile('${p.id}', '${p.username}', this)">+ Seguir</button>
@@ -1410,11 +1417,11 @@ async function renderInboxList() {
     item.onclick = () => openPrivateChat(chat.partnerId, chat.name, chat.avatar);
 
     const safeName = escapeHtml(chat.name);
-    const isOnline = STATE.onlineUserIds && STATE.onlineUserIds.has(chat.partnerId);
+    const presence = getUserPresenceStatus(chat.partnerId, null);
     item.innerHTML = `
       <div class="inbox-avatar">
         <img src="${chat.avatar}" alt="${safeName}">
-        ${isOnline ? '<div class="online-indicator"></div>' : ''}
+        ${presence.dotClass ? `<div class="online-indicator ${presence.dotClass}"></div>` : ''}
       </div>
       <div class="inbox-details">
         <span class="inbox-name">${safeName}</span>
@@ -2007,25 +2014,29 @@ function handleIncomingTypingIndicator(fromUserId) {
   typingIndicatorTimeout = setTimeout(() => renderChatPartnerStatus(), 3000);
 }
 
-// Online agora (Presence) ou "visto por último" (coluna last_seen_at) —
-// chamado ao abrir a conversa e de novo sempre que o Presence sincroniza,
-// pra refletir em tempo real quando a outra pessoa entra/sai. Não sobrepõe
-// o indicador de "digitando…" (esse tem seu próprio timeout que chama de
-// volta aqui quando termina).
+// "Perfil vivo" (0117) — prioridade: ao vivo de verdade agora > online no
+// app agora (Presence) > "visto por último". Centraliza uma lógica que antes
+// só existia (parcial, sem checar live) dentro do chat privado; reaproveitada
+// agora em perfil de outra pessoa, busca e sugestões.
+function getUserPresenceStatus(userId, lastSeenAt) {
+  const isLive = STATE.realLiveSessions && STATE.realLiveSessions.some(s => s.user_id === userId);
+  if (isLive) return { text: "🔴 Ao vivo agora", dotClass: "live", isLive: true };
+  if (STATE.onlineUserIds && STATE.onlineUserIds.has(userId)) return { text: "🟢 Online agora", dotClass: "online", isLive: false };
+  if (lastSeenAt) return { text: `Visto por último ${formatMessageTime(lastSeenAt)}`, dotClass: "", isLive: false };
+  return { text: "", dotClass: "", isLive: false };
+}
+
+// Chamado ao abrir a conversa e de novo sempre que o Presence sincroniza ou
+// uma live começa/termina, pra refletir em tempo real. Não sobrepõe o
+// indicador de "digitando…" (esse tem seu próprio timeout que chama de volta
+// aqui quando termina) nem o cabeçalho de um chat em grupo (sem "parceiro").
 function renderChatPartnerStatus() {
   const statusEl = document.getElementById("chat-partner-status");
   if (!statusEl) return;
-  if (STATE.activeScreen !== "private-chat" || !STATE.activeChatPartner) {
-    statusEl.textContent = "";
+  if (STATE.activeScreen !== "private-chat" || STATE.activeChatMode === "group" || !STATE.activeChatPartner) {
     return;
   }
-  if (STATE.onlineUserIds && STATE.onlineUserIds.has(STATE.activeChatPartner)) {
-    statusEl.textContent = "online agora";
-  } else if (STATE.activeChatPartnerLastSeen) {
-    statusEl.textContent = `visto por último ${formatMessageTime(STATE.activeChatPartnerLastSeen)}`;
-  } else {
-    statusEl.textContent = "";
-  }
+  statusEl.textContent = getUserPresenceStatus(STATE.activeChatPartner, STATE.activeChatPartnerLastSeen).text;
 }
 
 
@@ -2061,6 +2072,7 @@ async function openUserProfile(userId) {
     `${escapeHtml(profile.display_name || profile.username)} ${profile.is_verified ? '<span class="premium-verified">✓</span>' : ""}`;
   document.getElementById("user-profile-handle").textContent = "@" + profile.username;
   document.getElementById("user-profile-bio-text").textContent = profile.bio || "";
+  renderViewedProfilePresence(profile.id, profile.last_seen_at);
 
   const isFollowing = STATE.followedStreamers.includes(profile.username);
   const followBtn = document.getElementById("user-profile-follow-btn");
@@ -2093,6 +2105,25 @@ function appendPostToUserProfileGrid(post, grid) {
     : `<video src="${post.media_url}" muted playsinline></video><div class="post-video-indicator">▶ Video</div>`;
   if (isCarousel) item.innerHTML += `<div class="post-video-indicator" style="left:8px; right:auto;">🖼️ ${post.media_urls.length}</div>`;
   grid.appendChild(item);
+}
+
+// Chamado ao abrir o perfil e de novo sempre que Presence sincroniza ou uma
+// live começa/termina (enquanto esse mesmo perfil estiver aberto), igual ao
+// status do chat privado — cursor de "clicável" só aparece quando é ao vivo.
+function renderViewedProfilePresence(userId, lastSeenAt) {
+  const el = document.getElementById("user-profile-presence-status");
+  if (!el || STATE.activeScreen !== "user-profile" || !STATE.viewedUserProfile || STATE.viewedUserProfile.id !== userId) return;
+  const status = getUserPresenceStatus(userId, lastSeenAt);
+  el.textContent = status.text;
+  el.style.cursor = status.isLive ? "pointer" : "default";
+  el.style.color = status.isLive ? "var(--primary)" : "";
+}
+
+function openViewedProfileLiveRoom() {
+  const profile = STATE.viewedUserProfile;
+  if (!profile) return;
+  const isLive = STATE.realLiveSessions && STATE.realLiveSessions.some(s => s.user_id === profile.id);
+  if (isLive) enterRealLiveRoom(profile.id);
 }
 
 async function refreshUserProfileStats(userId, username) {
@@ -6678,9 +6709,11 @@ function renderProfileSearchResults(container, profiles) {
     const privateBtnHtml = p.private_content_price
       ? `<button class="btn-lightbox-like" style="font-size: 0.65rem; background: var(--bg-input); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--glass-border); color: #fff; margin-left: 6px;" onclick="event.stopPropagation(); closeSearchOverlay(); openPrivateContentModal('${p.id}');">🔒</button>`
       : "";
+    const presence = getUserPresenceStatus(p.id, null);
     item.innerHTML = `
       <div class="inbox-avatar" style="width: 44px; height: 44px;">
         <img src="${p.avatar_url}" alt="${safeName}" style="border-radius: 50%;">
+        ${presence.dotClass ? `<div class="online-indicator ${presence.dotClass}"></div>` : ''}
       </div>
       <div class="inbox-details" style="margin-left: 12px;">
         <span class="inbox-name" style="font-size: 0.8rem; font-weight: 700; color: #fff;">${safeName}</span>
@@ -7822,6 +7855,7 @@ async function applyProfileToUI(profile) {
     STATE.presenceChannel = DB.subscribeToGlobalPresence(profile.id, (onlineUserIds) => {
       STATE.onlineUserIds = onlineUserIds;
       renderChatPartnerStatus();
+      if (STATE.viewedUserProfile) renderViewedProfilePresence(STATE.viewedUserProfile.id, STATE.viewedUserProfile.last_seen_at);
       if (STATE.activeScreen === "messages") renderInboxList();
     });
     DB.touchLastSeen().catch(() => {});

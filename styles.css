@@ -326,6 +326,12 @@ body {
   border-radius: 50%;
 }
 
+/* "Perfil vivo" (0117) — mesmo pontinho de sempre, só troca de cor quando é
+   uma transmissão ao vivo de verdade, não só "app aberto agora". */
+.online-indicator.live {
+  background: var(--primary);
+}
+
 .wallet-badge {
   display: flex;
   align-items: center;
@@ -2884,6 +2890,17 @@ input:-webkit-autofill:focus {
   color: var(--light-gray);
   margin-top: 6px;
   line-height: 1.3;
+}
+
+.profile-presence-status {
+  font-size: 0.68rem;
+  color: var(--light-gray);
+  margin-top: 3px;
+  font-weight: 600;
+}
+
+.profile-presence-status:empty {
+  display: none;
 }
 
 .profile-actions-row {
@@ -5738,6 +5755,11 @@ input:-webkit-autofill:focus {
   border-radius: 50%;
   object-fit: cover;
   cursor: pointer;
+}
+
+.suggested-avatar-wrap {
+  position: relative;
+  display: inline-block;
 }
 
 .suggested-profile-card .suggested-name {
