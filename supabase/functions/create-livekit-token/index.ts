@@ -102,6 +102,27 @@ Deno.serve(async (req) => {
     canPublish = !!call;
   }
 
+  // Sala de voz (voice-<hostId>): publica só quem tem papel 'host' ou
+  // 'speaker' em voice_room_participants — um ouvinte só entra pra escutar,
+  // mesmo que alguém adultere o cliente pra tentar publicar áudio mesmo assim.
+  if (!canPublish && roomName.startsWith("voice-")) {
+    const { data: room } = await supabase
+      .from("voice_rooms")
+      .select("id")
+      .eq("room_name", roomName)
+      .is("ended_at", null)
+      .maybeSingle();
+    if (room) {
+      const { data: participant } = await supabase
+        .from("voice_room_participants")
+        .select("role")
+        .eq("room_id", room.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      canPublish = participant?.role === "host" || participant?.role === "speaker";
+    }
+  }
+
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: user.id,
     name: displayName,

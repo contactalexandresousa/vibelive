@@ -121,6 +121,7 @@ const DOM = {
     "private-chat": document.getElementById("screen-private-chat"),
     "user-profile": document.getElementById("screen-user-profile"),
     community: document.getElementById("screen-community"),
+    "voice-room": document.getElementById("screen-voice-room"),
     profile: document.getElementById("screen-profile"),
     "go-live": document.getElementById("screen-go-live"),
     auth: document.getElementById("screen-auth")
@@ -256,6 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRealLiveSessionsFeed();
   renderCommunitiesRow();
   renderEventsList();
+  renderVoiceRoomsList();
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
@@ -337,6 +339,9 @@ function navigateTo(screenId) {
   if (previousScreen === "private-chat" && screenId !== "private-chat") {
     closeActiveGroupChannel();
   }
+  if (previousScreen === "voice-room" && screenId !== "voice-room") {
+    cleanupVoiceRoomConnection();
+  }
 
   // Ocultar todas as telas
   Object.keys(DOM.screens).forEach(key => {
@@ -348,7 +353,7 @@ function navigateTo(screenId) {
   STATE.activeScreen = screenId;
 
   // Gerenciamento da navegação inferior
-  const hideNavScreens = ["splash", "live-room", "private-chat", "user-profile", "auth", "go-live", "community"];
+  const hideNavScreens = ["splash", "live-room", "private-chat", "user-profile", "auth", "go-live", "community", "voice-room"];
   if (hideNavScreens.includes(screenId)) {
     DOM.bottomNav.style.display = "none";
   } else {
@@ -1142,6 +1147,346 @@ async function submitCreateEvent() {
   } catch (err) {
     errorEl.textContent = err.message || "Não foi possível criar o evento agora.";
   }
+}
+
+// SALAS DE VOZ (0121) — modelo Clubhouse/Twitter Spaces: só o anfitrião e
+// quem foi promovido publicam áudio (garantido no servidor pela edge
+// function de token, não só escondido na UI); todo o resto entra ouvindo.
+async function renderVoiceRoomsList() {
+  const list = document.getElementById("voice-rooms-list");
+  if (!list) return;
+  let rooms = [];
+  try {
+    rooms = await DB.getActiveVoiceRooms();
+  } catch (err) {
+    console.error("Falha ao carregar salas de voz:", err);
+    return;
+  }
+
+  if (rooms.length === 0) {
+    list.innerHTML = `<p style="color: var(--light-gray); font-size: 0.72rem; padding: 8px 4px;">Nenhuma sala de voz ativa agora. Que tal começar uma?</p>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  rooms.forEach(r => {
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.onclick = () => enterVoiceRoom(r.id, r.room_name, r.title, r.host_id);
+    const safeName = escapeHtml(r.host_display_name || r.host_username);
+    const safeTitle = escapeHtml(r.title);
+    const communityInfo = r.community_slug ? COMMUNITIES[r.community_slug] : null;
+    const tagHtml = communityInfo ? ` · ${communityInfo.icon} ${escapeHtml(communityInfo.label)}` : "";
+    item.innerHTML = `
+      <div class="inbox-avatar"><img src="${r.host_avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+      <div class="inbox-details">
+        <span class="inbox-name">🎙️ ${safeTitle}</span>
+        <span class="inbox-message">com @${escapeHtml(r.host_username)}${tagHtml}</span>
+      </div>
+      <div class="inbox-right"><span class="inbox-time">${r.participant_count} ouvindo</span></div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function openCreateVoiceRoomModal() {
+  if (!requireAuth()) return;
+  document.getElementById("voice-room-title-input").value = "";
+  document.getElementById("create-voice-room-error").textContent = "";
+
+  const select = document.getElementById("voice-room-community-select");
+  if (select && select.options.length === 1) {
+    Object.entries(COMMUNITIES).forEach(([slug, c]) => {
+      const opt = document.createElement("option");
+      opt.value = slug;
+      opt.textContent = `${c.icon} ${c.label}`;
+      select.appendChild(opt);
+    });
+  }
+  if (select) select.value = "";
+
+  document.getElementById("modal-create-voice-room").style.display = "flex";
+}
+
+function closeCreateVoiceRoomModal() {
+  document.getElementById("modal-create-voice-room").style.display = "none";
+}
+
+async function submitCreateVoiceRoom() {
+  const title = document.getElementById("voice-room-title-input").value.trim();
+  const communitySlug = document.getElementById("voice-room-community-select").value || null;
+  const errorEl = document.getElementById("create-voice-room-error");
+  errorEl.textContent = "";
+
+  if (!title) {
+    errorEl.textContent = "Dê um título à sala.";
+    return;
+  }
+
+  try {
+    const room = await DB.startVoiceRoom(title, communitySlug);
+    closeCreateVoiceRoomModal();
+    await enterVoiceRoom(room.id, room.room_name, room.title, room.host_id);
+  } catch (err) {
+    errorEl.textContent = err.message || "Não foi possível iniciar a sala agora.";
+  }
+}
+
+STATE.activeVoiceRoomId = null;
+STATE.activeVoiceRoomName = null;
+STATE.voiceLiveKitRoom = null;
+STATE.voiceLocalAudioTrack = null;
+STATE.voiceRoomChannel = null;
+STATE.voiceRoomIsHost = false;
+STATE.voiceRoomMuted = false;
+STATE.voiceRoomLastKnownRole = null;
+
+async function enterVoiceRoom(roomId, roomName, title, hostId) {
+  if (!requireAuth()) return;
+
+  let participant;
+  try {
+    participant = await DB.joinVoiceRoom(roomId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível entrar nessa sala.");
+    return;
+  }
+
+  STATE.activeVoiceRoomId = roomId;
+  STATE.activeVoiceRoomName = roomName;
+  STATE.voiceRoomIsHost = participant.role === "host";
+  document.getElementById("voice-room-title-header").textContent = title;
+  document.getElementById("voice-room-end-btn").style.display = STATE.voiceRoomIsHost ? "inline-flex" : "none";
+  navigateTo("voice-room");
+
+  await connectVoiceLiveKit(roomName, participant.role);
+  await renderVoiceRoomParticipants();
+
+  if (STATE.voiceRoomChannel) sb.removeChannel(STATE.voiceRoomChannel);
+  STATE.voiceRoomChannel = DB.subscribeToVoiceRoom(roomId, {
+    onParticipantChange: () => renderVoiceRoomParticipants(),
+    onRoomEnded: () => {
+      if (!STATE.voiceRoomIsHost) {
+        showToast("O anfitrião encerrou a sala.");
+        leaveActiveVoiceRoom();
+      }
+    }
+  });
+}
+
+// Conecta no LiveKit e publica o microfone só se o papel já permitir — quem
+// é promovido depois precisa de um token NOVO (o grant de publicar é
+// decidido no momento em que o token é emitido, não muda depois), então
+// reconecta do zero em vez de tentar "atualizar" a conexão existente.
+async function connectVoiceLiveKit(roomName, role) {
+  if (STATE.voiceLiveKitRoom) {
+    STATE.voiceLiveKitRoom.disconnect();
+    STATE.voiceLiveKitRoom = null;
+    STATE.voiceLocalAudioTrack = null;
+  }
+
+  try {
+    const token = await DB.createLivekitToken(roomName);
+    const room = new LivekitClient.Room();
+    STATE.voiceLiveKitRoom = room;
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === "audio") track.attach();
+    });
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const speakingIds = new Set(speakers.map(s => s.identity));
+      document.querySelectorAll(".voice-speaker-avatar-wrap").forEach(el => {
+        el.classList.toggle("speaking", speakingIds.has(el.dataset.userId));
+      });
+    });
+
+    await room.connect(LIVEKIT_URL, token);
+
+    if (role === "host" || role === "speaker") {
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const track = mic.getAudioTracks()[0];
+      await room.localParticipant.publishTrack(track);
+      STATE.voiceLocalAudioTrack = track;
+      STATE.voiceRoomMuted = false;
+      document.getElementById("voice-room-mute-btn").style.display = "inline-flex";
+      document.getElementById("voice-room-mute-btn").textContent = "🎤 Ativo";
+    } else {
+      document.getElementById("voice-room-mute-btn").style.display = "none";
+    }
+  } catch (err) {
+    console.error("Falha ao conectar na sala de voz:", err);
+    showToast("Sua conexão de áudio pode não estar funcionando agora.");
+  }
+}
+
+function toggleVoiceRoomMute() {
+  if (!STATE.voiceLocalAudioTrack) return;
+  STATE.voiceRoomMuted = !STATE.voiceRoomMuted;
+  STATE.voiceLocalAudioTrack.enabled = !STATE.voiceRoomMuted;
+  const btn = document.getElementById("voice-room-mute-btn");
+  btn.textContent = STATE.voiceRoomMuted ? "🔇 Mudo" : "🎤 Ativo";
+}
+
+async function renderVoiceRoomParticipants() {
+  const roomId = STATE.activeVoiceRoomId;
+  if (!roomId) return;
+  let participants = [];
+  try {
+    participants = await DB.getVoiceRoomParticipants(roomId);
+  } catch (err) {
+    console.error("Falha ao carregar participantes da sala de voz:", err);
+    return;
+  }
+  if (STATE.activeVoiceRoomId !== roomId) return;
+
+  const myId = STATE.myUserId;
+
+  // Detecta minha PRÓPRIA promoção/rebaixamento pra reconectar com um token
+  // novo (só assim o grant de publicar muda de verdade) — compara contra o
+  // papel guardado da última renderização.
+  const me = participants.find(p => p.user_id === myId);
+  if (me && STATE.voiceRoomLastKnownRole && me.role !== STATE.voiceRoomLastKnownRole) {
+    const becameSpeaker = me.role === "speaker" || me.role === "host";
+    const wasSpeaker = STATE.voiceRoomLastKnownRole === "speaker" || STATE.voiceRoomLastKnownRole === "host";
+    if (becameSpeaker !== wasSpeaker) {
+      showToast(becameSpeaker ? "Você foi promovido a falante! 🎤" : "Você voltou a ser ouvinte.");
+      if (STATE.activeVoiceRoomName) await connectVoiceLiveKit(STATE.activeVoiceRoomName, me.role);
+    }
+  }
+  if (me) STATE.voiceRoomLastKnownRole = me.role;
+
+  const speakers = participants.filter(p => p.role === "host" || p.role === "speaker");
+  const listeners = participants.filter(p => p.role === "listener");
+  document.getElementById("voice-room-listener-count").textContent =
+    `${speakers.length} falando · ${listeners.length} ouvindo`;
+
+  const grid = document.getElementById("voice-room-speakers-grid");
+  grid.innerHTML = "";
+  speakers.forEach(p => {
+    const prof = p.profiles || {};
+    const safeName = escapeHtml(prof.display_name || prof.username || "Alguém");
+    const tile = document.createElement("div");
+    tile.className = STATE.voiceRoomIsHost && p.role !== "host" ? "voice-speaker-tile clickable" : "voice-speaker-tile";
+    if (STATE.voiceRoomIsHost && p.role !== "host") {
+      tile.onclick = () => demoteParticipant(p.user_id);
+      tile.title = "Tocar para tirar da fala";
+    }
+    tile.innerHTML = `
+      <div class="voice-speaker-avatar-wrap${p.role === "host" ? " is-host" : ""}" data-user-id="${p.user_id}">
+        <img src="${prof.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}">
+        ${p.role === "host" ? '<span class="voice-speaker-crown">👑</span>' : ""}
+      </div>
+      <span class="voice-speaker-name">${safeName}</span>
+    `;
+    grid.appendChild(tile);
+  });
+
+  const handsPanel = document.getElementById("voice-room-hands-panel");
+  const handsList = document.getElementById("voice-room-hands-list");
+  const raisedHands = listeners.filter(p => p.hand_raised);
+  if (STATE.voiceRoomIsHost && raisedHands.length > 0) {
+    handsPanel.style.display = "block";
+    handsList.innerHTML = "";
+    raisedHands.forEach(p => {
+      const prof = p.profiles || {};
+      const safeName = escapeHtml(prof.display_name || prof.username || "Alguém");
+      const item = document.createElement("div");
+      item.className = "inbox-item";
+      item.innerHTML = `
+        <div class="inbox-avatar"><img src="${prof.avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+        <div class="inbox-details"><span class="inbox-name">${safeName}</span></div>
+        <div class="inbox-right"><button class="btn-follow-primary" onclick="promoteParticipant('${p.user_id}')">Chamar pra falar</button></div>
+      `;
+      handsList.appendChild(item);
+    });
+  } else {
+    handsPanel.style.display = "none";
+  }
+
+  const raiseHandBtn = document.getElementById("voice-room-raise-hand-btn");
+  if (me && me.role === "listener") {
+    raiseHandBtn.style.display = "inline-flex";
+    raiseHandBtn.textContent = me.hand_raised ? "🖐️ Mão levantada" : "🖐️ Levantar a mão";
+    raiseHandBtn.classList.toggle("active", !!me.hand_raised);
+  } else {
+    raiseHandBtn.style.display = "none";
+  }
+}
+
+async function toggleRaiseHand() {
+  const roomId = STATE.activeVoiceRoomId;
+  if (!roomId) return;
+  const btn = document.getElementById("voice-room-raise-hand-btn");
+  const raising = !btn.classList.contains("active");
+  try {
+    await DB.setHandRaised(roomId, raising);
+    await renderVoiceRoomParticipants();
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+async function promoteParticipant(userId) {
+  const roomId = STATE.activeVoiceRoomId;
+  if (!roomId) return;
+  try {
+    await DB.promoteToSpeaker(roomId, userId);
+  } catch (err) {
+    showToast(err.message || "Não foi possível promover agora.");
+  }
+}
+
+async function demoteParticipant(userId) {
+  const roomId = STATE.activeVoiceRoomId;
+  if (!roomId) return;
+  try {
+    await DB.demoteToListener(roomId, userId);
+    showToast("Participante voltou a ser ouvinte.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  }
+}
+
+async function confirmEndVoiceRoom() {
+  const roomId = STATE.activeVoiceRoomId;
+  if (!roomId) return;
+  try {
+    await DB.endVoiceRoom(roomId);
+    showToast("Sala encerrada.");
+  } catch (err) {
+    showToast(err.message || "Não foi possível encerrar agora.");
+  }
+  leaveActiveVoiceRoom();
+}
+
+// Só a limpeza (desconectar LiveKit, sair da tabela de participantes,
+// remover o canal) — sem navegar. Reaproveitada tanto pelo botão de sair
+// quanto pelo hook de navigateTo (se a tela mudar por outro caminho
+// enquanto uma sala de voz está ativa), que não deve chamar navigateTo de
+// novo por dentro de si mesmo.
+function cleanupVoiceRoomConnection() {
+  const roomId = STATE.activeVoiceRoomId;
+  if (roomId && !STATE.voiceRoomIsHost) {
+    DB.leaveVoiceRoom(roomId).catch(() => {});
+  }
+  if (STATE.voiceLiveKitRoom) {
+    STATE.voiceLiveKitRoom.disconnect();
+    STATE.voiceLiveKitRoom = null;
+  }
+  if (STATE.voiceRoomChannel) {
+    sb.removeChannel(STATE.voiceRoomChannel);
+    STATE.voiceRoomChannel = null;
+  }
+  STATE.activeVoiceRoomId = null;
+  STATE.activeVoiceRoomName = null;
+  STATE.voiceLocalAudioTrack = null;
+  STATE.voiceRoomIsHost = false;
+  STATE.voiceRoomLastKnownRole = null;
+}
+
+function leaveActiveVoiceRoom() {
+  cleanupVoiceRoomConnection();
+  navigateTo("discover");
 }
 
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM REAL)

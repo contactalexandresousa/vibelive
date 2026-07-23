@@ -2182,5 +2182,79 @@ const DB = {
     const { data, error } = await sb.rpc("mark_event_attendance", { p_event_id: eventId });
     if (error) throw error;
     return data;
+  },
+
+  // Salas de voz (0121)
+  async getActiveVoiceRooms() {
+    const { data, error } = await sb.rpc("get_active_voice_rooms");
+    if (error) throw error;
+    return data;
+  },
+
+  async startVoiceRoom(title, communitySlug) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const roomName = `voice-${user.id}`;
+    await sb.from("voice_rooms").update({ ended_at: new Date().toISOString() }).eq("host_id", user.id).is("ended_at", null);
+    const { data, error } = await sb.from("voice_rooms").insert({
+      host_id: user.id, room_name: roomName, title, community_slug: communitySlug || null
+    }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async endVoiceRoom(roomId) {
+    const { error } = await sb.rpc("end_voice_room", { p_room_id: roomId });
+    if (error) throw error;
+  },
+
+  async joinVoiceRoom(roomId) {
+    const { data, error } = await sb.rpc("join_voice_room", { p_room_id: roomId });
+    if (error) throw error;
+    return data;
+  },
+
+  async leaveVoiceRoom(roomId) {
+    const { error } = await sb.rpc("leave_voice_room", { p_room_id: roomId });
+    if (error) throw error;
+  },
+
+  async setHandRaised(roomId, raised) {
+    const { error } = await sb.rpc("set_hand_raised", { p_room_id: roomId, p_raised: raised });
+    if (error) throw error;
+  },
+
+  async promoteToSpeaker(roomId, userId) {
+    const { error } = await sb.rpc("promote_to_speaker", { p_room_id: roomId, p_user_id: userId });
+    if (error) throw error;
+  },
+
+  async demoteToListener(roomId, userId) {
+    const { error } = await sb.rpc("demote_to_listener", { p_room_id: roomId, p_user_id: userId });
+    if (error) throw error;
+  },
+
+  async getVoiceRoomParticipants(roomId) {
+    const { data, error } = await sb
+      .from("voice_room_participants")
+      .select("user_id, role, hand_raised, joined_at, profiles!voice_room_participants_user_id_fkey(username, display_name, avatar_url)")
+      .eq("room_id", roomId)
+      .order("joined_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  },
+
+  subscribeToVoiceRoom(roomId, { onParticipantChange, onRoomEnded }) {
+    const channel = sb.channel(`voice_room:${roomId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "voice_room_participants",
+        filter: `room_id=eq.${roomId}`
+      }, () => onParticipantChange && onParticipantChange())
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "voice_rooms",
+        filter: `id=eq.${roomId}`
+      }, (payload) => { if (payload.new.ended_at) onRoomEnded && onRoomEnded(); })
+      .subscribe();
+    return channel;
   }
 };

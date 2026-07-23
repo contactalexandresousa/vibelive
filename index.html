@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723i">
+  <link rel="stylesheet" href="styles.css?v=20260723j">
 </head>
 <body>
 
@@ -205,6 +205,15 @@
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
+              <!-- Salas de voz — conversa em áudio ao vivo, sem câmera -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>🎙️ Salas de Voz</h2>
+                  <button class="btn-follow-primary" onclick="openCreateVoiceRoomModal()">+ Iniciar</button>
+                </div>
+                <div id="voice-rooms-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              </section>
+
               <!-- Eventos ao vivo — algo acontecendo num horário marcado -->
               <section class="discover-section">
                 <div class="section-header">
@@ -592,6 +601,36 @@
                   <p>Participe e comece a subir de nível pra aparecer aqui.</p>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <!-- 5.6 TELA DE SALA DE VOZ (Clubhouse-style, só áudio) -->
+          <section id="screen-voice-room" class="screen">
+            <header class="private-chat-header">
+              <button class="btn-back-chat" onclick="leaveActiveVoiceRoom()">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+              </button>
+              <div class="chat-partner-info">
+                <span id="voice-room-title-header" style="font-weight: 700; font-size: 0.85rem;">Sala de voz</span>
+              </div>
+              <div class="chat-header-actions">
+                <button class="btn-follow-primary" id="voice-room-end-btn" style="display: none;" onclick="confirmEndVoiceRoom()">Encerrar</button>
+              </div>
+            </header>
+
+            <div style="padding: 16px; overflow-y: auto; flex: 1;">
+              <p id="voice-room-listener-count" style="text-align: center; color: var(--light-gray); font-size: 0.7rem; margin-bottom: 20px;"></p>
+              <div id="voice-room-speakers-grid" class="voice-speakers-grid"></div>
+
+              <div id="voice-room-hands-panel" style="display: none; margin-top: 24px;">
+                <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.3px; color: var(--light-gray); margin-bottom: 8px;">🖐️ Mãos levantadas</p>
+                <div id="voice-room-hands-list" class="inbox-list"></div>
+              </div>
+            </div>
+
+            <div style="padding: 14px 16px; display: flex; justify-content: center; gap: 10px; border-top: 1px solid var(--glass-border);">
+              <button class="btn-live-sfx" id="voice-room-raise-hand-btn" onclick="toggleRaiseHand()">🖐️ Levantar a mão</button>
+              <button class="btn-live-sfx" id="voice-room-mute-btn" style="display: none;" onclick="toggleVoiceRoomMute()">🎤 Ativo</button>
             </div>
           </section>
 
@@ -2014,6 +2053,31 @@
           </div>
         </div>
 
+        <!-- Modal: Iniciar Sala de Voz -->
+        <div class="new-post-modal" id="modal-create-voice-room" style="display: none;">
+          <div class="new-post-overlay" onclick="closeCreateVoiceRoomModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>🎙️ Iniciar Sala de Voz</h3>
+              <button class="btn-close-new-post" onclick="closeCreateVoiceRoomModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div class="form-group-post">
+                <label for="voice-room-title-input">Título:</label>
+                <input type="text" id="voice-room-title-input" maxlength="80" placeholder="Ex: Bate-papo de sexta à noite">
+              </div>
+              <div class="form-group-post">
+                <label for="voice-room-community-select">Comunidade (opcional):</label>
+                <select id="voice-room-community-select" style="width:100%; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem;">
+                  <option value="">Nenhuma</option>
+                </select>
+              </div>
+              <p id="create-voice-room-error" style="color: var(--danger); font-size: 0.7rem; min-height: 14px;"></p>
+              <button class="btn-publish-post" onclick="submitCreateVoiceRoom()">Iniciar Sala</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal: Criar Evento ao Vivo -->
         <div class="new-post-modal" id="modal-create-event" style="display: none;">
           <div class="new-post-overlay" onclick="closeCreateEventModal()"></div>
@@ -2538,9 +2602,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723i"></script>
+  <script src="supabase-client.js?v=20260723j"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723i"></script>
+  <script src="app.js?v=20260723j"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
