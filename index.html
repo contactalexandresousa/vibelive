@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- CSS customizado -->
-  <link rel="stylesheet" href="styles.css?v=20260723h">
+  <link rel="stylesheet" href="styles.css?v=20260723i">
 </head>
 <body>
 
@@ -205,6 +205,15 @@
 
             <!-- Lives reais acontecendo agora (câmera de verdade via LiveKit) -->
             <main class="discover-scroll-area">
+              <!-- Eventos ao vivo — algo acontecendo num horário marcado -->
+              <section class="discover-section">
+                <div class="section-header">
+                  <h2>📅 Eventos</h2>
+                  <button class="btn-follow-primary" onclick="openCreateEventModal()">+ Criar</button>
+                </div>
+                <div id="events-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              </section>
+
               <!-- Comunidades — entrar por interesse, não por pessoa -->
               <section class="discover-section">
                 <div class="section-header">
@@ -2005,6 +2014,45 @@
           </div>
         </div>
 
+        <!-- Modal: Criar Evento ao Vivo -->
+        <div class="new-post-modal" id="modal-create-event" style="display: none;">
+          <div class="new-post-overlay" onclick="closeCreateEventModal()"></div>
+          <div class="new-post-content" style="align-items: stretch;">
+            <header class="new-post-header">
+              <h3>📅 Criar Evento</h3>
+              <button class="btn-close-new-post" onclick="closeCreateEventModal()">×</button>
+            </header>
+            <div class="new-post-body">
+              <div class="form-group-post">
+                <label for="event-title-input">Título:</label>
+                <input type="text" id="event-title-input" maxlength="80" placeholder="Ex: Noite do Karaokê">
+              </div>
+              <div class="form-group-post">
+                <label for="event-datetime-input">Data e hora:</label>
+                <input type="datetime-local" id="event-datetime-input" style="width:100%; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem;">
+              </div>
+              <div class="form-group-post">
+                <label for="event-description-input">Descrição (opcional):</label>
+                <textarea id="event-description-input" maxlength="300" placeholder="Do que se trata..."></textarea>
+              </div>
+              <div class="form-group-post">
+                <label for="event-community-select">Comunidade (opcional):</label>
+                <select id="event-community-select" style="width:100%; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem;">
+                  <option value="">Nenhuma</option>
+                </select>
+              </div>
+              <div class="form-group-post">
+                <label for="event-challenge-select">Tipo de desafio (opcional):</label>
+                <select id="event-challenge-select" style="width:100%; background: var(--bg-input); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-primary); padding: 10px; font-family: var(--font-body); font-size: 0.8rem;">
+                  <option value="">Nenhum</option>
+                </select>
+              </div>
+              <p id="create-event-error" style="color: var(--danger); font-size: 0.7rem; min-height: 14px;"></p>
+              <button class="btn-publish-post" onclick="submitCreateEvent()">Criar Evento</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal: marcar a live com uma comunidade -->
         <div class="new-post-modal" id="modal-live-community" style="display: none;">
           <div class="new-post-overlay" onclick="closeLiveCommunityModal()"></div>
@@ -2490,9 +2538,9 @@
        cacheia esses arquivos por 10min (Cache-Control: max-age=600), então sem
        isso um F5 normal podia continuar rodando código antigo por até 10 minutos
        depois de um fix já estar publicado. -->
-  <script src="supabase-client.js?v=20260723h"></script>
+  <script src="supabase-client.js?v=20260723i"></script>
   <!-- Script Principal -->
-  <script src="app.js?v=20260723h"></script>
+  <script src="app.js?v=20260723i"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

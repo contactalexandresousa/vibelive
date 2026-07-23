@@ -2141,5 +2141,46 @@ const DB = {
       .range(offset, offset + limit - 1);
     if (error) throw error;
     return data;
+  },
+
+  // Eventos ao vivo (0120)
+  async getUpcomingLiveEvents(limit = 30) {
+    const { data, error } = await sb.rpc("get_upcoming_live_events", { p_limit: limit });
+    if (error) throw error;
+    return data;
+  },
+
+  async createLiveEvent(title, description, scheduledAtIso, communitySlug, challengeType) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    const { data, error } = await sb.from("live_events").insert({
+      host_id: user.id, title, description: description || null, scheduled_at: scheduledAtIso,
+      community_slug: communitySlug || null, challenge_type: challengeType || null
+    }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteLiveEvent(eventId) {
+    const { error } = await sb.from("live_events").delete().eq("id", eventId);
+    if (error) throw error;
+  },
+
+  async setEventInterest(eventId, interested) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) throw new Error("Não autenticado.");
+    if (interested) {
+      const { error } = await sb.from("live_event_interests").insert({ event_id: eventId, user_id: user.id });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from("live_event_interests").delete().eq("event_id", eventId).eq("user_id", user.id);
+      if (error) throw error;
+    }
+  },
+
+  async markEventAttendance(eventId) {
+    const { data, error } = await sb.rpc("mark_event_attendance", { p_event_id: eventId });
+    if (error) throw error;
+    return data;
   }
 };

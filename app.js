@@ -103,7 +103,10 @@ const STATE = {
   // Comunidades (0119)
   selectedCommunitySlug: null, // escolhida no setup, antes de ir ao vivo
   activeCommunitySlug: null, // comunidade aberta agora em #screen-community
-  activeCommunityIsMember: false
+  activeCommunityIsMember: false,
+
+  // Eventos ao vivo (0120)
+  pendingEventAttendanceId: null // setado ao clicar "AO VIVO AGORA" num card de evento
 };
 
 
@@ -252,6 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderInboxList();
   initRealLiveSessionsFeed();
   renderCommunitiesRow();
+  renderEventsList();
 
   // Temporizador para esconder a Splash Screen, então checa se já existe sessão real.
   setTimeout(async () => {
@@ -729,6 +733,7 @@ function renderRealLiveSessions(allSessions) {
   if (STATE.viewedUserProfile) renderViewedProfilePresence(STATE.viewedUserProfile.id, STATE.viewedUserProfile.last_seen_at);
   if (STATE.activeChatMode === "dm") renderChatPartnerStatus();
   if (STATE.activeScreen === "messages") renderInboxList();
+  if (STATE.activeScreen === "discover") renderEventsList();
 
   const mode = STATE.discoverFilter || "hot";
   const category = DISCOVER_CATEGORIES[mode];
@@ -988,6 +993,157 @@ async function renderCommunityRanking(slug) {
   }
 }
 
+// EVENTOS AO VIVO (0120) — qualquer conta marca um horário, quem tem
+// interesse recebe destaque quando o anfitrião entra ao vivo dentro da
+// janela. "Ranking" do brief é o ranking por XP que já existe (comunidades).
+function formatEventDateTime(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return `hoje às ${time}`;
+  if (isTomorrow) return `amanhã às ${time}`;
+  return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${time}`;
+}
+
+async function renderEventsList() {
+  const list = document.getElementById("events-list");
+  if (!list) return;
+  let events = [];
+  try {
+    events = await DB.getUpcomingLiveEvents();
+  } catch (err) {
+    console.error("Falha ao carregar eventos:", err);
+    return;
+  }
+
+  if (events.length === 0) {
+    list.innerHTML = `<p style="color: var(--light-gray); font-size: 0.72rem; padding: 8px 4px;">Nenhum evento marcado ainda. Que tal criar o primeiro?</p>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  events.forEach(e => {
+    const item = document.createElement("div");
+    item.className = "inbox-item";
+    item.onclick = () => handleEventCardClick(e.id, e.host_id, e.is_live_now);
+    const safeName = escapeHtml(e.host_display_name || e.host_username);
+    const safeTitle = escapeHtml(e.title);
+    const tagInfo = e.challenge_type ? CHALLENGE_TYPES[e.challenge_type] : (e.community_slug ? COMMUNITIES[e.community_slug] : null);
+    const tagHtml = tagInfo ? ` · ${tagInfo.icon} ${escapeHtml(tagInfo.label)}` : "";
+    const liveNowBadge = e.is_live_now ? ` <span style="color: var(--primary); font-weight: 800;">🔴 AO VIVO</span>` : "";
+    item.innerHTML = `
+      <div class="inbox-avatar"><img src="${e.host_avatar_url || DEFAULT_AVATAR_DATA_URI}" alt="${safeName}"></div>
+      <div class="inbox-details">
+        <span class="inbox-name">${safeTitle}${liveNowBadge}</span>
+        <span class="inbox-message">com @${escapeHtml(e.host_username)} · ${formatEventDateTime(e.scheduled_at)}${tagHtml}</span>
+      </div>
+      <div class="inbox-right">
+        <button class="btn-follow-primary${e.is_interested ? " followed" : ""}" onclick="event.stopPropagation(); toggleEventInterest('${e.id}', this)">${e.is_interested ? "Interessado ✓" : "Interesse"}</button>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+async function toggleEventInterest(eventId, btn) {
+  if (!requireAuth()) return;
+  const wasInterested = btn.classList.contains("followed");
+  btn.disabled = true;
+  try {
+    await DB.setEventInterest(eventId, !wasInterested);
+    btn.classList.toggle("followed", !wasInterested);
+    btn.textContent = !wasInterested ? "Interessado ✓" : "Interesse";
+  } catch (err) {
+    showToast(err.message || "Não foi possível atualizar agora.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function handleEventCardClick(eventId, hostId, isLiveNow) {
+  if (isLiveNow) {
+    STATE.pendingEventAttendanceId = eventId;
+    enterRealLiveRoom(hostId);
+  } else {
+    showToast("Esse evento ainda não começou — marque interesse pra não perder.");
+  }
+}
+
+function openCreateEventModal() {
+  if (!requireAuth()) return;
+  document.getElementById("event-title-input").value = "";
+  document.getElementById("event-description-input").value = "";
+  document.getElementById("create-event-error").textContent = "";
+
+  const defaultTime = new Date(Date.now() + 60 * 60 * 1000);
+  defaultTime.setMinutes(0, 0, 0);
+  document.getElementById("event-datetime-input").value = defaultTime.toISOString().slice(0, 16);
+
+  const communitySelect = document.getElementById("event-community-select");
+  if (communitySelect && communitySelect.options.length === 1) {
+    Object.entries(COMMUNITIES).forEach(([slug, c]) => {
+      const opt = document.createElement("option");
+      opt.value = slug;
+      opt.textContent = `${c.icon} ${c.label}`;
+      communitySelect.appendChild(opt);
+    });
+  }
+  if (communitySelect) communitySelect.value = "";
+
+  const challengeSelect = document.getElementById("event-challenge-select");
+  if (challengeSelect && challengeSelect.options.length === 1) {
+    Object.entries(CHALLENGE_TYPES).forEach(([key, c]) => {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = `${c.icon} ${c.label}`;
+      challengeSelect.appendChild(opt);
+    });
+  }
+  if (challengeSelect) challengeSelect.value = "";
+
+  document.getElementById("modal-create-event").style.display = "flex";
+}
+
+function closeCreateEventModal() {
+  document.getElementById("modal-create-event").style.display = "none";
+}
+
+async function submitCreateEvent() {
+  const title = document.getElementById("event-title-input").value.trim();
+  const description = document.getElementById("event-description-input").value.trim();
+  const datetimeValue = document.getElementById("event-datetime-input").value;
+  const communitySlug = document.getElementById("event-community-select").value || null;
+  const challengeType = document.getElementById("event-challenge-select").value || null;
+  const errorEl = document.getElementById("create-event-error");
+  errorEl.textContent = "";
+
+  if (!title) {
+    errorEl.textContent = "Dê um título ao evento.";
+    return;
+  }
+  if (!datetimeValue) {
+    errorEl.textContent = "Escolha data e hora.";
+    return;
+  }
+  const scheduledAt = new Date(datetimeValue);
+  if (scheduledAt.getTime() < Date.now()) {
+    errorEl.textContent = "Escolha um horário no futuro.";
+    return;
+  }
+
+  try {
+    await DB.createLiveEvent(title, description, scheduledAt.toISOString(), communitySlug, challengeType);
+    closeCreateEventModal();
+    showToast("Evento criado! 📅");
+    renderEventsList();
+  } catch (err) {
+    errorEl.textContent = err.message || "Não foi possível criar o evento agora.";
+  }
+}
+
 // 9. TELA DE LIVE PLAYER (ASSISTINDO STREAM REAL)
 // Entra numa transmissão de verdade (pessoa real, vídeo real via LiveKit) —
 // hostUserId é o id da conta de quem está transmitindo. Antes de conectar,
@@ -1133,6 +1289,16 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
   Auth.getUser().then(me => {
     if (me && me.id !== hostUserId) DB.logWatchLiveMission(`live-${hostUserId}`).catch(() => {});
   });
+
+  // Comparecimento a evento marcado (0120) — só quando a entrada veio de um
+  // clique em "AO VIVO AGORA" num card de evento, setado em handleEventCardClick.
+  if (STATE.pendingEventAttendanceId) {
+    const eventId = STATE.pendingEventAttendanceId;
+    STATE.pendingEventAttendanceId = null;
+    DB.markEventAttendance(eventId).then(result => {
+      if (result && result.xp_awarded > 0) showToast(`Presença no evento confirmada! +${result.xp_awarded} XP 📅`);
+    }).catch(() => {});
+  }
 
   // Iniciar vídeo
   const loader = DOM.liveRoom.querySelector(".video-loading-placeholder");
