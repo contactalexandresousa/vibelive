@@ -227,7 +227,7 @@ body {
 .logo-circle {
   width: 90px;
   height: 90px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 28px;
   display: flex;
@@ -330,8 +330,8 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(240, 178, 61, 0.1);
-  border: 1px solid rgba(240, 178, 61, 0.25);
+  background: rgba(255, 178, 56, 0.1);
+  border: 1px solid rgba(255, 178, 56, 0.25);
   padding: 4px 8px;
   border-radius: 20px;
   font-size: 0.78rem;
@@ -342,7 +342,7 @@ body {
 }
 
 .wallet-badge:hover {
-  background: rgba(240, 178, 61, 0.2);
+  background: rgba(255, 178, 56, 0.2);
 }
 
 .icon-coin {
@@ -461,7 +461,7 @@ body {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(255, 77, 109, 0.25);
+  box-shadow: 0 8px 24px rgba(255, 69, 104, 0.25);
   transition: var(--transition-smooth);
 }
 
@@ -659,7 +659,7 @@ body {
   z-index: 4;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(240, 178, 61, 0.4);
+  box-shadow: 0 4px 10px rgba(255, 178, 56, 0.4);
 }
 
 .card-btn-call svg {
@@ -707,7 +707,7 @@ body {
 .loader-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 77, 109, 0.15);
+  border: 3px solid rgba(255, 69, 104, 0.15);
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spinner 0.8s linear infinite;
@@ -798,7 +798,7 @@ body {
 }
 
 .btn-follow.followed {
-  background: rgba(255,255,255,0.15);
+  background: var(--overlay-10);
   color: var(--text-secondary);
 }
 
@@ -890,7 +890,7 @@ body {
 }
 
 .chat-msg.gift-ann {
-  background: rgba(240, 178, 61, 0.15);
+  background: rgba(255, 178, 56, 0.15);
   border-left-color: var(--secondary);
 }
 
@@ -985,14 +985,14 @@ body {
 
 .action-btn.gift {
   color: var(--secondary);
-  border-color: rgba(240, 178, 61, 0.3);
-  box-shadow: 0 0 10px rgba(240, 178, 61, 0.15);
+  border-color: rgba(255, 178, 56, 0.3);
+  box-shadow: 0 0 10px rgba(255, 178, 56, 0.15);
 }
 
 .action-btn.like {
   color: var(--primary);
-  border-color: rgba(255, 77, 109, 0.3);
-  box-shadow: 0 0 10px rgba(255, 77, 109, 0.15);
+  border-color: rgba(255, 69, 104, 0.3);
+  box-shadow: 0 0 10px rgba(255, 69, 104, 0.15);
 }
 
 .action-btn svg {
@@ -1117,7 +1117,7 @@ body {
 }
 
 .gift-item.selected {
-  background: rgba(240, 178, 61, 0.1);
+  background: rgba(255, 178, 56, 0.1);
   border-color: var(--secondary);
   box-shadow: var(--shadow-glow-gold);
 }
@@ -1212,7 +1212,7 @@ body {
 }
 
 .announcement-content {
-  background: linear-gradient(135deg, rgba(255, 77, 109, 0.9) 0%, rgba(185, 41, 74, 0.9) 100%);
+  background: linear-gradient(135deg, rgba(255, 69, 104, 0.9) 0%, rgba(185, 41, 74, 0.9) 100%);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 24px;
@@ -1221,7 +1221,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 12px 30px rgba(255, 77, 109,0.4);
+  box-shadow: 0 12px 30px rgba(255, 69, 104,0.4);
 }
 
 .announcement-emoji {
@@ -1565,8 +1565,8 @@ body {
 
 .user-balance-box {
   width: 100%;
-  background: rgba(240, 178, 61, 0.08);
-  border: 1px solid rgba(240, 178, 61, 0.2);
+  background: rgba(255, 178, 56, 0.08);
+  border: 1px solid rgba(255, 178, 56, 0.2);
   border-radius: 16px;
   padding: 10px;
   display: flex;
@@ -1631,14 +1631,14 @@ body {
 }
 
 .package-card:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.15);
+  background: var(--overlay-06);
+  border-color: var(--glass-highlight);
 }
 
 .package-card.featured {
   border-color: var(--secondary);
-  background: rgba(240, 178, 61, 0.05);
-  box-shadow: 0 4px 15px rgba(240, 178, 61,0.1);
+  background: rgba(255, 178, 56, 0.05);
+  box-shadow: 0 4px 15px rgba(255, 178, 56,0.1);
 }
 
 .popular-ribbon {
@@ -1707,7 +1707,7 @@ body {
 }
 
 .stat-card {
-  background: rgba(255,255,255,0.02);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   padding: 10px;
@@ -1809,7 +1809,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px;
-  background: rgba(255,255,255,0.02);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
 }
@@ -2110,7 +2110,7 @@ body {
 }
 
 .btn-stop-my-live {
-  background: rgba(255, 77, 109, 0.2);
+  background: rgba(255, 69, 104, 0.2);
   border: 1px solid var(--primary);
   color: var(--primary);
   font-size: 0.72rem;
@@ -2467,7 +2467,7 @@ body {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
   border: none;
-  box-shadow: 0 0 8px rgba(255, 77, 109, 0.4);
+  box-shadow: 0 0 8px rgba(255, 69, 104, 0.4);
 }
 
 .card-badge-right.nearby {
@@ -2628,7 +2628,7 @@ body {
 
 .auth-form-group input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 10px rgba(255, 77, 109, 0.15);
+  box-shadow: 0 0 10px rgba(255, 69, 104, 0.15);
   background: var(--overlay-10);
 }
 
@@ -2667,7 +2667,7 @@ input:-webkit-autofill:focus {
   font-weight: 800;
   cursor: pointer;
   margin-top: 8px;
-  box-shadow: 0 4px 15px rgba(255, 77, 109, 0.3);
+  box-shadow: 0 4px 15px rgba(255, 69, 104, 0.3);
   transition: var(--transition-smooth);
 }
 
@@ -2688,7 +2688,7 @@ input:-webkit-autofill:focus {
   content: "";
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--overlay-06);
 }
 
 .auth-social-divider span {
@@ -2766,9 +2766,9 @@ input:-webkit-autofill:focus {
   position: relative;
   padding: 24px 16px 20px;
   background:
-    radial-gradient(circle at 18% 0%, rgba(255, 77, 109, 0.16) 0%, transparent 55%),
-    radial-gradient(circle at 100% 20%, rgba(240, 178, 61, 0.12) 0%, transparent 50%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0) 100%);
+    radial-gradient(circle at 18% 0%, rgba(255, 69, 104, 0.16) 0%, transparent 55%),
+    radial-gradient(circle at 100% 20%, rgba(255, 178, 56, 0.12) 0%, transparent 50%),
+    linear-gradient(180deg, var(--overlay-04) 0%, transparent 100%);
   border-bottom: 1px solid var(--glass-border);
   overflow: hidden;
 }
@@ -2808,7 +2808,7 @@ input:-webkit-autofill:focus {
   z-index: 1;
   animation: rotateGlow 4s linear infinite;
   opacity: 0.9;
-  box-shadow: 0 0 22px rgba(255, 77, 109, 0.35);
+  box-shadow: 0 0 22px rgba(255, 69, 104, 0.35);
 }
 
 @keyframes rotateGlow {
@@ -2828,7 +2828,7 @@ input:-webkit-autofill:focus {
   flex-direction: column;
   align-items: center;
   padding: 8px 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   transition: var(--transition-smooth);
@@ -2913,7 +2913,7 @@ input:-webkit-autofill:focus {
 .profile-action-btn.primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(255, 77, 109, 0.25);
+  box-shadow: 0 4px 12px rgba(255, 69, 104, 0.25);
 }
 
 .profile-action-btn.primary svg {
@@ -3126,7 +3126,7 @@ input:-webkit-autofill:focus {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
 }
@@ -3144,8 +3144,8 @@ input:-webkit-autofill:focus {
 .btn-logout-profile {
   width: calc(100% - 32px);
   height: 42px;
-  background: rgba(255, 77, 109, 0.06);
-  border: 1px solid rgba(255, 77, 109, 0.15);
+  background: rgba(255, 69, 104, 0.06);
+  border: 1px solid rgba(255, 69, 104, 0.15);
   color: var(--primary);
   border-radius: 14px;
   font-family: var(--font-display);
@@ -3157,7 +3157,7 @@ input:-webkit-autofill:focus {
 }
 
 .btn-logout-profile:hover {
-  background: rgba(255, 77, 109, 0.1);
+  background: rgba(255, 69, 104, 0.1);
 }
 
 /* ==========================================================================
@@ -3350,7 +3350,7 @@ input:-webkit-autofill:focus {
   font-size: 0.78rem;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(255, 77, 109, 0.3);
+  box-shadow: 0 4px 15px rgba(255, 69, 104, 0.3);
 }
 
 /* Lightbox Modal */
@@ -3780,7 +3780,7 @@ input:-webkit-autofill:focus {
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1.5px solid rgba(255, 77, 109, 0.55);
+  border: 1.5px solid rgba(255, 69, 104, 0.55);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -3831,9 +3831,9 @@ input:-webkit-autofill:focus {
 }
 
 .btn-follow-primary.followed {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--overlay-10);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-highlight);
 }
 
 .btn-follow-primary:active {
@@ -4167,7 +4167,7 @@ input:-webkit-autofill:focus {
   position: absolute;
   inset: 0;
   width: 0%;
-  background: linear-gradient(90deg, rgba(255, 77, 109, 0.45), rgba(240, 178, 61, 0.45));
+  background: linear-gradient(90deg, rgba(255, 69, 104, 0.45), rgba(255, 178, 56, 0.45));
   transition: width 0.4s ease;
 }
 
@@ -4227,8 +4227,8 @@ input:-webkit-autofill:focus {
 }
 
 .live-chat-area-tiktok .chat-msg.gift-ann {
-  background: rgba(240, 178, 61, 0.14);
-  border: 0.5px solid rgba(240, 178, 61, 0.22);
+  background: rgba(255, 178, 56, 0.14);
+  border: 0.5px solid rgba(255, 178, 56, 0.22);
 }
 
 .live-chat-area-tiktok .msg-author {
@@ -4321,13 +4321,13 @@ input:-webkit-autofill:focus {
 }
 
 .btn-action-tk.rose {
-  background: rgba(255, 77, 109, 0.18);
-  border-color: rgba(255, 77, 109, 0.3);
+  background: rgba(255, 69, 104, 0.18);
+  border-color: rgba(255, 69, 104, 0.3);
 }
 
 .btn-action-tk.gift {
-  background: rgba(240, 178, 61, 0.18);
-  border-color: rgba(240, 178, 61, 0.3);
+  background: rgba(255, 178, 56, 0.18);
+  border-color: rgba(255, 178, 56, 0.3);
 }
 
 /* ==========================================================================
@@ -4356,7 +4356,7 @@ input:-webkit-autofill:focus {
 }
 
 #screen-messages .chat-new-btn {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   width: 32px;
   height: 32px;
@@ -4364,13 +4364,13 @@ input:-webkit-autofill:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 #screen-messages .chat-new-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--overlay-10);
   transform: scale(1.05);
 }
 
@@ -4413,7 +4413,7 @@ input:-webkit-autofill:focus {
 }
 
 #screen-messages .messages-search-bar input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--light-gray);
 }
 
 /* Seção de Notas superiores com cards flutuantes premium */
@@ -4509,7 +4509,7 @@ input:-webkit-autofill:focus {
 }
 
 #screen-messages .inbox-item {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   padding: 12px 14px;
@@ -4520,8 +4520,8 @@ input:-webkit-autofill:focus {
 }
 
 #screen-messages .inbox-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--overlay-06);
+  border-color: var(--glass-highlight);
   transform: translateY(-1px);
 }
 
@@ -4575,7 +4575,7 @@ input:-webkit-autofill:focus {
 
 #screen-messages .inbox-time {
   font-size: 0.58rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--light-gray);
 }
 
 #screen-messages .unread-dot {
@@ -4703,7 +4703,7 @@ input:-webkit-autofill:focus {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 4px 12px rgba(255, 77, 109, 0.2);
+  box-shadow: 0 4px 12px rgba(255, 69, 104, 0.2);
 }
 
 .chat-bubble.received {
@@ -4730,6 +4730,14 @@ input:-webkit-autofill:focus {
 .chat-bubble-status.read {
   color: var(--info);
   font-weight: 600;
+}
+
+/* .sent é sempre um gradiente coral fixo (branco continua certo nos dois
+   temas), mas .received usa var(--overlay-04) — uma superfície que INVERTE
+   no tema claro; texto branco fixo nela ficaria quase invisível. */
+.chat-bubble.received .chat-bubble-time,
+.chat-bubble.received .chat-bubble-status {
+  color: var(--light-gray);
 }
 
 .chat-bubble-image {
@@ -4851,7 +4859,7 @@ input:-webkit-autofill:focus {
 }
 
 .profile-screen-style .profile-settings-btn {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   width: 32px;
   height: 32px;
@@ -4859,7 +4867,7 @@ input:-webkit-autofill:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   transition: var(--transition-smooth);
 }
@@ -4871,7 +4879,7 @@ input:-webkit-autofill:focus {
 
 /* Novo visual do Cartão de Perfil */
 .profile-screen-style .profile-card-premium {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(180deg, var(--overlay-04) 0%, transparent 100%);
   border-bottom: 1px solid var(--glass-border);
   padding: 24px 16px;
 }
@@ -4960,7 +4968,7 @@ input:-webkit-autofill:focus {
 .profile-screen-style .profile-action-btn.primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
-  box-shadow: 0 4px 15px rgba(255, 77, 109, 0.3);
+  box-shadow: 0 4px 15px rgba(255, 69, 104, 0.3);
 }
 
 .profile-screen-style .profile-action-btn.secondary {
@@ -5003,8 +5011,8 @@ input:-webkit-autofill:focus {
 }
 
 .profile-screen-style .package-card:hover {
-  border-color: rgba(240, 178, 61, 0.4);
-  background: rgba(240, 178, 61, 0.02);
+  border-color: rgba(255, 178, 56, 0.4);
+  background: rgba(255, 178, 56, 0.02);
 }
 
 .profile-screen-style .package-coins {
@@ -5017,7 +5025,7 @@ input:-webkit-autofill:focus {
   color: #000;
   font-weight: 850;
   border: none;
-  box-shadow: 0 4px 10px rgba(240, 178, 61, 0.25);
+  box-shadow: 0 4px 10px rgba(255, 178, 56, 0.25);
 }
 
 /* Abas e Grid de Publicações */
@@ -5057,8 +5065,8 @@ input:-webkit-autofill:focus {
   width: calc(100% - 32px);
   margin: 20px 16px 40px;
   height: 42px;
-  background: rgba(255, 77, 109, 0.05);
-  border: 1px solid rgba(255, 77, 109, 0.15);
+  background: rgba(255, 69, 104, 0.05);
+  border: 1px solid rgba(255, 69, 104, 0.15);
   color: var(--primary);
   border-radius: 14px;
   font-family: var(--font-display);
@@ -5069,7 +5077,7 @@ input:-webkit-autofill:focus {
 }
 
 .profile-screen-style .btn-logout:hover {
-  background: rgba(255, 77, 109, 0.1);
+  background: rgba(255, 69, 104, 0.1);
   border-color: var(--primary);
 }
 
@@ -5236,7 +5244,7 @@ input:-webkit-autofill:focus {
 
 .btn-start-broadcasting-tiktok:active {
   transform: scale(0.97);
-  box-shadow: 0 2px 10px rgba(255, 77, 109, 0.2);
+  box-shadow: 0 2px 10px rgba(255, 69, 104, 0.2);
 }
 
 /* Modos de Transmissão Swiping */
@@ -5246,10 +5254,10 @@ input:-webkit-autofill:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   padding: 0;
   transition: transform 0.2s ease, background 0.2s ease;
@@ -5257,7 +5265,7 @@ input:-webkit-autofill:focus {
 
 .profile-action-btn.icon-only:active {
   transform: scale(0.95);
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--overlay-10);
 }
 
 .profile-action-btn.icon-only svg {
@@ -5617,7 +5625,7 @@ input:-webkit-autofill:focus {
   align-items: center;
   gap: 4px;
   padding: 12px 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   cursor: pointer;
@@ -5635,9 +5643,9 @@ input:-webkit-autofill:focus {
 }
 
 .vibe-category-card.active {
-  background: linear-gradient(135deg, var(--primary-soft) 0%, rgba(240, 178, 61, 0.12) 100%);
+  background: linear-gradient(135deg, var(--primary-soft) 0%, rgba(255, 178, 56, 0.12) 100%);
   border-color: var(--primary);
-  box-shadow: 0 4px 14px rgba(255, 77, 109, 0.15);
+  box-shadow: 0 4px 14px rgba(255, 69, 104, 0.15);
 }
 
 .vibe-category-card.active .vibe-category-label {
@@ -5760,7 +5768,7 @@ input:-webkit-autofill:focus {
    ========================================================================== */
 .profile-xp-section {
   margin-top: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-04);
   border: 1px solid var(--glass-border);
   padding: 12px 14px;
   border-radius: 16px;
@@ -5787,13 +5795,13 @@ input:-webkit-autofill:focus {
   border-radius: 8px;
   font-weight: 800;
   color: #fff;
-  box-shadow: 0 2px 8px rgba(255, 77, 109, 0.25);
+  box-shadow: 0 2px 8px rgba(255, 69, 104, 0.25);
 }
 
 .xp-progress-bg {
   width: 100%;
   height: 7px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--overlay-10);
   border-radius: 4px;
   overflow: hidden;
   position: relative;
@@ -5803,7 +5811,7 @@ input:-webkit-autofill:focus {
   height: 100%;
   background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
   border-radius: 4px;
-  box-shadow: 0 0 8px rgba(255, 77, 109, 0.4);
+  box-shadow: 0 0 8px rgba(255, 69, 104, 0.4);
   transition: width 0.4s ease;
 }
 
@@ -5922,7 +5930,7 @@ input:-webkit-autofill:focus {
 .roulette-prize-chip.primary { color: var(--primary); border-color: var(--primary-soft); background: var(--primary-soft); }
 .roulette-prize-chip.primary-dark { color: #ff8ba0; border-color: var(--primary-soft); background: var(--primary-soft); }
 .roulette-prize-chip.info { color: var(--info); border-color: rgba(78, 158, 255, 0.18); background: rgba(78, 158, 255, 0.1); }
-.roulette-prize-chip.gold { color: var(--secondary); border-color: rgba(240, 178, 61, 0.2); background: rgba(240, 178, 61, 0.1); }
+.roulette-prize-chip.gold { color: var(--secondary); border-color: rgba(255, 178, 56, 0.2); background: rgba(255, 178, 56, 0.1); }
 .roulette-prize-chip.success { color: var(--success); border-color: rgba(52, 211, 153, 0.2); background: rgba(52, 211, 153, 0.1); }
 .roulette-prize-chip.neutral { color: var(--text-secondary); }
 
