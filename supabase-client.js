@@ -736,6 +736,24 @@ const DB = {
     return data;
   },
 
+  // Missões diárias (0117)
+  async getDailyMissionsProgress() {
+    const { data, error } = await sb.rpc("get_daily_missions_progress");
+    if (error) throw error;
+    return data;
+  },
+
+  async claimDailyMissionsBonus() {
+    const { data, error } = await sb.rpc("claim_daily_missions_bonus");
+    if (error) throw error;
+    return data;
+  },
+
+  async logWatchLiveMission(roomName) {
+    const { error } = await sb.rpc("log_watch_live_mission", { p_room_name: roomName });
+    if (error) throw error;
+  },
+
   // PIX real via Mercado Pago — a Edge Function decide o valor a partir do
   // código do pacote (o cliente nunca manda quantia), e só o webhook do
   // Mercado Pago (server-side, nunca o cliente) confirma o pagamento.

@@ -961,6 +961,12 @@ async function enterRealLiveRoomUnlocked(hostUserId, profile) {
   // Navegar
   navigateTo("live-room");
 
+  // Missão diária "assistir 2 lives" — só conta pra quem está ASSISTINDO,
+  // não pro próprio anfitrião entrando na própria sala.
+  Auth.getUser().then(me => {
+    if (me && me.id !== hostUserId) DB.logWatchLiveMission(`live-${hostUserId}`).catch(() => {});
+  });
+
   // Iniciar vídeo
   const loader = DOM.liveRoom.querySelector(".video-loading-placeholder");
   loader.style.opacity = "1";
@@ -1695,6 +1701,7 @@ async function sendPrivateChatMessage() {
     const sent = await DB.sendDirectMessage(partnerId, text);
     appendPrivateChatBubble(sent, user.id);
     renderInboxList();
+    renderDailyMissionsCard();
   } catch (err) {
     showToast(err.message || "Não foi possível enviar a mensagem.");
   }
@@ -4865,6 +4872,7 @@ async function publishNewPost() {
     await renderProfilePosts();
     closeNewPostModal();
     showToast("Publicação realizada com sucesso!");
+    renderDailyMissionsCard();
   } catch (err) {
     showToast(err.message || "Não foi possível publicar. Tente novamente.");
   } finally {
@@ -7796,6 +7804,7 @@ async function applyProfileToUI(profile) {
   refreshProfileStats(profile.id, profile.username);
   renderProfileHighlights();
   renderDailyCheckinState();
+  renderDailyMissionsCard();
   renderSuggestedProfiles();
   STATE.dmPrivacy = profile.dm_privacy || "everyone";
   updateDmPrivacyButtonUI();
@@ -8427,6 +8436,76 @@ async function claimDailyCheckIn() {
   }
 
   await renderDailyCheckinState();
+}
+
+// Missões Diárias (0117) — 4 missões calculadas no servidor a partir de dados
+// já existentes (post, DM, curtidas recebidas) + o watch_live registrado
+// pontualmente ao entrar numa live real. Resetam sozinhas à meia-noite UTC
+// porque a comparação no servidor é sempre contra current_date.
+const DAILY_MISSIONS_META = {
+  watch_live: { icon: "📺", label: (t) => `Assista ${t} lives` },
+  post: { icon: "📸", label: (t) => `Publique ${t} post` },
+  chat: { icon: "💬", label: (t) => `Converse com ${t} pessoas` },
+  likes_received: { icon: "❤️", label: (t) => `Ganhe ${t} curtidas` },
+};
+
+async function renderDailyMissionsCard() {
+  const list = document.getElementById("daily-missions-list");
+  const btn = document.getElementById("btn-claim-missions");
+  if (!list || !btn || !STATE.isLoggedIn) return;
+
+  let progress;
+  try {
+    progress = await DB.getDailyMissionsProgress();
+  } catch (err) {
+    console.error("Falha ao carregar missões diárias:", err);
+    return;
+  }
+
+  list.innerHTML = "";
+  Object.entries(DAILY_MISSIONS_META).forEach(([key, meta]) => {
+    const m = progress[key];
+    if (!m) return;
+    const pct = Math.min(100, Math.round((m.progress / m.target) * 100));
+    const complete = m.progress >= m.target;
+    const row = document.createElement("div");
+    row.className = complete ? "mission-row complete" : "mission-row";
+    row.innerHTML = `
+      <span class="mission-icon">${complete ? "✅" : meta.icon}</span>
+      <div class="mission-info">
+        <span class="mission-label">${meta.label(m.target)}</span>
+        <div class="xp-progress-bg"><div class="xp-progress-fill" style="width: ${pct}%;"></div></div>
+      </div>
+      <span class="mission-count">${m.progress}/${m.target}</span>
+    `;
+    list.appendChild(row);
+  });
+
+  if (progress.bonus_claimed) {
+    btn.disabled = true;
+    btn.textContent = "Resgatado ✓";
+    btn.style.opacity = "0.6";
+  } else if (progress.all_complete) {
+    btn.disabled = false;
+    btn.textContent = "Resgatar 🎁";
+    btn.style.opacity = "1";
+  } else {
+    btn.disabled = true;
+    btn.textContent = "Resgatar";
+    btn.style.opacity = "0.6";
+  }
+}
+
+async function claimDailyMissionsBonus() {
+  if (!requireAuth()) return;
+  try {
+    const result = await DB.claimDailyMissionsBonus();
+    await applyProfileToUI(result.profile);
+    showToast("Missões do dia completas! Ganhou 🪙 30 moedas e +50 XP! 🎯");
+  } catch (err) {
+    showToast(err.message || "Ainda faltam missões para completar hoje.");
+  }
+  await renderDailyMissionsCard();
 }
 
 async function purchaseVIPBadge() {
